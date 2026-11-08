@@ -50,6 +50,7 @@ class HttpApp:
         self.store = store
         self.on_event = on_event
         self.on_release = on_release
+        self.analytics: Any = None
         self.table: dict[str, str] = {}
         self.canonical: dict[str, str] = {}
         self.redirects: dict[str, list[dict[str, Any]]] = {}
@@ -84,6 +85,11 @@ class HttpApp:
                 ),
                 Route("/_constellation/sites/{site}", self.retire_site, methods=["DELETE"]),
                 Route("/_constellation/status", self.status, methods=["GET"]),
+                Route(
+                    "/_constellation/sites/{site}/analytics/{report}",
+                    self.analytics_report,
+                    methods=["GET"],
+                ),
                 Route("/{path:path}", self.static, methods=["GET", "HEAD"]),
             ]
         )
@@ -299,6 +305,31 @@ class HttpApp:
         if self._admin_ok(request):
             return True
         return self.store.site(site).verify_token(raw)
+
+    async def analytics_report(self, request: Request) -> Response:
+        if (g := self._api_guard(request)) is not None:
+            return g
+        site, report = request.path_params["site"], request.path_params["report"]
+        if not self._site_ok(request, site):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if self.analytics is None:
+            return JSONResponse({"error": "analytics are disabled on this server"}, status_code=404)
+        try:
+            days = max(1, min(365, int(request.query_params.get("days", "30"))))
+        except ValueError:
+            days = 30
+        a = self.analytics
+        if report == "overview":
+            return JSONResponse(a.overview(site, days))
+        if report == "content":
+            return JSONResponse({"items": a.content(site, days)})
+        if report == "technical":
+            return JSONResponse(a.technical(site, days))
+        if report == "referrers":
+            return JSONResponse({"items": a.referrers(site, days)})
+        if report == "export.csv":
+            return PlainTextResponse(a.export_csv(site, days), media_type="text/csv")
+        return JSONResponse({"error": "unknown report"}, status_code=404)
 
     async def healthz(self, request: Request) -> Response:
         return JSONResponse({"status": "ok", "version": __version__})

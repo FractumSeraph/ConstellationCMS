@@ -110,6 +110,11 @@ class PublishClient:
             self.client.post(self._url(f"/sites/{site}/tokens"), json={"label": label})
         )
 
+    def analytics(self, site: str, report: str, days: int = 30) -> dict[str, Any]:
+        return self._check(
+            self.client.get(self._url(f"/sites/{site}/analytics/{report}"), params={"days": days})
+        )
+
     def retire(self, site: str) -> dict[str, Any]:
         return self._check(self.client.delete(self._url(f"/sites/{site}")))
 

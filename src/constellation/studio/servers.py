@@ -118,6 +118,24 @@ def rollback(state: State, site_id: str, server: ServerEntry, release_id: str) -
         client.close()
 
 
+def analytics(state: State, site_id: str, server: ServerEntry, days: int) -> dict[str, Any]:
+    token = state.kv_get(token_key(server.id, site_id))
+    if not token:
+        return {"error": "not connected"}
+    client = PublishClient(server.admin_url, str(token))
+    try:
+        return {
+            "overview": client.analytics(site_id, "overview", days),
+            "content": client.analytics(site_id, "content", days).get("items", []),
+            "technical": client.analytics(site_id, "technical", days),
+            "referrers": client.analytics(site_id, "referrers", days).get("items", []),
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)}
+    finally:
+        client.close()
+
+
 def releases(state: State, site_id: str, server: ServerEntry) -> dict[str, Any]:
     token = state.kv_get(token_key(server.id, site_id))
     if not token:

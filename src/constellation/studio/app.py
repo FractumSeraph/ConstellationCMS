@@ -1034,6 +1034,30 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         studio.state.audit("rollback", f"{site_id}:{release_id}", client_host(request))
         return RedirectResponse(f"/sites/{site_id}/publish", 303)
 
+    # ---- analytics --------------------------------------------------------------------------
+    @app.get("/sites/{site_id}/analytics", response_class=HTMLResponse)
+    async def analytics_page(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_session),
+        days: int = 30,
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        studio.site_root(site_id)
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        server = ws.server(entry.server) if entry and entry.server else None
+        days = max(1, min(365, days))
+        data = (
+            srv.analytics(studio.state, site_id, server, days)
+            if server
+            else {"error": "This site is not assigned to a server."}
+        )
+        return render(
+            request, "analytics.html", site_id=site_id, server=server, data=data, days=days
+        )
+
     # ---- account --------------------------------------------------------------------------
     @app.get("/account", response_class=HTMLResponse)
     async def account(

@@ -98,3 +98,7 @@ main.editor-main { flex: 1; display: flex; padding: 0; }
 body.gemini-page { background: #000; color: #d8c7e8; padding: 1rem 2rem; display: block; }
 .qr svg { width: 12rem; height: 12rem; background: #fff; padding: 0.5rem; border-radius: 6px; }
 .warn { color: var(--warn); }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 8rem; }
+.bar { flex: 1; display: flex; align-items: flex-end; min-width: 2px; }
+.bar span { display: block; width: 100%; background: var(--accent-2); min-height: 1px; border-radius: 2px 2px 0 0; }
+.filters a.current { font-weight: 700; }

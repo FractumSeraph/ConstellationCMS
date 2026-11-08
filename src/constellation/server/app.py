@@ -12,6 +12,7 @@ from pathlib import Path
 
 import uvicorn
 
+from constellation.server.analytics import Analytics, UmamiForwarder
 from constellation.server.config import ServerConfig
 from constellation.server.gemini import GeminiRoute, GeminiServer
 from constellation.server.http import HttpApp
@@ -26,12 +27,37 @@ class Server:
     def __init__(self, cfg: ServerConfig, *, on_event: EventSink | None = None) -> None:
         self.cfg = cfg
         self.store = Store(cfg.data)
-        self.http = HttpApp(cfg, self.store, on_event=on_event, on_release=self.on_release)
+        self.analytics: Analytics | None = None
+        self.forwarder: UmamiForwarder | None = None
+        if cfg.analytics.enabled:
+            self.forwarder = UmamiForwarder()
+            self.analytics = Analytics(
+                cfg.data,
+                ip_policy=cfg.analytics.ip_policy,
+                retention_days=cfg.analytics.retention_days,
+                forwarder=self.forwarder,
+                site_configs=lambda sid: self.store.site(sid).site_config(),
+            )
+        self._external_sink = on_event
+        self.http = HttpApp(cfg, self.store, on_event=self.on_event, on_release=self.on_release)
+        self.http.analytics = self.analytics
         self.gemini_routes: dict[str, GeminiRoute] = {}
         self.sni: SniTable | None = None
         self.gemini: GeminiServer | None = None
-        self.on_event = on_event
         self.reload_gemini()
+
+    def on_event(self, event: dict[str, object]) -> None:
+        if self.analytics is not None:
+            try:
+                self.analytics.record(event)
+            except Exception:  # noqa: BLE001
+                log.exception("analytics record failed")
+        if self._external_sink is not None:
+            result = self._external_sink(event)
+            if result is not None:
+                import asyncio as _asyncio
+
+                _asyncio.ensure_future(result)
 
     # ---- routing ---------------------------------------------------------------------------
     def reload_gemini(self) -> None:
@@ -121,8 +147,12 @@ class Server:
         for sig in (signal.SIGINT, signal.SIGTERM):
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(sig, stop.set)
+        if self.forwarder is not None:
+            self.forwarder.start()
         log.info("server up (tls mode %s)", self.cfg.https.tls_mode)
         await stop.wait()
+        if self.forwarder is not None:
+            self.forwarder.stop()
         if self.gemini:
             await self.gemini.stop()
         for t in tasks:
