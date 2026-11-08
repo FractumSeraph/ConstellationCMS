@@ -26,3 +26,4 @@ hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0; }
 .social { list-style: none; padding: 0; display: flex; gap: 1rem; }
 .footnotes { font-size: 0.9rem; border-top: 1px solid var(--rule); margin-top: 2rem; }
 .task-list-item { list-style: none; margin-left: -1.25rem; }
+.cistercian { vertical-align: -0.35em; }

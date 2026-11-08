@@ -365,6 +365,21 @@ class _Context:
         self.env.filters["date"] = _date_filter(cfg)
         self.env.filters["isoformat"] = lambda d: d.isoformat()
         self.env.filters["slug"] = lambda s: slugify(str(s))
+        from markupsafe import Markup
+
+        from constellation.core.numerals import render_numeral
+
+        def numeral(n: object, system: str | None = None) -> object:
+            text = render_numeral(
+                int(str(n)),
+                system or cfg.calendar.numerals,
+                platform,
+                text_fallback=cfg.calendar.numerals_text_fallback,
+            )
+            return Markup(text) if platform == "web" else text
+
+        self.env.filters["numeral"] = numeral
+        self.env.filters["ddate"] = lambda d, fmt="%{%A, %B %d%}, %Y YOLD": _ddate(d, fmt, cfg)
 
     def _render_body(self, item: Post | Page) -> Rendered:
         doc = self.docs[f"{item.kind}:{item.slug}"]
@@ -639,9 +654,7 @@ class _Context:
             for f in sorted(static.rglob("*")):
                 if f.is_file():
                     rel = f.relative_to(static).as_posix()
-                    pb.add(
-                        f"assets/{t.name}/{rel}", b"", media_type_for(f.name), source=f
-                    )
+                    pb.add(f"assets/{t.name}/{rel}", b"", media_type_for(f.name), source=f)
 
 
 def _date_filter(cfg: Any) -> Any:
@@ -664,6 +677,14 @@ def _date_filter(cfg: Any) -> Any:
         return d.strftime(style)
 
     return date
+
+
+def _ddate(d: datetime, fmt: str, cfg: Any) -> str:
+    from zoneinfo import ZoneInfo
+
+    from constellation.core.calendars import ddate
+
+    return ddate(d.astimezone(ZoneInfo(cfg.site.timezone)), fmt)
 
 
 def _tidy(text: str, platform: str) -> str:

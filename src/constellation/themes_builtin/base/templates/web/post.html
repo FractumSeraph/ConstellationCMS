@@ -20,6 +20,7 @@
       <time datetime="{{ item.date | isoformat }}">{{ item.date | date('long') }}</time>
       {% if author %} · <span class="post-author">{{ author.name }}</span>{% endif %}
       {% if theme.show_discordian_date %} · <span class="post-date-alt">{{ item.date | date('long', calendar='discordian') }}</span>{% endif %}
+      {% if theme.show_year_numeral and site.config.calendar.numerals != 'arabic' %} · <span class="post-year-numeral" title="{{ item.date.year }}">{{ item.date.year | numeral }}</span>{% endif %}
     </p>
     {% if item.meta.tags %}<ul class="post-tags">{% for t in item.meta.tags %}<li><a href="{{ url_for('tag', t | slug) }}">#{{ t }}</a></li>{% endfor %}</ul>{% endif %}
     {% if series %}<p class="post-series">Part {{ series.part }} of <a href="{{ url_for('series', series.slug) }}">{{ series.title }}</a></p>{% endif %}

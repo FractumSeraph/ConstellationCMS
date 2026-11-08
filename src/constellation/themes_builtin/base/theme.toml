@@ -27,3 +27,9 @@ key = "gemini_favicon"
 type = "string"
 label = "Emoji favicon for the capsule (favicon.txt)"
 default = "✦"
+
+[[settings]]
+key = "show_year_numeral"
+type = "bool"
+label = "Show the year in the site's numeral system next to the date"
+default = false

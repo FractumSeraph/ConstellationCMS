@@ -37,6 +37,12 @@
     <label>Horizontal rule <input name="f.render.gemini.hr" value="{{ rg.get('hr', '~~~~') }}"></label>
     <label>Image notice <input name="f.render.gemini.image_notice" value="{{ rg.get('image_notice', '[Image, web only. Alt text: {alt}]') }}"></label>
   </div></section>
+  {% set cal = doc.get('calendar', {}) %}
+  <section class="card"><h2>Calendars and numerals</h2><div class="grid">
+    <label>Calendars themes may show (comma separated: gregorian, discordian) <input name="f.calendar.display" value="{{ cal.get('display', ['gregorian']) | join(', ') }}"></label>
+    <label>Numeral system <select name="f.calendar.numerals">{% for v in ['arabic', 'roman', 'cistercian'] %}<option {% if cal.get('numerals', 'arabic') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Cistercian fallback on text platforms <select name="f.calendar.numerals_text_fallback">{% for v in ['arabic', 'words'] %}<option {% if cal.get('numerals_text_fallback', 'arabic') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+  </div></section>
   <section class="card"><h2>Menu and footer</h2>
     <label>Menu items (JSON list of {label, ref|url, children}) <textarea name="f.menu.items" rows="6">{{ doc.get('menu', {}).get('items', []) | tojson_attr }}</textarea></label>
     <label>Footer text <input name="f.footer.text" value="{{ doc.get('footer', {}).get('text', '') }}"></label>

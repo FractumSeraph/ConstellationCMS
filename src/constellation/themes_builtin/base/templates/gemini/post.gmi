@@ -1,6 +1,6 @@
 # {{ item.meta.title }}
 
-{{ item.date | date('iso') }}{% if author %} · {{ author.name }}{% endif %}
+{{ item.date | date('iso') }}{% if author %} · {{ author.name }}{% endif %}{% if theme.show_year_numeral and site.config.calendar.numerals != 'arabic' %} · {{ item.date.year | numeral }}{% endif %}
 {% if theme.show_discordian_date %}{{ item.date | date('long', calendar='discordian') }}
 {% endif %}{% for t in item.meta.tags %}=> {{ url_for('tag', t | slug) }} #{{ t }}
 {% endfor %}{% if series %}=> {{ url_for('series', series.slug) }} Part {{ series.part }} of "{{ series.title }}"
