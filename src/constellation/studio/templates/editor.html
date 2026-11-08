@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ item.meta.title or item.slug }}{% endblock %}
+{% block body_class %}editor-page{% endblock %}
+{% block main_class %}editor-main{% endblock %}
+{% block content %}
+<div id="editor-app" data-site="{{ site_id }}" data-rel="{{ rel }}" data-sha="{{ item.sha256 }}" data-kind="{{ item.kind }}" data-slug="{{ item.slug }}"
+     data-meta='{{ meta_json }}' data-gemini="{{ 'yes' if gemini_enabled else 'no' }}" data-readonly="{{ 'yes' if read_only else 'no' }}">
+  <aside class="meta-panel">
+    <h2 class="small">{{ item.kind | capitalize }}</h2>
+    <label>Title <input id="m-title" value="{{ item.meta.title or '' }}" required></label>
+    <label>Slug <input id="m-slug" value="{{ item.meta.slug or '' }}" placeholder="{{ item.slug }}"></label>
+    <label>Status
+      <select id="m-status">{% for s in ['draft', 'published', 'hidden'] %}<option value="{{ s }}" {% if (item.meta.status or 'published') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    </label>
+    {% if item.kind == 'post' %}
+    <label>Date <input id="m-date" type="datetime-local" value="{{ (item.meta.date | string)[:16] if item.meta.date else '' }}"></label>
+    <label>Tags <input id="m-tags" value="{{ item.meta.tags | join(', ') if item.meta.tags else '' }}" placeholder="comma, separated"></label>
+    <label>Categories <input id="m-categories" value="{{ item.meta.categories | join(', ') if item.meta.categories else '' }}"></label>
+    <label>Series <input id="m-series" value="{{ item.meta.series or '' }}"></label>
+    <label>Part <input id="m-series_part" type="number" min="1" value="{{ item.meta.series_part or '' }}"></label>
+    {% else %}
+    <label>Menu order <input id="m-menu_order" type="number" value="{{ item.meta.menu_order or '' }}"></label>
+    <label>Template <input id="m-template" value="{{ item.meta.template or '' }}" placeholder="page"></label>
+    {% endif %}
+    <label>Author <input id="m-author" list="authors" value="{{ item.meta.author or '' }}"><datalist id="authors">{% for a in authors %}<option value="{{ a }}">{% endfor %}</datalist></label>
+    <label>Summary <textarea id="m-summary" rows="3">{{ item.meta.summary or '' }}</textarea></label>
+    <label>Featured image <select id="m-image"><option value="">none</option>{% for m in item.media %}<option value="{{ m }}" {% if item.meta.image == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+    <label>Image alt <input id="m-image_alt" value="{{ item.meta.image_alt or '' }}"></label>
+    <details><summary>SEO</summary>
+      <label>Meta title <input id="m-seo-title" value="{{ item.meta.seo.title if item.meta.seo else '' }}"></label>
+      <label>Meta description <textarea id="m-seo-description" rows="2">{{ item.meta.seo.description if item.meta.seo else '' }}</textarea></label>
+      <label>Canonical <input id="m-seo-canonical" value="{{ item.meta.seo.canonical if item.meta.seo else '' }}"></label>
+      <label class="check"><input type="checkbox" id="m-seo-noindex" {% if item.meta.seo and item.meta.seo.noindex %}checked{% endif %}> noindex</label>
+    </details>
+    <details><summary>Media ({{ item.media | length }})</summary>
+      <ul class="plain small">{% for m in item.media %}<li><code>{{ m }}</code> <button class="link insert-media" data-name="{{ m }}">insert</button></li>{% endfor %}</ul>
+      <label class="upload">Add image <input type="file" id="upload" accept="image/*"></label>
+    </details>
+    <p class="muted small">File: <code>{{ rel }}</code></p>
+  </aside>
+  <section class="editor-column">
+    <div class="editor-toolbar">
+      <span id="save-state" class="muted">loaded</span>
+      <button id="save-now" class="primary" {% if read_only %}disabled{% endif %}>Save</button>
+      <span class="spacer"></span>
+      <label class="toggle"><input type="radio" name="pv" value="web" checked> Web</label>
+      {% if gemini_enabled %}<label class="toggle"><input type="radio" name="pv" value="gemini"> Gemini</label>{% endif %}
+    </div>
+    <div id="cm" class="cm-host"></div>
+  </section>
+  <section class="preview-column">
+    <div id="preview-web" class="preview-pane"><iframe id="preview-frame" title="Web preview" src="about:blank" sandbox="allow-same-origin"></iframe></div>
+    <div id="preview-gemini" class="preview-pane gemini hidden"><div id="gemini-body" class="gemtext"></div></div>
+    <div id="warnings" class="warnings"><p class="muted">Warnings appear here as you write.</p></div>
+  </section>
+</div>
+<script type="module" src="/static/editor.js"></script>
+{% endblock %}

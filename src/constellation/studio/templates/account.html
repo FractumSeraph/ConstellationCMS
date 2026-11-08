@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<h1>Account</h1>
+{% if saved %}<p class="ok">Saved.</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<section class="card"><h2>Password</h2>
+  <form method="post" action="/account/password" class="grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Current <input type="password" name="current" required></label>
+    <label>New <input type="password" name="password" minlength="10" required></label>
+    <label>Again <input type="password" name="confirm" minlength="10" required></label>
+    <button>Change password</button>
+  </form>
+</section>
+<section class="card"><h2>Options</h2>
+  <form method="post" action="/account/options">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="check"><input type="checkbox" name="auto_login_local" {% if settings.auto_login_local %}checked{% endif %}> Sign in automatically from this machine (never applies in remote mode or behind a proxy)</label>
+    <button>Save</button>
+  </form>
+  <form method="post" action="/account/signout-everywhere" class="top-gap"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Sign out everywhere</button></form>
+</section>
+<section class="card"><h2>Recent activity</h2>
+  <table class="items small"><tbody>{% for ts, event, detail, remote in audit %}<tr><td>{{ ts | int }}</td><td>{{ event }}</td><td>{{ detail }}</td><td>{{ remote }}</td></tr>{% endfor %}</tbody></table>
+</section>
+{% endblock %}

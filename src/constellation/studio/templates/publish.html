@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Publish{% endblock %}
+{% block content %}
+<h1>Publish</h1>
+{% if problems %}<section class="card error"><h2>The site does not load</h2><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
+{% if errors %}<section class="card warn"><h2>{{ errors | length }} error-level warnings block publishing</h2><ul>{% for w in errors[:20] %}<li><code>{{ w.code }}</code> {{ w.message }}</li>{% endfor %}</ul></section>{% endif %}
+<section class="card">
+  <h2>Export targets</h2>
+  <table class="items"><thead><tr><th>Name</th><th>Platform</th><th>Target</th><th>Layout</th><th></th></tr></thead><tbody>
+  {% for e in exports %}
+  <tr><td>{{ e.name }}</td><td>{{ e.platform }}</td><td><code>{{ e.target }}</code></td><td>{{ e.layout }}</td>
+    <td class="actions">
+      <form hx-post="/sites/{{ site_id }}/export/{{ e.name }}" hx-target="#job-{{ loop.index }}" hx-swap="innerHTML" class="inline"><input type="hidden" name="mode" value="plan"><button>Preview diff</button></form>
+      <form hx-post="/sites/{{ site_id }}/export/{{ e.name }}" hx-target="#job-{{ loop.index }}" hx-swap="innerHTML" hx-confirm="Apply this export to {{ e.target }}?" class="inline"><input type="hidden" name="mode" value="apply"><button class="primary" {% if errors or read_only %}disabled{% endif %}>Publish</button></form>
+      <form method="post" action="/sites/{{ site_id }}/exports" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="-"><input type="hidden" name="platform" value="web"><input type="hidden" name="target" value="-"><input type="hidden" name="delete" value="{{ e.name }}"><button class="link danger">remove</button></form>
+    </td></tr>
+  <tr><td colspan="5"><div id="job-{{ loop.index }}"></div></td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No targets yet.</td></tr>{% endfor %}
+  </tbody></table>
+  <details><summary>Add a target</summary>
+  <form method="post" action="/sites/{{ site_id }}/exports" class="grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Name <input name="name" required placeholder="vps-web"></label>
+    <label>Platform <select name="platform"><option>web</option><option>gemini</option></select></label>
+    <label>Target <input name="target" required placeholder="sftp://user@host/var/www/site or folder:C:\sites\out"></label>
+    <label>Layout <select name="layout"><option>plain</option><option>agate</option></select></label>
+    <button>Add</button>
+  </form></details>
+</section>
+{% if releases %}<section class="card"><h2>History</h2><ul class="plain small">{% for r in releases %}<li>{{ r.time[:19] }} · {{ r.kind }} {{ r.name }} · {{ r.platform }} · release {{ r.release }}</li>{% endfor %}</ul></section>{% endif %}
+{% endblock %}

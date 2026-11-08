@@ -56,6 +56,20 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--no-delete", action="store_true", help="never delete remote files")
     e.set_defaults(func=cmd_export)
 
+    s = sub.add_parser("studio", help="run the studio web app")
+    s.add_argument(
+        "--workspace",
+        type=Path,
+        help="workspace folder (default: the one remembered in studio.toml, else ./workspace)",
+    )
+    s.add_argument("--bind", default=None, help="address to bind (default 127.0.0.1)")
+    s.add_argument("--port", type=int, default=None)
+    s.add_argument("--no-browser", action="store_true")
+    s.add_argument(
+        "--state-dir", type=Path, help="machine-local state folder (default: the OS user data dir)"
+    )
+    s.set_defaults(func=cmd_studio)
+
     n = sub.add_parser("new", help="create a post or page")
     n.add_argument("kind", choices=["post", "page"])
     n.add_argument("site", type=Path)
@@ -176,6 +190,41 @@ def cmd_export(args: argparse.Namespace) -> int:
         return 0
     finally:
         target.close()
+
+
+def cmd_studio(args: argparse.Namespace) -> int:
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from constellation.studio.app import create_app
+    from constellation.studio.state import State
+
+    state = State(args.state_dir)
+    if args.workspace:
+        state.settings.workspace = str(Path(args.workspace).expanduser().resolve())
+        state.save_settings()
+    workspace = Path(state.settings.workspace or Path.cwd() / "workspace")
+    workspace.mkdir(parents=True, exist_ok=True)
+    if not state.settings.workspace:
+        state.settings.workspace = str(workspace.resolve())
+        state.save_settings()
+    bind = args.bind or state.settings.bind or "127.0.0.1"
+    port = args.port or state.settings.port or 8787
+    if bind != "127.0.0.1" and not state.settings.remote_mode:
+        print(
+            "refusing to bind a non-loopback address while remote mode is off (enable it in Account first)",
+            file=sys.stderr,
+        )
+        return 2
+    app = create_app(state, workspace)
+    url = f"http://{'localhost' if bind == '127.0.0.1' else bind}:{port}/"
+    print(f"studio: {url}  workspace: {workspace}")
+    if not args.no_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    uvicorn.run(app, host=bind, port=port, log_level="warning")
+    return 0
 
 
 def cmd_new(args: argparse.Namespace) -> int:

@@ -115,7 +115,8 @@ class Target(ABC):
     def exists(self, path: str) -> bool: ...
 
     def close(self) -> None:
-        pass
+        """Release connections; targets without connections need nothing."""
+        return None
 
     @abstractmethod
     def describe(self) -> str: ...

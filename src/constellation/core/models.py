@@ -136,9 +136,17 @@ class AnalyticsConfig(Strict):
     forward_to_umami: UmamiForward = Field(default_factory=UmamiForward)
 
 
+class ExportSpec(Strict):
+    name: str
+    platform: Platform = "web"
+    target: str
+    layout: Literal["plain", "agate"] = "plain"
+
+
 class SiteConfig(Strict):
     version: int = 1
     site: SiteInfo
+    exports: list[ExportSpec] = Field(default_factory=list)
     authors: list[Author] = Field(default_factory=list)
     platforms: dict[str, PlatformConfig] = Field(default_factory=dict)
     urls: UrlPatterns = Field(default_factory=UrlPatterns)

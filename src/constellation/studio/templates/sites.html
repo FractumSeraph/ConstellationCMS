@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Sites{% endblock %}
+{% block content %}
+<h1>Sites</h1>
+<p class="muted">Workspace: <code>{{ workspace.root }}</code></p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<ul class="site-list">
+{% for s in workspace.sites if not s.archived %}
+  <li><a class="site-card" href="/sites/{{ s.id }}"><strong>{{ s.name }}</strong><span class="muted">{{ s.id }}{% if s.server %} · {{ s.server }}{% endif %}</span></a></li>
+{% else %}
+  <li class="muted">No sites yet. Create one below.</li>
+{% endfor %}
+</ul>
+<section class="card">
+  <h2>New site</h2>
+  <form method="post" action="/sites" class="grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Name <input name="name" required placeholder="Fractum Seraph"></label>
+    <label>Author <input name="author" placeholder="Seraph"></label>
+    <label>Web URL <input name="web_url" placeholder="https://fractumseraph.net"></label>
+    <label>Gemini URL <input name="gemini_url" placeholder="gemini://fractumseraph.net"></label>
+    <label>Timezone <input name="timezone" value="America/Chicago"></label>
+    <button class="primary">Create</button>
+  </form>
+</section>
+{% endblock %}

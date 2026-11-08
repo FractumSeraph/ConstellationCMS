@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+{% if saved %}<p class="ok">Saved.</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% set site = doc.get('site', {}) %}{% set web = doc.get('platforms', {}).get('web', {}) %}{% set gem = doc.get('platforms', {}).get('gemini', {}) %}
+<form method="post" action="/sites/{{ site_id }}/settings" class="settings-form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <section class="card"><h2>Identity</h2><div class="grid">
+    <label>Title <input name="f.site.title" value="{{ site.get('title', '') }}"></label>
+    <label>Tagline <input name="f.site.tagline" value="{{ site.get('tagline', '') }}"></label>
+    <label>Language <input name="f.site.language" value="{{ site.get('language', 'en') }}"></label>
+    <label>Timezone <input name="f.site.timezone" value="{{ site.get('timezone', 'UTC') }}"></label>
+    <label>Default author id <input name="f.site.author" value="{{ site.get('author', '') }}"></label>
+  </div></section>
+  <section class="card"><h2>Web</h2><div class="grid">
+    <label class="check"><input type="checkbox" name="f.platforms.web.enabled" {% if web.get('enabled', True) %}checked{% endif %}> enabled</label>
+    <label>Base URL <input name="f.platforms.web.base_url" value="{{ web.get('base_url', '') }}"></label>
+    <label>Hostnames (comma separated; first is canonical) <input name="f.platforms.web.hostnames" value="{{ web.get('hostnames', []) | join(', ') }}"></label>
+    <label>Posts per page <input type="number" name="f.platforms.web.pagination" value="{{ web.get('pagination', 10) }}"></label>
+    <label>Feeds <input name="f.platforms.web.feeds" value="{{ web.get('feeds', ['atom', 'json']) | join(', ') }}"></label>
+  </div></section>
+  <section class="card"><h2>Gemini</h2><div class="grid">
+    <label class="check"><input type="checkbox" name="f.platforms.gemini.enabled" {% if gem.get('enabled', False) %}checked{% endif %}> enabled</label>
+    <label>Base URL <input name="f.platforms.gemini.base_url" value="{{ gem.get('base_url', '') }}"></label>
+    <label>Hostnames <input name="f.platforms.gemini.hostnames" value="{{ gem.get('hostnames', []) | join(', ') }}"></label>
+    <label>Feeds <input name="f.platforms.gemini.feeds" value="{{ gem.get('feeds', ['atom', 'gemsub']) | join(', ') }}"></label>
+  </div></section>
+  {% set rg = doc.get('render', {}).get('gemini', {}) %}
+  <section class="card"><h2>Gemini rendering</h2><div class="grid">
+    <label>Inline markup <select name="f.render.gemini.inline_markup">{% for v in ['markdown', 'strip'] %}<option {% if rg.get('inline_markup', 'markdown') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Deep headings <select name="f.render.gemini.heading_overflow">{% for v in ['text', 'promote', 'upper'] %}<option {% if rg.get('heading_overflow', 'text') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Nested lists <select name="f.render.gemini.nested_lists">{% for v in ['indent', 'flatten', 'sentence'] %}<option {% if rg.get('nested_lists', 'indent') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Tables <select name="f.render.gemini.tables">{% for v in ['auto', 'pre', 'records'] %}<option {% if rg.get('tables', 'auto') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Link markers <select name="f.render.gemini.link_markers">{% for v in ['none', 'numbers', 'letters'] %}<option {% if rg.get('link_markers', 'none') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Horizontal rule <input name="f.render.gemini.hr" value="{{ rg.get('hr', '~~~~') }}"></label>
+    <label>Image notice <input name="f.render.gemini.image_notice" value="{{ rg.get('image_notice', '[Image, web only. Alt text: {alt}]') }}"></label>
+  </div></section>
+  <section class="card"><h2>Menu and footer</h2>
+    <label>Menu items (JSON list of {label, ref|url, children}) <textarea name="f.menu.items" rows="6">{{ doc.get('menu', {}).get('items', []) | tojson_attr }}</textarea></label>
+    <label>Footer text <input name="f.footer.text" value="{{ doc.get('footer', {}).get('text', '') }}"></label>
+  </section>
+  <section class="card"><h2>SEO</h2><div class="grid">
+    <label>Default description <input name="f.seo.default_description" value="{{ doc.get('seo', {}).get('default_description', '') }}"></label>
+    <label>Twitter handle <input name="f.seo.twitter" value="{{ doc.get('seo', {}).get('twitter', '') }}"></label>
+  </div></section>
+  {% set ch = doc.get('custom_html', {}) %}
+  <section class="card"><h2>Custom HTML (web only)</h2>
+    <p class="muted">Tracking snippets and anything else that belongs in the page. Injected verbatim.</p>
+    <label>In &lt;head&gt; <textarea name="f.custom_html.head" rows="5">{{ ch.get('head', '') }}</textarea></label>
+    <label>After &lt;body&gt; opens <textarea name="f.custom_html.body_start" rows="3">{{ ch.get('body_start', '') }}</textarea></label>
+    <label>Before &lt;/body&gt; <textarea name="f.custom_html.body_end" rows="3">{{ ch.get('body_end', '') }}</textarea></label>
+  </section>
+  <button class="primary" {% if read_only %}disabled{% endif %}>Save settings</button>
+</form>
+<details class="card"><summary>Edit site.toml directly</summary>
+  <form method="post" action="/sites/{{ site_id }}/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <textarea name="toml_text" rows="30" class="mono">{{ toml_text }}</textarea>
+    <button {% if read_only %}disabled{% endif %}>Save file</button>
+  </form>
+</details>
+{% endblock %}

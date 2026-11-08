@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ site_id }}{% endblock %}
+{% block content %}
+<h1>{{ site_id }}</h1>
+{% if problems %}<section class="card error"><h2>The site does not load</h2><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
+{% if conflicts %}<section class="card warn"><h2>Sync conflict files</h2><p>Another machine saved these at the same time. Open each, keep the right one, delete the other.</p><ul>{% for c in conflicts %}<li><code>{{ c }}</code></li>{% endfor %}</ul></section>{% endif %}
+<div class="columns">
+  <section class="card">
+    <h2>Recent posts</h2>
+    <ul class="plain">{% for p in posts %}<li><a href="/sites/{{ site_id }}/edit?rel={{ p.rel }}">{{ p.title }}</a> <span class="muted">{{ p.status }} · {{ p.date or '' }}</span></li>{% else %}<li class="muted">No posts yet.</li>{% endfor %}</ul>
+    <form method="post" action="/sites/{{ site_id }}/new" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="kind" value="post">
+      <input name="title" placeholder="New post title" required><button class="primary">Write</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Status</h2>
+    <p>Drafts: {{ drafts | length }}</p>
+    <p>Warnings in the preview build: {% for k, v in warnings.items() %}<span class="pill {{ k }}">{{ v }} {{ k }}</span> {% else %}none{% endfor %}</p>
+    {% if releases %}<p>Last export: {{ releases[0].time[:16] }} ({{ releases[0].platform }} → {{ releases[0].target }})</p>{% endif %}
+    {% if jobs %}<h3>Recent jobs</h3><ul class="plain">{% for j in jobs %}<li>{{ j.kind }} · {{ j.status }}</li>{% endfor %}</ul>{% endif %}
+  </section>
+</div>
+{% endblock %}
