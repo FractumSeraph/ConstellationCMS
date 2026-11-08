@@ -93,18 +93,15 @@ class Numerals(Protocol):
 Templates call `{{ 2026 | numeral }}` (site default) or `{{ n | numeral("roman") }}`. Each
 plugin must supply a plain-text form for Gemini and Gopher and may supply HTML for the web.
 
-The owner's "sicilian numerals" matched no known system in research (the phrase finds only
-Sicilian-language number words and the history of Arabic numerals arriving in Sicily). The plan
-assumes **Cistercian numerals** until confirmed (open question 1): a medieval system writing any
-number from 1 to 9999 as one glyph made of a vertical stem with marks in four quadrants (units
-top right, tens top left, hundreds bottom right, thousands bottom left). They are not in Unicode,
-so:
+The owner confirmed **Cistercian numerals** (decision 37): a medieval system writing any number
+from 1 to 9999 as one glyph made of a vertical stem with marks in four quadrants (units top right,
+tens top left, hundreds bottom right, thousands bottom left). They are not in Unicode, so:
 
 | Platform | Rendering |
 |---|---|
 | web | inline SVG generated from the digits (no font dependency), `role="img"` with `aria-label="2026"`, and a `<span class="numeral-fallback">2026</span>` for copy and paste |
 | gemini, gopher | Arabic digits (default), or the spelled-out form, chosen by `site.calendar.numerals_text_fallback` |
 
-If the owner meant Roman numerals or Sicilian number words, both are trivial text plugins that
-work on every platform. The plugin interface is the same either way, so this decision does not
-block anything before milestone 8.
+Years (YOLD or Gregorian) are the obvious use; day numbers and post counts can use the same
+filter. Roman numerals ship as a second, trivial plugin so the interface is exercised by two
+implementations.

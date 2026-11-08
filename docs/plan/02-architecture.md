@@ -3,22 +3,21 @@
 ## The shape in one picture
 
 ```
- Owner's PC (Windows or Linux)                      VPS (Linux)
- ┌───────────────────────────────────┐               ┌──────────────────────────────────────┐
- │ Synced folder (Dropbox/Syncthing) │               │ constellation server                 │
- │  sites/                           │               │  ├─ HTTP :80  / HTTPS :443 (SNI)     │
- │   fractumseraph/  (content+cfg)   │               │  ├─ Gemini :1965 (SNI, self-signed)  │
- │   fractum-faith/                  │               │  ├─ (later) Gopher :70               │
- └──────────────┬────────────────────┘               │  ├─ Publish + admin API (HTTPS)      │
-                │ reads/writes                        │  ├─ ACME client (HTTP-01)            │
- ┌──────────────▼────────────────────┐   release     │  ├─ Analytics pipeline → SQLite      │
- │ constellation studio (browser UI) │ ─────────────▶│  └─ releases/<site>/<hash>/<platform>│
- │  editor · previews · warnings     │   HTTPS,      └──────────────────────────────────────┘
- │  settings · publish · dashboards  │   token
- │  uses: core (build) + publish     │
- └───────────────────────────────────┘
-          │ static export (optional)
-          ▼
+ Owner's PC (Windows or Linux)                      VPS 1 (Linux)                      VPS 2
+ ┌───────────────────────────────────┐              ┌────────────────────────────┐    ┌──────────────┐
+ │ Synced folder (Dropbox/Syncthing) │              │ constellation server       │    │ constellation│
+ │  workspace.toml (sites, servers)  │              │  site A                    │    │ server       │
+ │  sites/A  sites/B  sites/C        │              │  ├─ HTTP :80 / HTTPS :443  │    │  sites B, C  │
+ └──────────────┬────────────────────┘              │  ├─ Gemini :1965 (SNI)     │    │  (same       │
+                │ reads/writes                      │  ├─ (later) Gopher :70     │    │   layout)    │
+ ┌──────────────▼────────────────────┐   release    │  ├─ Publish + admin API    │    │              │
+ │ constellation studio (browser UI) │ ───────────▶ │  ├─ ACME client (HTTP-01)  │    │              │
+ │  editor · previews · warnings     │   HTTPS,     │  ├─ Analytics → SQLite     │    │              │
+ │  settings · publish · dashboards  │   per-site   │  └─ releases/<site>/<hash> │    │              │
+ │  uses: core (build) + publish     │   token      └────────────────────────────┘    └──────▲───────┘
+ └───────────────┬───────────────────┘ ─────────────────────────────────────────────────────┘
+                 │ static export (optional)
+                 ▼
    folder / SFTP / rsync → any web host, Agate, Gophernicus...
 ```
 
@@ -182,7 +181,8 @@ TLS modes for HTTPS, chosen per server:
 ## What runs during "Publish"
 
 1. The studio runs `build` for the site, all platforms, with `now` fixed.
-2. It fetches the server's current manifest for that site and computes the diff per platform.
+2. It fetches the current manifest for that site from the server the site is assigned to
+   (decision 36: sites may live on different VPSes) and computes the diff per platform.
 3. It shows the diff (added, changed, removed files; warnings that are still unacknowledged).
 4. On confirm it uploads only missing blobs, then sends the manifest; the server assembles a
    release directory, validates it, and switches the site's `current` pointer atomically.

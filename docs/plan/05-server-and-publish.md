@@ -74,7 +74,7 @@ request_timeout_s = 10
 gemini_handshake_timeout_s = 10
 
 [analytics]
-ip_policy = "hash"                    # raw | truncate | hash | none
+ip_policy = "raw"                     # raw | truncate | hash | none (decision 44)
 retention_days = 730
 ```
 
@@ -195,6 +195,18 @@ Properties of the protocol:
   machine-locally (never in the synced workspace). The admin token is not retained by the studio.
 - Tokens can be listed and revoked from the studio.
 - All admin and publish endpoints are rate-limited and refuse plain HTTP.
+
+## Several servers, one studio
+
+A workspace may list several servers (decision 36). Each site names the server it publishes to.
+The studio keeps, per server, the admin URL (shared via the workspace) and, per site and server,
+a publish token (machine-local). Publishing a site talks only to that site's server; the Servers
+screen shows every server's status, certificates and releases side by side. Servers know nothing
+about each other, so there is no cross-server state to keep consistent.
+
+Retiring a site from a server (`DELETE /_constellation/sites/{site}`, admin token) removes its
+hostnames from routing, stops certificate renewal for them, and keeps its releases and analytics
+database on disk until the owner purges them.
 
 ## Installing the server
 

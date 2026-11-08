@@ -81,11 +81,22 @@ interpretation. "Default" means the proposed default was accepted.
 | 28 | Themes | A real multi-theme system. |
 | 29 | License | Owner will add one later. Dependencies are chosen to be permissively licensed so any choice remains open. |
 | 30 | Tests | Important. |
-| 31 | Dates | English only; configurable timezone; optional Discordian calendar; optional alternative numerals (see open question 1). |
+| 31 | Dates | English only; configurable timezone; optional Discordian calendar; optional alternative numerals (Cistercian, decision 37). |
 | 32 | Publii features | Keep the defaults: SEO fields, sitemap, Open Graph, custom head HTML, feeds. |
 | 33 | Scale | About 60 posts, one per week. Incremental builds are a nicety, not a need. |
 | 34 | Analytics | Lots. Today: GA4, self-hosted Umami, Facebook Pixel via custom HTML. Gemini and Gopher cannot run scripts, so the server logs every request and can forward to Umami. |
 | 35 | Name | ConstellationCMS. |
+| 36 | Multiple servers | One studio controls sites spread across several VPSes: site A on VPS 1, sites B, C and D on VPS 2, all from the home PC. Each site is assigned to a server; the studio keeps a registry of servers. |
+| 37 | Numerals | Cistercian numerals (confirmed). |
+| 38 | Image notice on text platforms | Short form: "[Image, web only. Alt text: ...]". Missing alt text is a warning, not a publish blocker. |
+| 39 | Tables on Gemini | Record list when cells are long (the `auto` default). |
+| 40 | Bold and italic on Gemini | Keep the `*` and `**` markers as plain text; readers understand them. |
+| 41 | Nested lists on Gemini | Indented text lines. |
+| 42 | Horizontal rule on Gemini | `~~~~`. |
+| 43 | Gopher sites | One Gopher site is enough for now. |
+| 44 | Client IPs in analytics | Store raw IPs. |
+| 45 | Studio on the VPS | Yes: a second studio instance on a VPS, so posts can be written without the main PC. |
+| 46 | Footnotes | Supported, rendered as `[1]` markers with a Notes section on text platforms. |
 
 ## Assumptions the plan makes
 
@@ -102,38 +113,25 @@ Each of these is a judgment call the owner can overturn. They are stated so the 
   avoids 90-day rotation warnings in clients.
 - **A4. Images are also served over Gemini.** The owner's notice text is emitted, followed by a
   link line to the image file so Gemini readers can open it. The notice wording is a theme setting.
-- **A5. "Sicilian numerals" is read as Cistercian numerals** pending confirmation (open question 1).
+- **A5. Cistercian numerals** are the alternative numeral system (confirmed by the owner, decision 37).
 - **A6. One Gopher site per listener.** Gopher has no virtual hosting, so when Gopher arrives each
   Gopher-enabled site needs its own IP address or port. The site model carries per-platform
-  listener settings from the start so this needs no later redesign.
+  listener settings from the start so this needs no later redesign. The owner needs one Gopher
+  site for now (decision 43).
+- **A9. Servers are a registry in the workspace; credentials are machine-local.** A site names
+  the server it publishes to by id. The server's address is shared through the synced workspace;
+  the tokens for it live only on the machines that have been connected to it.
 - **A7. The gemsub index label is `YYYY-MM-DD Title`** (no dash), the form Lagrange documents.
   The owner's current capsule uses an em dash; it is a one-line theme setting either way.
 - **A8. The studio requires a password even in local mode** but auto-logs-in on localhost by
   default. Remote mode adds a second factor and HTTPS requirements.
 
+## Resolved questions
+
+The planning questionnaire's ten open questions were answered on 2026-11-08 and are recorded as
+decisions 37 to 46 above. No question blocks any milestone.
+
 ## Open questions for the owner
 
-Answers are not needed to start milestone 0 or 1. They are needed before the milestone named.
-
-1. **Numerals (milestone 8).** "Sicilian numerals" matches no known numeral system. The nearest
-   candidates are Cistercian numerals (medieval single-glyph numbers 1 to 9999, popular online),
-   Roman numerals, or Sicilian-language number words (unu, dui, tri). Which did you mean?
-2. **Image notice wording (milestone 1).** Keep the exact text "[image only available on html
-   version of this site. Alt text is: ...]" or the shorter "[Image, web only. Alt text: ...]"?
-   And may the editor refuse to publish an image without alt text?
-3. **Tables on Gemini (milestone 1).** Your ranks table has sentence-length cells. As preformatted
-   text it will be very wide on phones. Default to the "record list" rendering (one bullet group
-   per row) when cells are long?
-4. **Bold and italic on Gemini (milestone 1).** Strip the markers (recommended) or keep `*` and
-   `**` as a plain-text convention?
-5. **Nested lists on Gemini (milestone 1).** Indented text lines, flattened bullets, or sentences?
-6. **Horizontal rule string on Gemini (milestone 1).** Proposed `~~~`.
-7. **Multiple Gopher sites (milestone 9).** Is one Gopher site enough for now, and which site gets
-   port 70?
-8. **Client IP policy (milestone 5).** Store raw IPs, truncated IPs, or daily-salted hashes only?
-   Recommended: hashes only, which still gives unique-visitor counts.
-9. **Second studio on the VPS (milestone 4).** Would you like the option of running a studio
-   instance on the VPS, with the content folder synced there by Syncthing, in addition to the one
-   on your PC?
-10. **Footnotes.** Not used today. Support the syntax anyway (cheap), rendered as `[1]` markers
-    with a Notes section on text platforms?
+None at present. New questions raised during a milestone are added here and to that milestone's
+pull request.

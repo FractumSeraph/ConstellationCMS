@@ -4,7 +4,7 @@ This folder is the plan for ConstellationCMS, written before any code. Read it i
 
 | # | Document | What it settles |
 |---|----------|-----------------|
-| 01 | [Overview and decisions](01-overview-and-decisions.md) | What we are building, the owner's decisions, assumptions, and the open questions |
+| 01 | [Overview and decisions](01-overview-and-decisions.md) | What we are building, the owner's decisions, assumptions, and resolved questions |
 | 02 | [Architecture](02-architecture.md) | Stack, processes, repository layout, the core interfaces |
 | 03 | [Content model](03-content-model.md) | What a site looks like on disk: folders, front matter, settings, multi-site registry |
 | 04 | [Rendering](04-rendering.md) | One Markdown source, many platforms: the document model, the mapping table, warnings and alternatives, links, feeds |

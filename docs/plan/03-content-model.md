@@ -8,7 +8,7 @@ ConstellationCMS separates three kinds of data:
 |------|----------|---------|----------|
 | The program | this repository, installed as a package | no | public |
 | Sites (content, settings, themes the owner installed) | a **workspace** folder the owner chooses, typically inside Dropbox/OneDrive/Syncthing | yes | private |
-| Machine-local state (studio password hash, sessions, build cache, publish tokens) | the OS user data directory (`%APPDATA%\ConstellationCMS` on Windows, `~/.config/constellation` and `~/.cache/constellation` on Linux) | no | private |
+| Machine-local state (studio password hash, sessions, build cache, publish tokens per server) | the OS user data directory (`%APPDATA%\ConstellationCMS` on Windows, `~/.config/constellation` and `~/.cache/constellation` on Linux) | no | private |
 
 Secrets never go into the synced workspace. Publish tokens, the studio password and TOTP secret
 are machine-local, so a synced folder landing on a stranger's machine exposes content but nothing
@@ -54,16 +54,33 @@ present and from the folder name otherwise.
 ```toml
 version = 1
 
+[[servers]]                   # every VPS running `constellation server` (decision 36)
+id = "vps-1"
+name = "First VPS"
+admin_url = "https://fractumseraph.net/_constellation"
+
+[[servers]]
+id = "vps-2"
+name = "Second VPS"
+admin_url = "https://fractum.faith/_constellation"
+
 [[sites]]
 id = "fractumseraph"          # folder name under sites/
 name = "Fractum Seraph"
+server = "vps-1"              # where this site publishes; "" means export only
 
 [[sites]]
 id = "fractum-faith"
 name = "Angels of Fractum"
+server = "vps-2"
 ```
 
-The studio shows every site in the registry and lets the owner create, rename, or archive one.
+The studio shows every site in the registry and lets the owner create, rename, or archive one, and
+assign it to a server. Server addresses are shared through the synced workspace; the per-site
+publish tokens for each server are machine-local, so each machine that should publish is
+connected once with the server's admin token. Moving a site to another server is a change of the
+`server` field followed by a publish, plus a retire action on the old server from the Servers
+screen when it should stop serving the site.
 
 ## site.toml
 
@@ -137,9 +154,9 @@ body_start = ""
 body_end = ""
 
 [render.gemini]                       # per-platform rendering options; defaults from 04-rendering
-inline_markup = "strip"
-hr = "~~~"
-image_notice = "[image only available on html version of this site. Alt text is: {alt}]"
+inline_markup = "markdown"
+hr = "~~~~"
+image_notice = "[Image, web only. Alt text: {alt}]"
 
 [calendar]
 display = ["gregorian", "discordian"] # which calendars themes may show; order = preference

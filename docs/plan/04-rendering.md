@@ -103,7 +103,7 @@ The owner's rules are marked **(owner)**. Defaults are configurable per site in
 |---|---|---|---|---|---|
 | paragraph, soft breaks | `<p>` | one text line; soft breaks become spaces | no | | |
 | hard break (`  ⏎`, `\⏎`, `<br>`) | `<br>` | new text line; inside a quote, a new `> ` line | no | | |
-| `*em*`, `**strong**`, `` `code` `` | `<em>`, `<strong>`, `<code>` | markers stripped (default) | yes | `INLINE-STYLE-LOST` info, once per post | option `inline_markup = "markdown"` keeps the `*`, `**`, backticks as a text convention |
+| `*em*`, `**strong**`, `` `code` `` | `<em>`, `<strong>`, `<code>` | markers kept as plain text (`*em*`, `**strong**`, backticks) because readers understand them **(owner)** | slightly | `INLINE-STYLE-KEPT` info, once per post | option `inline_markup = "strip"` removes the markers |
 | `~~strike~~` | `<del>` | stripped | yes | `STRIKE-LOST` warn | render as `[struck: text]`, or keep `~~` |
 | `[text](url)` in prose | `<a>` | text stays inline; `=> url text` line directly after the block, no blank line between, one blank line after the group | no | `LINK-GENERIC-TEXT` warn when the text is "here", "this", "link", "read more", a bare URL | `link_markers = "numbers"` gives `text[1]` and `=> url [1] text` |
 | link with a title | title attribute | title appended to the label after " — " | slightly | `LINK-TITLE-LOST` info | |
@@ -143,8 +143,8 @@ The owner's rules are marked **(owner)**. Defaults are configurable per site in
 | indented code | `<pre>` | ` ```code ` block | no | `PRE-NO-ALT` info | |
 | pipe table | `<table>` | default `auto`: preformatted aligned text table when cells are short; **record list** (one bullet group per row, `* Header: cell`) when any cell exceeds 40 characters or the table exceeds 80 columns | yes | `TABLE-PRE` info; `TABLE-LONG-CELLS` warn | force `pre` or `records`; for two-column tables, `* Term — definition` |
 | definition list | `<dl>` | `* Term — definition` | yes | `DEFLIST` info | |
-| horizontal rule | `<hr>` | a text line `~~~` between blank lines (never `* * *`, which is a list item) | yes | | theme option `hr = "..."` |
-| image alone in a paragraph **(owner)** | `<figure><img srcset><figcaption>` | text line `[image only available on html version of this site. Alt text is: ALT]` then `=> /media/posts/slug/file.png ALT`, then a blank line | yes | `IMG-NO-ALT` error when alt is empty; `IMG-EXTERNAL` info | wording is a setting; `image_link = false` drops the link line |
+| horizontal rule | `<hr>` | a text line `~~~~` between blank lines **(owner)** (never `* * *`, which is a list item) | yes | | theme option `hr = "..."` |
+| image alone in a paragraph **(owner)** | `<figure><img srcset><figcaption>` | text line `[Image, web only. Alt text: ALT]` then `=> /media/posts/slug/file.png ALT`, then a blank line | yes | `IMG-NO-ALT` warn when alt is empty (does not block publishing); `IMG-EXTERNAL` info | wording is a setting; `image_link = false` drops the link line |
 | image inside a sentence | `<img>` inline | `[image: ALT]` in the text; the link line goes first in the block's link group | yes | `IMG-INLINE` info | move to its own paragraph |
 | `<figure>` HTML | passed through | image rule plus caption text line | yes | | |
 | admonition `> [!NOTE]` / `:::note` / Publii message box | styled box | quote whose first line is `> Note: ...` | yes | | `NOTE:` prefix text |
@@ -189,17 +189,17 @@ alternative", which inserts the matching skeleton below the construct.
 
 ```toml
 [render.gemini]
-inline_markup   = "strip"          # strip | markdown
+inline_markup   = "markdown"       # markdown (keep * ** and backticks) | strip
 link_placement  = "after-block"    # after-block | per-item | at-end
 link_markers    = "none"           # none | numbers | letters
 dedupe_links    = "block"          # block | document | off
-image_notice    = "[image only available on html version of this site. Alt text is: {alt}]"
+image_notice    = "[Image, web only. Alt text: {alt}]"
 image_link      = true
 heading_overflow = "text"          # text | promote | upper
 nested_lists    = "indent"         # indent | flatten | sentence
 ordered_lists   = "numbered-text"  # numbered-text | bullet-numbered
 tables          = "auto"           # pre | records | auto
-hr              = "~~~"
+hr              = "~~~~"
 footnotes       = "end-section"    # end-section | inline-parens
 notes_heading   = "### Notes"
 embed_notice    = "[embedded content only available on the html version of this site]"
@@ -249,7 +249,7 @@ Boomtime, The Aftermath 20, 3192 YOLD        ← only when the Discordian calend
 ### Notes                                           ← only when footnotes exist
 [1] ...
 
-~~~
+~~~~
 => /posts/previous.gmi ← Previous: Title
 => /posts/next.gmi → Next: Title
 => https://fractumseraph.net/posts/slug/ Read this post on the web (images, tables and formatting)

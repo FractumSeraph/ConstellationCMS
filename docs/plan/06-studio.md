@@ -18,7 +18,7 @@ serves pages on `http://127.0.0.1:8787` and opens the browser.
 | Theme | Pick a theme per site; edit its typed settings; show which platforms it covers; open the override folder. |
 | Publish | Build, show warnings, show the per-platform diff against the server, confirm; history with rollback; export targets. |
 | Analytics | Dashboards fed by the server's analytics API ([07-analytics](07-analytics.md)). |
-| Server | Connect a server, mint and revoke tokens, view listeners, certificates and expiry, server settings (TLS mode, ports), logs tail. |
+| Servers | The server registry: add a server by admin URL and admin token, assign sites to servers, mint and revoke per-site tokens, view each server's listeners, certificates and expiry, server settings (TLS mode, ports), logs tail. Sites on different VPSes are managed side by side (decision 36). |
 | Account | Studio password, second factor, remote mode, sessions, audit log. |
 
 ## The editor
@@ -79,13 +79,14 @@ running the studio, so the studio is never on the public internet; remote mode s
 password and second factor. Exposing port 8787 publicly works but is the owner's choice and the
 studio says so in the settings screen.
 
-### Studio on the VPS (option)
+### Studio on the VPS (chosen)
 
-The studio can also run on the VPS, behind our own server's HTTPS at a dedicated hostname such as
-`studio.fractumseraph.net`, with the workspace synced to the VPS by Syncthing. This gives remote
-access with proper TLS and no open ports at home. The trade-off is that two studios may edit the
-same workspace; the sync-safety rules below exist for exactly that case. The owner decides
-(open question 9).
+The owner wants to post without the main PC (decision 45), so a second studio instance runs on a
+VPS, behind our own server's HTTPS at a dedicated hostname such as `studio.fractumseraph.net`,
+with the workspace synced to the VPS by Syncthing. This gives remote access with proper TLS and
+no open ports at home. Two studios may then edit the same workspace; the sync-safety rules below
+exist for exactly that case. `constellation server install --with-studio` sets up the second
+instance as a systemd unit behind the server, with remote mode mandatory.
 
 ## Synced-folder safety
 

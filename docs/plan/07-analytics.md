@@ -22,7 +22,8 @@ class Event:
     status: int                  # HTTP status; Gemini status; Gopher synthesized (20 ok / 51 missing)
     bytes: int
     duration_ms: int
-    visitor: str                 # daily-salted hash of (ip, user_agent or "", site); see IP policy
+    ip: str | None               # stored according to the IP policy (raw, by the owner's choice)
+    visitor: str                 # hash of (ip, user_agent or "", site) for unique counts
     ip_class: str                # v4 | v6; plus "tor" / "known-bot" flags when determinable
     referrer: str | None         # web only
     user_agent: str | None       # web only
@@ -40,10 +41,13 @@ by platform, by status) are kept forever and are what the dashboards read.
 
 | Value | Stored | Unique visitors |
 |---|---|---|
-| `hash` (recommended) | nothing identifying; `visitor` = SHA-256(daily salt, IP, UA, site), salt rotated daily and discarded | yes, per day |
+| `raw` (the owner's choice, decision 44) | full IP in every event | yes, across days |
+| `hash` | nothing identifying; `visitor` = SHA-256(daily salt, IP, UA, site), salt rotated daily and discarded | yes, per day |
 | `truncate` | IPv4 /24, IPv6 /48 | approximate |
-| `raw` | full IP | yes |
 | `none` | no visitor field | views only |
+
+With `raw`, dashboards gain per-IP views, optional offline geolocation, and repeat-visitor tracking
+across days; the retention setting bounds how long raw addresses are kept.
 
 Gemini and Gopher requests carry no user agent or referrer, so their visitor hash is IP-only; that
 is the small-web norm and still yields daily unique counts.
@@ -100,7 +104,8 @@ the web through custom HTML injection.
 
 ## Privacy notes
 
-- Hash mode stores no personal data; the daily salt is never written to disk after the day ends.
+- Raw mode stores IP addresses, which count as personal data in some jurisdictions; retention and
+  backup policy apply to them. Hash mode remains available and stores no personal data.
 - Forwarding to Umami sends the request path and hostname, not the IP (Umami sees the server's
   IP), so Gemini readers are not individually identifiable there.
 - Web trackers injected through custom HTML are the owner's responsibility, as today.
