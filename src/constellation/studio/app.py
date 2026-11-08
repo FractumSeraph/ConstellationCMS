@@ -34,11 +34,13 @@ from constellation.studio.jobs import Jobs
 from constellation.studio.preview import PreviewBuilder, gemtext_to_html
 from constellation.studio.state import State
 from constellation.studio.workspace import (
+    ServerEntry,
     Workspace,
     atomic_write,
     create_site,
     load_workspace,
     read_site_toml,
+    save_workspace,
     set_path,
     write_site_toml,
 )
@@ -773,6 +775,12 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             for w in pb.warnings
             if w.severity == "error"
         ]
+        from constellation.studio import servers as srv
+
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        server = ws.server(entry.server) if entry and entry.server else None
+        remote = srv.releases(studio.state, site_id, server) if server else None
         return render(
             request,
             "publish.html",
@@ -783,6 +791,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             jobs=studio.jobs.for_site(site_id),
             read_only=studio.read_only_reason(site_id),
             releases=_releases(root),
+            server=server,
+            remote=remote,
+            connected=bool(server and srv.has_token(studio.state, server.id, site_id)),
         )
 
     @app.post("/sites/{site_id}/exports")
@@ -855,6 +866,151 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if job is None:
             raise HTTPException(404)
         return render(request, "partials/job.html", job=job, site_id=job.site)
+
+    # ---- servers (registry, tokens, publish to our server) -----------------------------------
+    @app.get("/servers", response_class=HTMLResponse)
+    async def servers_page(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_session),
+        error: str = "",
+        ok: str = "",
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        ws = studio.workspace
+        connected = {
+            (s.id, site.id): srv.has_token(studio.state, s.id, site.id)
+            for s in ws.servers
+            for site in ws.sites
+        }
+        return render(
+            request,
+            "servers.html",
+            servers=ws.servers,
+            sites=ws.sites,
+            connected=connected,
+            error=error,
+            ok=ok,
+        )
+
+    @app.post("/servers")
+    async def servers_add(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        id: str = Form(...),
+        name: str = Form(""),
+        admin_url: str = Form(...),
+        delete: str = Form(""),
+    ) -> Response:
+        ws = studio.workspace
+        if delete:
+            ws.servers = [s for s in ws.servers if s.id != delete]
+            for site in ws.sites:
+                if site.server == delete:
+                    site.server = ""
+        else:
+            sid = id.strip().lower()
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", sid) or not admin_url.startswith("https://"):
+                return RedirectResponse(
+                    "/servers?error=server+id+must+be+lowercase+and+the+admin+URL+must+use+https",
+                    303,
+                )
+            ws.servers = [s for s in ws.servers if s.id != sid]
+            ws.servers.append(ServerEntry(sid, name.strip() or sid, admin_url.strip().rstrip("/")))
+        save_workspace(ws)
+        studio.state.audit("servers_changed", delete or id, client_host(request))
+        return RedirectResponse("/servers?ok=1", 303)
+
+    @app.post("/servers/{server_id}/connect")
+    async def servers_connect(
+        request: Request,
+        server_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        site_id: str = Form(...),
+        admin_token: str = Form(...),
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        ws = studio.workspace
+        server = ws.server(server_id)
+        if server is None or ws.site(site_id) is None:
+            raise HTTPException(404)
+        try:
+            srv.connect_site(
+                studio.state,
+                ws,
+                server,
+                site_id,
+                admin_token.strip(),
+                f"studio on {locks.machine_label()}",
+            )
+        except Exception as e:  # noqa: BLE001
+            from urllib.parse import quote
+
+            return RedirectResponse(f"/servers?error={quote(str(e))}", 303)
+        studio.state.audit("server_connected", f"{server_id}:{site_id}", client_host(request))
+        return RedirectResponse("/servers?ok=1", 303)
+
+    @app.post("/servers/{server_id}/forget")
+    async def servers_forget(
+        request: Request,
+        server_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        site_id: str = Form(...),
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        srv.forget_token(studio.state, server_id, site_id)
+        return RedirectResponse("/servers?ok=1", 303)
+
+    @app.post("/sites/{site_id}/publish-to-server")
+    async def publish_to_server(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        mode: str = Form("plan"),
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        root = studio.site_root(site_id)
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        server = ws.server(entry.server) if entry and entry.server else None
+        if server is None:
+            raise HTTPException(400, "this site is not assigned to a server")
+        try:
+            job = await studio.jobs.start(
+                "publish",
+                site_id,
+                lambda job: srv.run_publish(
+                    job, studio.state, root, site_id, server, apply=mode == "apply"
+                ),
+            )
+        except RuntimeError as e:
+            raise HTTPException(409, str(e)) from e
+        studio.state.audit("publish_" + mode, f"{site_id}->{server.id}", client_host(request))
+        return render(request, "partials/job.html", job=job, site_id=site_id)
+
+    @app.post("/sites/{site_id}/rollback")
+    async def rollback_site(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        release_id: str = Form(...),
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        server = ws.server(entry.server) if entry and entry.server else None
+        if server is None:
+            raise HTTPException(400, "this site is not assigned to a server")
+        try:
+            srv.rollback(studio.state, site_id, server, release_id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(409, str(e)) from e
+        studio.state.audit("rollback", f"{site_id}:{release_id}", client_host(request))
+        return RedirectResponse(f"/sites/{site_id}/publish", 303)
 
     # ---- account --------------------------------------------------------------------------
     @app.get("/account", response_class=HTMLResponse)

@@ -34,12 +34,28 @@ from constellation.core.routes import (
 from constellation.core.themes import Theme, load_theme, make_environment, theme_chain
 
 MEDIA_TYPES = {
-    ".html": "text/html; charset=utf-8", ".gmi": "text/gemini", ".txt": "text/plain; charset=utf-8",
-    ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".xml": "application/xml",
-    ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".ico": "image/x-icon",
-    ".woff2": "font/woff2", ".woff": "font/woff", ".pdf": "application/pdf", ".mp3": "audio/mpeg",
-    ".ogg": "audio/ogg", ".mp4": "video/mp4", ".webm": "video/webm", ".atom": "application/atom+xml",
+    ".html": "text/html; charset=utf-8",
+    ".gmi": "text/gemini",
+    ".txt": "text/plain; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".xml": "application/xml",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".pdf": "application/pdf",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".atom": "application/atom+xml",
 }
 
 
@@ -48,7 +64,7 @@ class BuiltFile:
     path: str
     data: bytes
     media_type: str
-    source: Path | None = None   # set for copied media (large files are not held in memory twice)
+    source: Path | None = None  # set for copied media (large files are not held in memory twice)
 
     @property
     def sha256(self) -> str:
@@ -67,7 +83,14 @@ class PlatformBuild:
     warnings: list[Warning] = field(default_factory=list)
     item_warnings: dict[str, list[Warning]] = field(default_factory=dict)
 
-    def add(self, path: str, data: bytes | str, media_type: str | None = None, *, source: Path | None = None) -> None:
+    def add(
+        self,
+        path: str,
+        data: bytes | str,
+        media_type: str | None = None,
+        *,
+        source: Path | None = None,
+    ) -> None:
         raw = data.encode("utf-8") if isinstance(data, str) else data
         mt = media_type or media_type_for(path)
         if self.platform == "gemini" and mt == "text/gemini":
@@ -101,7 +124,9 @@ class Build:
 
     def release_id(self) -> str:
         """Hash of the content only, so an identical rebuild is the same release."""
-        payload = json.dumps(self.manifest()["platforms"], sort_keys=True, separators=(",", ":")).encode()
+        payload = json.dumps(
+            self.manifest()["platforms"], sort_keys=True, separators=(",", ":")
+        ).encode()
         return hashlib.sha256(payload).hexdigest()[:16]
 
 
@@ -123,8 +148,14 @@ class Rendered:
     doc: Document
 
 
-def build_site(site: Site, *, platforms: list[str] | None = None, now: datetime | None = None,
-               include_drafts: bool = False, theme_search: list[Path] | None = None) -> Build:
+def build_site(
+    site: Site,
+    *,
+    platforms: list[str] | None = None,
+    now: datetime | None = None,
+    include_drafts: bool = False,
+    theme_search: list[Path] | None = None,
+) -> Build:
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         now = now.replace(tzinfo=UTC)
@@ -141,7 +172,9 @@ def build_site(site: Site, *, platforms: list[str] | None = None, now: datetime 
         drafts = [p for p in site.posts if p.meta.status == "draft" or p.date > now]
         visible = sorted(visible + drafts, key=lambda p: (p.date, p.slug), reverse=True)
     pages = [p for p in site.pages if p.meta.status != "draft" or include_drafts]
-    resolver = RefResolver(cfg, post_slugs={p.slug for p in site.posts}, page_slugs={p.slug for p in site.pages})
+    resolver = RefResolver(
+        cfg, post_slugs={p.slug for p in site.posts}, page_slugs={p.slug for p in site.pages}
+    )
     docs = _parse_all(visible, pages, resolver)
     link_problems = _check_links(site, docs, visible, pages)
 
@@ -153,7 +186,9 @@ def build_site(site: Site, *, platforms: list[str] | None = None, now: datetime 
         pb = PlatformBuild(platform)
         pb.warnings.extend(link_problems)
         env = make_environment(chain, platform, overrides=overrides if overrides.is_dir() else None)
-        ctx = _Context(site, platform, env, chain, build, listed, docs, image_sets if platform == "web" else {})
+        ctx = _Context(
+            site, platform, env, chain, build, listed, docs, image_sets if platform == "web" else {}
+        )
         for post in visible:
             ctx.render_post(post, pb)
         for page in pages:
@@ -203,7 +238,9 @@ def _parse_all(posts: list[Post], pages: list[Page], resolver: RefResolver) -> d
     return docs
 
 
-def _check_links(site: Site, docs: dict[str, Document], visible: list[Post], pages: list[Page]) -> list[Warning]:
+def _check_links(
+    site: Site, docs: dict[str, Document], visible: list[Post], pages: list[Page]
+) -> list[Warning]:
     """Links to drafts, future posts, missing pages or missing media are errors."""
     post_slugs = {p.slug for p in visible}
     page_slugs = {p.slug for p in pages}
@@ -215,22 +252,65 @@ def _check_links(site: Site, docs: dict[str, Document], visible: list[Post], pag
         site_media = site.root / "media"
         for ref in doc.refs:
             if ref.kind == "post" and ref.target not in post_slugs:
-                code = "LINK-UNPUBLISHED" if site.post_by_slug(ref.target) else "LINK-BROKEN-INTERNAL"
-                problems.append(Warning(code, "error", "all", 0, f"{key}: link to post {ref.target!r} which {'is not published' if code == 'LINK-UNPUBLISHED' else 'does not exist'}"))
+                code = (
+                    "LINK-UNPUBLISHED" if site.post_by_slug(ref.target) else "LINK-BROKEN-INTERNAL"
+                )
+                problems.append(
+                    Warning(
+                        code,
+                        "error",
+                        "all",
+                        0,
+                        f"{key}: link to post {ref.target!r} which {'is not published' if code == 'LINK-UNPUBLISHED' else 'does not exist'}",
+                    )
+                )
             elif ref.kind == "page" and ref.target not in page_slugs:
-                problems.append(Warning("LINK-BROKEN-INTERNAL", "error", "all", 0, f"{key}: link to page {ref.target!r} which does not exist"))
+                problems.append(
+                    Warning(
+                        "LINK-BROKEN-INTERNAL",
+                        "error",
+                        "all",
+                        0,
+                        f"{key}: link to page {ref.target!r} which does not exist",
+                    )
+                )
             elif ref.kind == "media":
                 if ref.target.startswith("/"):
                     if not (site_media / ref.target.lstrip("/")).is_file():
-                        problems.append(Warning("LINK-BROKEN-MEDIA", "error", "all", 0, f"{key}: site media {ref.target!r} not found"))
+                        problems.append(
+                            Warning(
+                                "LINK-BROKEN-MEDIA",
+                                "error",
+                                "all",
+                                0,
+                                f"{key}: site media {ref.target!r} not found",
+                            )
+                        )
                 elif ref.target not in media_names:
-                    problems.append(Warning("LINK-BROKEN-MEDIA", "error", "all", 0, f"{key}: media {ref.target!r} not found next to the post"))
+                    problems.append(
+                        Warning(
+                            "LINK-BROKEN-MEDIA",
+                            "error",
+                            "all",
+                            0,
+                            f"{key}: media {ref.target!r} not found next to the post",
+                        )
+                    )
     return problems
 
 
 class _Context:
-    def __init__(self, site: Site, platform: str, env: Any, chain: list[Theme], build: Build,
-                 listed: list[Post], docs: dict[str, Document], image_sets: dict[str, ImageSet]) -> None:
+    def __init__(
+        self,
+        site: Site,
+        platform: str,
+        env: Any,
+        chain: list[Theme],
+        build: Build,
+        listed: list[Post],
+        docs: dict[str, Document],
+        image_sets: dict[str, ImageSet],
+    ) -> None:
         self.site = site
         self.image_sets = image_sets
         self.bodies: dict[str, str] = {}
@@ -269,12 +349,19 @@ class _Context:
         def asset(name: str) -> str:
             return f"/assets/{self.chain[0].name}/{name}"
 
-        self.env.globals.update({
-            "site": self.site, "platform": platform, "url_for": url, "menu_url": menu_url,
-            "absolute_url": lambda path: absolute_url(cfg, platform, path), "asset": asset,
-            "theme": self.theme_settings, "now": self.build.now,
-            "hr": cfg.render.gemini.hr,
-        })
+        self.env.globals.update(
+            {
+                "site": self.site,
+                "platform": platform,
+                "url_for": url,
+                "menu_url": menu_url,
+                "absolute_url": lambda path: absolute_url(cfg, platform, path),
+                "asset": asset,
+                "theme": self.theme_settings,
+                "now": self.build.now,
+                "hr": cfg.render.gemini.hr,
+            }
+        )
         self.env.filters["date"] = _date_filter(cfg)
         self.env.filters["isoformat"] = lambda d: d.isoformat()
         self.env.filters["slug"] = lambda s: slugify(str(s))
@@ -289,7 +376,9 @@ class _Context:
         if self.platform == "gemini":
             res = GemtextRenderer(self.cfg.render.gemini, u).render(doc)
         else:
-            srcsets = {path: iset.srcset() for path, iset in self.image_sets.items() if iset.srcset()}
+            srcsets = {
+                path: iset.srcset() for path, iset in self.image_sets.items() if iset.srcset()
+            }
             res = HtmlRenderer(u, image_srcset=srcsets).render(doc)
         summary = item.meta.summary or summary_text(doc)
         if item.kind == "post":
@@ -301,12 +390,20 @@ class _Context:
         author_id = item.meta.author or self.cfg.site.author
         author = self.cfg.author_by_id(author_id) if author_id else None
         web = self.cfg.platform("web")
-        web_url = (web.base_url + platform_path(self.cfg, "web", item.kind, item.slug)) if web.enabled and web.base_url else ""
+        web_url = (
+            (web.base_url + platform_path(self.cfg, "web", item.kind, item.slug))
+            if web.enabled and web.base_url
+            else ""
+        )
         gem = self.cfg.platform("gemini")
         gem_path = platform_path(self.cfg, "gemini", item.kind, item.slug) if gem.enabled else ""
         return {
-            "item": item, "body": rendered.body, "summary": rendered.summary, "author": author,
-            "web_url": web_url, "gemini_path": gem_path,
+            "item": item,
+            "body": rendered.body,
+            "summary": rendered.summary,
+            "author": author,
+            "web_url": web_url,
+            "gemini_path": gem_path,
         }
 
     def render_post(self, post: Post, pb: PlatformBuild) -> None:
@@ -316,18 +413,28 @@ class _Context:
         pb.warnings.extend(rendered.warnings)
         ctx = self._common(post, rendered)
         idx = next((i for i, p in enumerate(self.listed) if p.slug == post.slug), None)
-        ctx["prev_post"] = self.listed[idx + 1] if idx is not None and idx + 1 < len(self.listed) else None
+        ctx["prev_post"] = (
+            self.listed[idx + 1] if idx is not None and idx + 1 < len(self.listed) else None
+        )
         ctx["next_post"] = self.listed[idx - 1] if idx is not None and idx > 0 else None
         ctx["featured_image"] = media_path(post.slug, post.meta.image) if post.meta.image else ""
-        ctx["featured_srcset"] = self.image_sets[ctx["featured_image"]].srcset() if ctx["featured_image"] in self.image_sets else ""
+        ctx["featured_srcset"] = (
+            self.image_sets[ctx["featured_image"]].srcset()
+            if ctx["featured_image"] in self.image_sets
+            else ""
+        )
         series = None
         if post.meta.series:
             term = self.site.series.get(slugify(post.meta.series))
             if term:
-                part = post.meta.series_part or (term.posts.index(post) + 1 if post in term.posts else None)
+                part = post.meta.series_part or (
+                    term.posts.index(post) + 1 if post in term.posts else None
+                )
                 series = {"slug": term.slug, "title": term.title, "part": part}
         ctx["series"] = series
-        text = self.env.get_template("post.gmi" if self.platform == "gemini" else "post.html").render(**ctx)
+        text = self.env.get_template(
+            "post.gmi" if self.platform == "gemini" else "post.html"
+        ).render(**ctx)
         pb.add(output_file(self.cfg, self.platform, "post", post.slug), _tidy(text, self.platform))
 
     def render_page(self, page: Page, pb: PlatformBuild) -> None:
@@ -341,12 +448,17 @@ class _Context:
         try:
             template = self.env.get_template(tpl)
         except Exception:
-            template = self.env.get_template("page.gmi" if self.platform == "gemini" else "page.html")
+            template = self.env.get_template(
+                "page.gmi" if self.platform == "gemini" else "page.html"
+            )
         text = template.render(**ctx)
         pb.add(output_file(self.cfg, self.platform, "page", page.slug), _tidy(text, self.platform))
 
     def _summaries(self) -> dict[str, str]:
-        return {p.slug: (p.meta.summary or summary_text(self.docs[f"post:{p.slug}"])) for p in self.listed}
+        return {
+            p.slug: (p.meta.summary or summary_text(self.docs[f"post:{p.slug}"]))
+            for p in self.listed
+        }
 
     def _tpl(self, name: str) -> Any:
         return self.env.get_template(f"{name}.gmi" if self.platform == "gemini" else f"{name}.html")
@@ -355,7 +467,8 @@ class _Context:
         summaries = self._summaries()
         listed_slugs = {p.slug for p in self.listed}
         groups: list[tuple[str, dict[str, Term], str]] = [
-            ("tag", self.site.tags, "Tags"), ("category", self.site.categories, "Categories"),
+            ("tag", self.site.tags, "Tags"),
+            ("category", self.site.categories, "Categories"),
             ("series", self.site.series, "Series"),
         ]
         for kind, terms, heading in groups:
@@ -370,12 +483,33 @@ class _Context:
                 term_body = ""
                 if term.body:
                     doc = parse_markdown(term.body)
-                    term_body = (GemtextRenderer(self.cfg.render.gemini, lambda r: url_for(r, "gemini", self.cfg)).render(doc).text
-                                 if self.platform == "gemini" else HtmlRenderer(lambda r: url_for(r, "web", self.cfg)).render(doc).text)
-                text = self._tpl("list").render(term=term, posts=posts, summaries=summaries, term_body=term_body, gemini_path=platform_path(self.cfg, "gemini", kind, term.slug))
-                pb.add(output_file(self.cfg, self.platform, kind, term.slug), _tidy(text, self.platform))
+                    term_body = (
+                        GemtextRenderer(
+                            self.cfg.render.gemini, lambda r: url_for(r, "gemini", self.cfg)
+                        )
+                        .render(doc)
+                        .text
+                        if self.platform == "gemini"
+                        else HtmlRenderer(lambda r: url_for(r, "web", self.cfg)).render(doc).text
+                    )
+                text = self._tpl("list").render(
+                    term=term,
+                    posts=posts,
+                    summaries=summaries,
+                    term_body=term_body,
+                    gemini_path=platform_path(self.cfg, "gemini", kind, term.slug),
+                )
+                pb.add(
+                    output_file(self.cfg, self.platform, kind, term.slug),
+                    _tidy(text, self.platform),
+                )
             if shown or kind != "series":
-                text = self._tpl("terms").render(kind=kind, terms=shown, heading=heading, gemini_path=index_path(self.cfg, "gemini", kind))
+                text = self._tpl("terms").render(
+                    kind=kind,
+                    terms=shown,
+                    heading=heading,
+                    gemini_path=index_path(self.cfg, "gemini", kind),
+                )
                 pb.add(index_output_file(self.cfg, self.platform, kind), _tidy(text, self.platform))
 
     def render_archives(self, pb: PlatformBuild) -> None:
@@ -383,28 +517,69 @@ class _Context:
         for p in self.listed:
             by_year.setdefault(p.date.year, []).append(p)
         years = sorted(((y, len(ps)) for y, ps in by_year.items()), reverse=True)
-        text = self._tpl("archive").render(year=None, years=years, posts=self.listed, gemini_path=index_path(self.cfg, "gemini", "archive"))
+        text = self._tpl("archive").render(
+            year=None,
+            years=years,
+            posts=self.listed,
+            gemini_path=index_path(self.cfg, "gemini", "archive"),
+        )
         pb.add(index_output_file(self.cfg, self.platform, "archive"), _tidy(text, self.platform))
         for y, posts in by_year.items():
-            text = self._tpl("archive").render(year=y, years=years, posts=posts, gemini_path=platform_path(self.cfg, "gemini", "archive", "", year=str(y)))
-            pb.add(output_file(self.cfg, self.platform, "archive", "", year=str(y)), _tidy(text, self.platform))
+            text = self._tpl("archive").render(
+                year=y,
+                years=years,
+                posts=posts,
+                gemini_path=platform_path(self.cfg, "gemini", "archive", "", year=str(y)),
+            )
+            pb.add(
+                output_file(self.cfg, self.platform, "archive", "", year=str(y)),
+                _tidy(text, self.platform),
+            )
 
     def render_feeds(self, pb: PlatformBuild) -> None:
         pcfg = self.cfg.platform(self.platform)
         if "atom" in pcfg.feeds:
-            pb.add("feed.xml", feeds.atom_feed(self.site, self.listed, platform=self.platform, now=self.build.now,
-                                              bodies=self.bodies, summaries=self.summaries), "application/atom+xml")
+            pb.add(
+                "feed.xml",
+                feeds.atom_feed(
+                    self.site,
+                    self.listed,
+                    platform=self.platform,
+                    now=self.build.now,
+                    bodies=self.bodies,
+                    summaries=self.summaries,
+                ),
+                "application/atom+xml",
+            )
         if self.platform == "web":
             if "json" in pcfg.feeds:
-                pb.add("feed.json", feeds.json_feed(self.site, self.listed, now=self.build.now, bodies=self.bodies, summaries=self.summaries), "application/feed+json")
-            entries: list[tuple[str, datetime | None]] = [("/", self.listed[0].updated or self.listed[0].date if self.listed else None)]
+                pb.add(
+                    "feed.json",
+                    feeds.json_feed(
+                        self.site,
+                        self.listed,
+                        now=self.build.now,
+                        bodies=self.bodies,
+                        summaries=self.summaries,
+                    ),
+                    "application/feed+json",
+                )
+            entries: list[tuple[str, datetime | None]] = [
+                ("/", self.listed[0].updated or self.listed[0].date if self.listed else None)
+            ]
             for p in self.listed:
                 if not p.meta.seo.noindex:
-                    entries.append((platform_path(self.cfg, "web", "post", p.slug), p.updated or p.date))
+                    entries.append(
+                        (platform_path(self.cfg, "web", "post", p.slug), p.updated or p.date)
+                    )
             for pg in self.site.pages:
                 if pg.meta.status == "published":
                     entries.append((platform_path(self.cfg, "web", "page", pg.slug), pg.updated))
-            for kind, terms in (("tag", self.site.tags), ("category", self.site.categories), ("series", self.site.series)):
+            for kind, terms in (
+                ("tag", self.site.tags),
+                ("category", self.site.categories),
+                ("series", self.site.series),
+            ):
                 for t in terms.values():
                     entries.append((platform_path(self.cfg, "web", kind, t.slug), None))
             pb.add("sitemap.xml", feeds.sitemap(self.site, entries), "application/xml")
@@ -420,19 +595,24 @@ class _Context:
     def render_home(self, pb: PlatformBuild) -> None:
         summaries = self._summaries()
         if self.platform == "gemini":
-            text = self.env.get_template("home.gmi").render(posts=self.listed, summaries=summaries, gemini_path="/")
+            text = self.env.get_template("home.gmi").render(
+                posts=self.listed, summaries=summaries, gemini_path="/"
+            )
             pb.add("index.gmi", _tidy(text, "gemini"))
             return
         per_page = max(1, self.cfg.platform("web").pagination)
         pages = max(1, -(-len(self.listed) // per_page))
         for n in range(1, pages + 1):
-            chunk = self.listed[(n - 1) * per_page: n * per_page]
+            chunk = self.listed[(n - 1) * per_page : n * per_page]
             pagination = {
-                "current": n, "pages": pages,
+                "current": n,
+                "pages": pages,
                 "prev": "/" if n == 2 else (f"/page/{n - 1}/" if n > 2 else None),
                 "next": f"/page/{n + 1}/" if n < pages else None,
             }
-            text = self.env.get_template("home.html").render(posts=chunk, summaries=summaries, pagination=pagination, gemini_path="/")
+            text = self.env.get_template("home.html").render(
+                posts=chunk, summaries=summaries, pagination=pagination, gemini_path="/"
+            )
             pb.add("index.html" if n == 1 else f"page/{n}/index.html", _tidy(text, "web"))
 
     def render_404(self, pb: PlatformBuild) -> None:
@@ -459,7 +639,9 @@ class _Context:
             for f in sorted(static.rglob("*")):
                 if f.is_file():
                     rel = f.relative_to(static).as_posix()
-                    pb.add(f"assets/{self.chain[0].name}/{rel}", b"", media_type_for(f.name), source=f)
+                    pb.add(
+                        f"assets/{self.chain[0].name}/{rel}", b"", media_type_for(f.name), source=f
+                    )
 
 
 def _date_filter(cfg: Any) -> Any:
@@ -511,10 +693,14 @@ def write_build(build: Build, out_dir: Path, *, clean: bool = True) -> None:
                 shutil.copyfile(f.source, dest)
             else:
                 dest.write_bytes(f.data)
-    (out_dir / "manifest.json").write_text(json.dumps(build.manifest(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (out_dir / "manifest.json").write_text(
+        json.dumps(build.manifest(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
-def diff_manifests(old: dict[str, dict[str, Any]], new: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
+def diff_manifests(
+    old: dict[str, dict[str, Any]], new: dict[str, dict[str, Any]]
+) -> dict[str, list[str]]:
     added = sorted(p for p in new if p not in old)
     removed = sorted(p for p in old if p not in new)
     changed = sorted(p for p in new if p in old and old[p]["sha256"] != new[p]["sha256"])

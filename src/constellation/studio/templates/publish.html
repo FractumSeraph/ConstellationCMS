@@ -4,6 +4,26 @@
 <h1>Publish</h1>
 {% if problems %}<section class="card error"><h2>The site does not load</h2><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
 {% if errors %}<section class="card warn"><h2>{{ errors | length }} error-level warnings block publishing</h2><ul>{% for w in errors[:20] %}<li><code>{{ w.code }}</code> {{ w.message }}</li>{% endfor %}</ul></section>{% endif %}
+{% if server %}
+<section class="card">
+  <h2>Server: {{ server.name }} <span class="muted small"><code>{{ server.admin_url }}</code></span></h2>
+  {% if not connected %}<p class="warn">This machine has no publish token for this site on {{ server.name }}. <a href="/servers">Connect it</a>.</p>{% endif %}
+  <div class="row">
+    <form hx-post="/sites/{{ site_id }}/publish-to-server" hx-target="#server-job" hx-swap="innerHTML" class="inline"><input type="hidden" name="mode" value="plan"><button {% if not connected %}disabled{% endif %}>Preview diff</button></form>
+    <form hx-post="/sites/{{ site_id }}/publish-to-server" hx-target="#server-job" hx-swap="innerHTML" hx-confirm="Publish every platform to {{ server.name }}?" class="inline"><input type="hidden" name="mode" value="apply"><button class="primary" {% if errors or read_only or not connected %}disabled{% endif %}>Publish</button></form>
+  </div>
+  <div id="server-job"></div>
+  {% if remote and remote.releases %}
+  <h3>Releases on the server</h3>
+  <table class="items small"><thead><tr><th>Release</th><th>Built</th><th>Files</th><th></th></tr></thead><tbody>
+  {% for r in remote.releases %}<tr><td><code>{{ r.id }}</code>{% if r.active %} <span class="pill published">active</span>{% endif %}</td><td>{{ r.built_at[:19] }}</td><td>{{ r.files }}</td>
+    <td>{% if not r.active %}<form method="post" action="/sites/{{ site_id }}/rollback" class="inline" onsubmit="return confirm('Activate release {{ r.id }}?')"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="release_id" value="{{ r.id }}"><button class="link">activate</button></form>{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  {% elif remote and remote.error %}<p class="muted small">Could not list releases: {{ remote.error }}</p>{% endif %}
+</section>
+{% else %}
+<p class="muted">This site is not assigned to a server; assign one on the <a href="/servers">Servers</a> page to publish directly, or use an export target below.</p>
+{% endif %}
 <section class="card">
   <h2>Export targets</h2>
   <table class="items"><thead><tr><th>Name</th><th>Platform</th><th>Target</th><th>Layout</th><th></th></tr></thead><tbody>

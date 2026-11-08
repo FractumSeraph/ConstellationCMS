@@ -12,7 +12,7 @@ WIDTHS = (("sm", 480), ("md", 960), ("lg", 1600))
 
 @dataclass(slots=True)
 class Variant:
-    path: str          # site-relative URL path of the variant
+    path: str  # site-relative URL path of the variant
     data: bytes
     width: int
     media_type: str
@@ -20,7 +20,7 @@ class Variant:
 
 @dataclass(slots=True)
 class ImageSet:
-    source_path: str   # site-relative URL path of the original
+    source_path: str  # site-relative URL path of the original
     width: int
     height: int
     variants: list[Variant] = field(default_factory=list)
@@ -57,10 +57,16 @@ def make_variants(source: Path, url_path: str) -> ImageSet | None:
                     continue
                 h = max(1, round(height * w / width))
                 resized = base.resize((w, h), Image.Resampling.LANCZOS)
-                iset.variants.append(Variant(f"{stem}-{name}.{ext}", _encode(resized, fmt), w, _mt(fmt)))
-                iset.variants.append(Variant(f"{stem}-{name}.webp", _encode(resized, "WEBP"), w, "image/webp"))
+                iset.variants.append(
+                    Variant(f"{stem}-{name}.{ext}", _encode(resized, fmt), w, _mt(fmt))
+                )
+                iset.variants.append(
+                    Variant(f"{stem}-{name}.webp", _encode(resized, "WEBP"), w, "image/webp")
+                )
             if fmt != "WEBP":
-                iset.variants.append(Variant(f"{stem}.webp", _encode(base, "WEBP"), width, "image/webp"))
+                iset.variants.append(
+                    Variant(f"{stem}.webp", _encode(base, "WEBP"), width, "image/webp")
+                )
             return iset
     except Exception:
         return None
@@ -68,7 +74,9 @@ def make_variants(source: Path, url_path: str) -> ImageSet | None:
 
 def _encode(im: object, fmt: str) -> bytes:
     buf = io.BytesIO()
-    kwargs: dict[str, object] = {"optimize": True} if fmt in ("PNG", "JPEG") else {"method": 4, "quality": 82}
+    kwargs: dict[str, object] = (
+        {"optimize": True} if fmt in ("PNG", "JPEG") else {"method": 4, "quality": 82}
+    )
     if fmt == "JPEG":
         kwargs["quality"] = 85
         kwargs["progressive"] = True

@@ -70,6 +70,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     s.set_defaults(func=cmd_studio)
 
+    sv = sub.add_parser("server", help="the VPS server")
+    svs = sv.add_subparsers(dest="server_command", required=True)
+    r = svs.add_parser("run", help="run the server")
+    r.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
+    r.set_defaults(func=cmd_server_run)
+    i = svs.add_parser(
+        "install", help="create the data directory, server.toml, the admin token and a systemd unit"
+    )
+    i.add_argument("--data-dir", type=Path, default=Path("/var/lib/constellation"))
+    i.add_argument("--user", default="constellation")
+    i.add_argument(
+        "--admin-hostname", required=True, help="the server's own hostname, e.g. vps1.example.org"
+    )
+    i.add_argument(
+        "--tls-mode", choices=["behind-proxy", "external", "acme"], default="behind-proxy"
+    )
+    i.add_argument("--plain-port", type=int, default=8080, help="local port for behind-proxy mode")
+    i.add_argument("--no-unit", action="store_true", help="do not write the systemd unit")
+    i.set_defaults(func=cmd_server_install)
+    ps = svs.add_parser(
+        "proxy-snippet", help="print an nginx/openresty server block for behind-proxy mode"
+    )
+    ps.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
+    ps.add_argument("hostnames", nargs="*")
+    ps.set_defaults(func=cmd_server_proxy)
+    pr = svs.add_parser("prune", help="apply release retention to every site")
+    pr.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
+    pr.set_defaults(func=cmd_server_prune)
+
     n = sub.add_parser("new", help="create a post or page")
     n.add_argument("kind", choices=["post", "page"])
     n.add_argument("site", type=Path)
@@ -224,6 +253,64 @@ def cmd_studio(args: argparse.Namespace) -> int:
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host=bind, port=port, log_level="warning")
+    return 0
+
+
+def cmd_server_run(args: argparse.Namespace) -> int:
+    from constellation.server.app import run
+
+    run(args.config)
+    return 0
+
+
+def cmd_server_install(args: argparse.Namespace) -> int:
+    from constellation.server.install import install
+
+    exe = Path(sys.argv[0]).resolve()
+    config_path, token = install(
+        data_dir=args.data_dir,
+        user=args.user,
+        admin_hostname=args.admin_hostname,
+        tls_mode=args.tls_mode,
+        exe=exe,
+        write_unit=not args.no_unit,
+        plain_port=args.plain_port,
+    )
+    print(f"wrote {config_path}")
+    print("admin token (shown once; paste it into the studio's Servers page):")
+    print(f"  {token}")
+    if not args.no_unit:
+        print(
+            "enable the service with: systemctl daemon-reload && systemctl enable --now constellation"
+        )
+    ports = ["1965 (gemini)"]
+    ports += (
+        [f"{args.plain_port} (local, behind the proxy)"]
+        if args.tls_mode == "behind-proxy"
+        else ["80 and 443 (http/https)"]
+    )
+    print("ports: " + ", ".join(ports))
+    return 0
+
+
+def cmd_server_proxy(args: argparse.Namespace) -> int:
+    from constellation.server.config import load_server_config
+    from constellation.server.install import proxy_snippet
+
+    cfg = load_server_config(args.config)
+    print(proxy_snippet(list(args.hostnames), cfg.https.plain_port, cfg.admin.hostname), end="")
+    return 0
+
+
+def cmd_server_prune(args: argparse.Namespace) -> int:
+    from constellation.server.config import load_server_config
+    from constellation.server.releases import Store
+
+    cfg = load_server_config(args.config)
+    store = Store(cfg.data)
+    for sid in store.sites():
+        removed = store.site(sid).prune(cfg.limits.keep_releases)
+        print(f"{sid}: removed {len(removed)} releases")
     return 0
 
 

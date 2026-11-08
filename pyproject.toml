@@ -23,6 +23,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "watchfiles>=0.22",
     "itsdangerous>=2.2",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
