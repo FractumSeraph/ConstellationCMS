@@ -175,7 +175,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
 
     class SecurityHeaders(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next: Any) -> Response:
-            response = await call_next(request)
+            response = cast(Response, await call_next(request))
             response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
             response.headers.setdefault("Referrer-Policy", "same-origin")
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
