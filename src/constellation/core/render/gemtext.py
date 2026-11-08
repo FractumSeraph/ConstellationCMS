@@ -72,7 +72,7 @@ class _State:
 
     # ---- output helpers -------------------------------------------------------------------
     def emit(self, line: str = "") -> None:
-        self.lines.append(line)
+        self.lines.append(line.rstrip())
 
     def blank(self) -> None:
         if self.lines and self.lines[-1] != "":
@@ -385,7 +385,7 @@ class _State:
         if prefix:
             self.text_line(text, line_no, prefix=prefix)
         elif level <= 3:
-            self.emit(f"{'#' * level} {text}")
+            self.emit(f"{'#' * level} {text}".rstrip())
         else:
             self.warn.add(
                 "HEADING-TOO-DEEP",
@@ -399,7 +399,7 @@ class _State:
                 ],
             )
             if self.cfg.heading_overflow == "promote":
-                self.emit(f"### {text}")
+                self.emit(f"### {text}".rstrip())
             elif self.cfg.heading_overflow == "upper":
                 self.text_line(text.upper(), line_no)
             else:

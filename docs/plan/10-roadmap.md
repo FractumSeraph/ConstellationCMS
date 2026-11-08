@@ -17,6 +17,13 @@ working sessions, not calendar time, and assume the owner reviews between milest
 | 9 | **Gopher** | Plain-text renderer finished for gophermaps and text files; Gopher listener; gophermap export; the analytics schema's Gopher fields; one Gopher site per listener (one site is enough for now). | none |
 | 10 | **Polish and release** | Packaging for PyPI, upgrade notes, backups, the Doctor page, documentation site (built with ConstellationCMS itself), license added by the owner. | |
 
+## Status (2026-11-09)
+
+All eleven milestones have an implementation on the main branch, in the order above, with a
+test suite of about 130 tests that runs on Windows and Linux. What remains is the owner's own
+deployment: creating the real sites in a synced workspace, installing the server on the VPS,
+connecting them, and switching DNS when ready. The deferred items below still stand.
+
 ## What is deliberately deferred
 
 - Titan uploads and Gemini client certificates (needs pyOpenSSL in the listener).

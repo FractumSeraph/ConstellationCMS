@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Doctor{% endblock %}
+{% block content %}
+<h1>Doctor</h1>
+<p class="muted">Self-checks to start a support conversation with facts. Also available as <code>constellation doctor</code>.</p>
+<table class="items"><tbody>
+{% for c in checks %}<tr><td><span class="pill {{ 'published' if c.status == 'ok' else 'draft' if c.status == 'warn' else 'error' if c.status == 'fail' else 'hidden' }}">{{ c.status }}</span></td><td>{{ c.name }}</td><td>{{ c.detail }}</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

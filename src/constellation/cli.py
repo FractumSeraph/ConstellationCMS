@@ -106,6 +106,23 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
     ps.add_argument("hostnames", nargs="*")
     ps.set_defaults(func=cmd_server_proxy)
+    bk = svs.add_parser(
+        "backup",
+        help="write a tarball of the data directory (releases are rebuilt from blobs on restore)",
+    )
+    bk.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
+    bk.add_argument("--out", type=Path, default=Path("."))
+    bk.set_defaults(func=cmd_server_backup)
+    rs = svs.add_parser("restore", help="restore a backup into an empty data directory")
+    rs.add_argument("archive", type=Path)
+    rs.add_argument("--data-dir", type=Path, required=True)
+    rs.set_defaults(func=cmd_server_restore)
+
+    d = sub.add_parser("doctor", help="run the studio self-checks")
+    d.add_argument("--workspace", type=Path)
+    d.add_argument("--state-dir", type=Path)
+    d.set_defaults(func=cmd_doctor)
+
     pr = svs.add_parser("prune", help="apply release retention to every site")
     pr.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
     pr.set_defaults(func=cmd_server_prune)
@@ -317,6 +334,37 @@ def cmd_server_proxy(args: argparse.Namespace) -> int:
     cfg = load_server_config(args.config)
     print(proxy_snippet(list(args.hostnames), cfg.https.plain_port, cfg.admin.hostname), end="")
     return 0
+
+
+def cmd_server_backup(args: argparse.Namespace) -> int:
+    from constellation.server.backup import backup
+    from constellation.server.config import load_server_config
+
+    cfg = load_server_config(args.config)
+    print(backup(cfg.data, args.out))
+    return 0
+
+
+def cmd_server_restore(args: argparse.Namespace) -> int:
+    from constellation.server.backup import restore
+
+    sites = restore(args.archive, args.data_dir)
+    print(f"restored {len(sites)} sites into {args.data_dir}: {', '.join(sites)}")
+    print("review server.toml, then start the service")
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from constellation.studio.doctor import format_checks, run_checks
+    from constellation.studio.state import State
+    from constellation.studio.workspace import load_workspace
+
+    state = State(args.state_dir)
+    workspace = Path(args.workspace or state.settings.workspace or Path.cwd() / "workspace")
+    servers = load_workspace(workspace).servers if workspace.is_dir() else []
+    checks = run_checks(state, workspace, servers=servers)
+    print(format_checks(checks))
+    return 1 if any(c.status == "fail" for c in checks) else 0
 
 
 def cmd_server_prune(args: argparse.Namespace) -> int:

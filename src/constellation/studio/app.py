@@ -1156,6 +1156,20 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             f"/sites/{site_id}/theme?installed={theme.name}" if site_id else "/", 303
         )
 
+    # ---- doctor -------------------------------------------------------------------------------
+    @app.get("/doctor", response_class=HTMLResponse)
+    async def doctor(request: Request, sess: dict[str, Any] = Depends(require_session)) -> Response:
+        from constellation.studio.doctor import run_checks
+
+        checks = await asyncio.to_thread(
+            run_checks,
+            studio.state,
+            studio.workspace_root,
+            servers=studio.workspace.servers,
+            running=True,
+        )
+        return render(request, "doctor.html", checks=checks)
+
     # ---- account --------------------------------------------------------------------------
     @app.get("/account", response_class=HTMLResponse)
     async def account(
