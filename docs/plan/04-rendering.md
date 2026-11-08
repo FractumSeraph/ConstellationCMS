@@ -149,7 +149,7 @@ The owner's rules are marked **(owner)**. Defaults are configurable per site in
 | `<figure>` HTML | passed through | image rule plus caption text line | yes | | |
 | admonition `> [!NOTE]` / `:::note` / Publii message box | styled box | quote whose first line is `> Note: ...` | yes | | `NOTE:` prefix text |
 | `<details>` | collapsible | summary as a text line, content always expanded | yes | `HTML-DETAILS` info | |
-| `<iframe>`, `<video>`, `<audio>`, `<script>`, `<style>`, `<form>` | passed through (web only) | dropped; text line `[embedded content only available on the html version of this site]` plus `=> SRC` when there is a source URL | yes | `HTML-EMBED` warn | Gemini-only alternative block |
+| `<iframe>`, `<video>`, `<audio>`, `<script>`, `<style>`, `<form>` | passed through (web only) | dropped; text line `[Embedded content, web only]` plus `=> SRC` when there is a source URL | yes | `HTML-EMBED` warn | Gemini-only alternative block |
 | other block HTML | passed through | tags stripped, text kept, `<a>` becomes links, `<br>` becomes breaks | yes | `HTML-STRIPPED` info | |
 | HTML comment | dropped | dropped | no | | |
 | `$$ math $$` | rendered | ` ```math ` block with the TeX source | yes | `MATH-SOURCE` warn | Gemini-only alternative block |
@@ -202,7 +202,7 @@ tables          = "auto"           # pre | records | auto
 hr              = "~~~~"
 footnotes       = "end-section"    # end-section | inline-parens
 notes_heading   = "### Notes"
-embed_notice    = "[embedded content only available on the html version of this site]"
+embed_notice    = "[Embedded content, web only]"
 lang            = "en"             # emitted as text/gemini; lang=en
 
 [render.gopher]
