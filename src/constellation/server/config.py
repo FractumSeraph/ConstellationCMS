@@ -48,6 +48,14 @@ class AdminConfig(Strict):
     token_hash: str = ""
 
 
+class StudioProxyConfig(Strict):
+    """A studio instance on this VPS, reachable through the server's HTTPS at its own hostname."""
+
+    enabled: bool = False
+    hostname: str = ""
+    upstream: str = "http://127.0.0.1:8787"
+
+
 class Limits(Strict):
     max_connections: int = 512
     request_timeout_s: int = 10
@@ -71,6 +79,7 @@ class ServerConfig(Strict):
     gemini: GeminiConfig = Field(default_factory=GeminiConfig)
     gopher: GopherConfig = Field(default_factory=GopherConfig)
     admin: AdminConfig = Field(default_factory=AdminConfig)
+    studio: StudioProxyConfig = Field(default_factory=StudioProxyConfig)
     limits: Limits = Field(default_factory=Limits)
     analytics: AnalyticsServerConfig = Field(default_factory=AnalyticsServerConfig)
 

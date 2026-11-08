@@ -135,6 +135,8 @@ class HttpApp:
     async def static(self, request: Request) -> Response:
         started = time.monotonic()
         host = self._host(request)
+        if self.cfg.studio.enabled and host == self.cfg.studio.hostname.lower():
+            return await self._proxy_studio(request)
         site = self.table.get(host)
         response: Response
         if site is None:
@@ -180,6 +182,38 @@ class HttpApp:
             return self._not_found(root)
         resp = FileResponse(str(resolved), headers=self._file_headers(site, resolved))
         return resp
+
+    async def _proxy_studio(self, request: Request) -> Response:
+        """Forward a request to the local studio, with the headers its remote mode expects."""
+        import httpx
+
+        if not self._is_https(request):
+            return RedirectResponse(
+                f"https://{self.cfg.studio.hostname}{request.url.path}", status_code=301
+            )
+        upstream = self.cfg.studio.upstream.rstrip("/")
+        url = upstream + request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        skip = {"host", "connection", "content-length", "transfer-encoding"}
+        headers = {k: v for k, v in request.headers.items() if k.lower() not in skip}
+        headers["X-Forwarded-For"] = self._client_ip(request)
+        headers["X-Forwarded-Proto"] = "https"
+        headers["X-Forwarded-Host"] = self.cfg.studio.hostname
+        headers["Host"] = self.cfg.studio.hostname
+        body = await request.body()
+        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
+            try:
+                r = await client.request(request.method, url, headers=headers, content=body)
+            except httpx.HTTPError:
+                return PlainTextResponse(
+                    "The studio is not running on this server.\n", status_code=502
+                )
+        out_headers = {
+            k: v
+            for k, v in r.headers.items()
+            if k.lower()
+            not in ("content-encoding", "transfer-encoding", "connection", "content-length")
+        }
+        return Response(r.content, status_code=r.status_code, headers=out_headers)
 
     def _not_found(self, root: Path) -> Response:
         page = root / "404.html"

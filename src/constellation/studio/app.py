@@ -227,11 +227,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             return RedirectResponse("/setup", 303)
         if session_of(request):
             return RedirectResponse(next if next.startswith("/") else "/", 303)
-        return render(request, "login.html", error="", next=next)
+        return render(
+            request, "login.html", error="", next=next, totp=bool(studio.state.settings.totp_secret)
+        )
 
     @app.post("/login")
     async def login_submit(
-        request: Request, password: str = Form(...), next: str = Form("/")
+        request: Request, password: str = Form(...), next: str = Form("/"), code: str = Form("")
     ) -> Response:
         host = client_host(request)
         locked = studio.state.login_locked(host)
@@ -242,11 +244,31 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 "login.html",
                 error=f"Too many failures; try again in {int(locked // 60) + 1} minutes.",
                 next=next,
+                totp=bool(studio.state.settings.totp_secret),
             )
         if not verify_password(studio.state.settings.password_hash, password):
             studio.state.login_failed(host)
             studio.state.audit("login_failed", remote=host)
-            return render(request, "login.html", error="Wrong password.", next=next)
+            return render(
+                request,
+                "login.html",
+                error="Wrong password.",
+                next=next,
+                totp=bool(studio.state.settings.totp_secret),
+            )
+        if studio.state.settings.totp_secret:
+            from constellation.studio import totp as _totp
+
+            if not _totp.verify(studio.state.settings.totp_secret, code):
+                studio.state.login_failed(host)
+                studio.state.audit("login_failed_totp", remote=host)
+                return render(
+                    request,
+                    "login.html",
+                    error="Wrong or missing authenticator code.",
+                    next=next,
+                    totp=True,
+                )
         studio.state.login_succeeded(host)
         studio.state.audit("login", remote=host)
         return _login_response(studio, request, next if next.startswith("/") else "/")
@@ -1050,6 +1072,116 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         studio.state.delete_all_sessions()
         studio.state.audit("password_changed", remote=client_host(request))
         return _login_response(studio, request, "/account?saved=1")
+
+    @app.post("/account/totp/begin")
+    async def totp_begin(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        from constellation.studio import totp as _totp
+
+        secret = _totp.new_secret()
+        studio.state.kv_set("totp_pending", secret)
+        uri = _totp.provisioning_uri(secret, locks.machine_label())
+        return render(
+            request,
+            "account.html",
+            audit=studio.state.audit_tail(30),
+            saved="",
+            error="",
+            pending_secret=secret,
+            qr=_totp.qr_svg(uri),
+        )
+
+    @app.post("/account/totp/confirm")
+    async def totp_confirm(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf), code: str = Form(...)
+    ) -> Response:
+        from constellation.studio import totp as _totp
+
+        secret = str(studio.state.kv_get("totp_pending", "") or "")
+        if not secret or not _totp.verify(secret, code):
+            return render(
+                request,
+                "account.html",
+                audit=studio.state.audit_tail(30),
+                saved="",
+                error="That code did not match; scan again and try once more.",
+                pending_secret=secret,
+                qr=_totp.qr_svg(_totp.provisioning_uri(secret, locks.machine_label()))
+                if secret
+                else "",
+            )
+        studio.state.settings.totp_secret = secret
+        studio.state.save_settings()
+        studio.state.kv_set("totp_pending", "")
+        studio.state.audit("totp_enabled", remote=client_host(request))
+        return RedirectResponse("/account?saved=1", 303)
+
+    @app.post("/account/totp/disable")
+    async def totp_disable(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf), password: str = Form(...)
+    ) -> Response:
+        if not verify_password(studio.state.settings.password_hash, password):
+            return render(
+                request,
+                "account.html",
+                audit=studio.state.audit_tail(30),
+                saved="",
+                error="Wrong password.",
+            )
+        if studio.state.settings.remote_mode:
+            return render(
+                request,
+                "account.html",
+                audit=studio.state.audit_tail(30),
+                saved="",
+                error="Turn remote mode off before disabling the second factor.",
+            )
+        studio.state.settings.totp_secret = ""
+        studio.state.save_settings()
+        studio.state.audit("totp_disabled", remote=client_host(request))
+        return RedirectResponse("/account?saved=1", 303)
+
+    @app.post("/account/remote")
+    async def remote_mode(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        enable: str = Form(""),
+        bind: str = Form("0.0.0.0"),
+        trust_proxy: str = Form(""),
+        password: str = Form(...),
+    ) -> Response:
+        if not verify_password(studio.state.settings.password_hash, password):
+            return render(
+                request,
+                "account.html",
+                audit=studio.state.audit_tail(30),
+                saved="",
+                error="Wrong password.",
+            )
+        s = studio.state.settings
+        if enable == "on":
+            if not s.totp_secret:
+                return render(
+                    request,
+                    "account.html",
+                    audit=studio.state.audit_tail(30),
+                    saved="",
+                    error="Remote mode needs the authenticator second factor; enable it first.",
+                )
+            s.remote_mode = True
+            s.bind = bind.strip() or "0.0.0.0"
+            s.trust_proxy = trust_proxy == "on"
+        else:
+            s.remote_mode = False
+            s.bind = "127.0.0.1"
+            s.trust_proxy = trust_proxy == "on"
+        studio.state.save_settings()
+        studio.state.delete_all_sessions()
+        studio.state.audit("remote_mode", "on" if s.remote_mode else "off", client_host(request))
+        resp = RedirectResponse("/account?saved=1&restart=1", 303)
+        resp.delete_cookie(SESSION_COOKIE)
+        return resp
 
     @app.post("/account/options")
     async def account_options(

@@ -7,6 +7,7 @@
   <form method="post" action="/login">
     <input type="hidden" name="next" value="{{ next }}">
     <label>Password <input type="password" name="password" required autofocus></label>
+    {% if totp %}<label>Authenticator code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>{% endif %}
     <button class="primary">Sign in</button>
   </form>
 </section>

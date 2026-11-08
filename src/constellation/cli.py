@@ -88,6 +88,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     i.add_argument("--plain-port", type=int, default=8080, help="local port for behind-proxy mode")
     i.add_argument("--no-unit", action="store_true", help="do not write the systemd unit")
+    i.add_argument(
+        "--with-studio",
+        metavar="HOSTNAME",
+        default="",
+        help="also run a studio on this server, proxied at HOSTNAME",
+    )
+    i.add_argument(
+        "--studio-workspace",
+        type=Path,
+        help="workspace folder for that studio (sync it with Syncthing)",
+    )
     i.set_defaults(func=cmd_server_install)
     ps = svs.add_parser(
         "proxy-snippet", help="print an nginx/openresty server block for behind-proxy mode"
@@ -241,7 +252,7 @@ def cmd_studio(args: argparse.Namespace) -> int:
         state.save_settings()
     bind = args.bind or state.settings.bind or "127.0.0.1"
     port = args.port or state.settings.port or 8787
-    if bind != "127.0.0.1" and not state.settings.remote_mode:
+    if bind not in ("127.0.0.1", "::1", "localhost") and not state.settings.remote_mode:
         print(
             "refusing to bind a non-loopback address while remote mode is off (enable it in Account first)",
             file=sys.stderr,
@@ -275,7 +286,13 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         exe=exe,
         write_unit=not args.no_unit,
         plain_port=args.plain_port,
+        studio_hostname=args.with_studio,
+        studio_workspace=args.studio_workspace,
     )
+    if args.with_studio:
+        print(
+            f"studio on this server: https://{args.with_studio}/ (turn on remote mode with 'trust proxy headers' in its Account page)"
+        )
     print(f"wrote {config_path}")
     print("admin token (shown once; paste it into the studio's Servers page):")
     print(f"  {token}")
