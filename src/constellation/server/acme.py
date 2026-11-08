@@ -66,9 +66,9 @@ class AcmeClient:
         self.user_agent = user_agent
 
     def _account_key(self) -> Any:
-        from josepy.jwk import JWKRSA
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
+        from josepy.jwk import JWKRSA
 
         self.account_dir.mkdir(parents=True, exist_ok=True)
         path = self.account_dir / "account.key"

@@ -76,6 +76,44 @@ def _read(path: Path) -> Theme:
     )
 
 
+def install_theme_zip(themes_dir: Path, data: bytes, *, max_bytes: int = 50 * 1024 * 1024) -> Theme:
+    """Install a theme from a zip holding one top-level folder with a theme.toml. Paths are checked."""
+    import io
+    import zipfile
+
+    if len(data) > max_bytes:
+        raise ThemeError("theme archive is too large")
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        names = [n for n in zf.namelist() if not n.endswith("/")]
+        if not names:
+            raise ThemeError("empty archive")
+        roots = {n.split("/", 1)[0] for n in names}
+        if len(roots) != 1 or "/" not in names[0] and len(names) > 1:
+            raise ThemeError("the archive must contain exactly one top-level theme folder")
+        root = roots.pop()
+        if not root or root.startswith(".") or "/" in root or "\\" in root or ".." in root:
+            raise ThemeError("bad theme folder name")
+        if f"{root}/theme.toml" not in names:
+            raise ThemeError("theme.toml is missing from the theme folder")
+        dest = Path(themes_dir) / root
+        if dest.exists():
+            raise ThemeError(f"theme {root!r} is already installed; remove it first")
+        total = 0
+        for n in names:
+            parts = n.split("/")
+            if any(p in ("", ".", "..") for p in parts) or n.startswith("/") or "\\" in n:
+                raise ThemeError(f"unsafe path in archive: {n}")
+            info = zf.getinfo(n)
+            total += info.file_size
+            if total > max_bytes:
+                raise ThemeError("theme archive expands beyond the size limit")
+        for n in names:
+            target = dest / Path(*n.split("/")[1:])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(zf.read(n))
+    return _read(dest)
+
+
 def theme_chain(theme: Theme, *, search: list[Path] | None = None) -> list[Theme]:
     """The theme followed by the themes it extends, nearest first."""
     chain = [theme]

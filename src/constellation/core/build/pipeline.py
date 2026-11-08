@@ -640,7 +640,7 @@ class _Context:
                 if f.is_file():
                     rel = f.relative_to(static).as_posix()
                     pb.add(
-                        f"assets/{self.chain[0].name}/{rel}", b"", media_type_for(f.name), source=f
+                        f"assets/{t.name}/{rel}", b"", media_type_for(f.name), source=f
                     )
 
 

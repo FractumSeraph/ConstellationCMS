@@ -731,7 +731,11 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     # ---- theme ------------------------------------------------------------------------------
     @app.get("/sites/{site_id}/theme", response_class=HTMLResponse)
     async def theme_page(
-        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_session)
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_session),
+        error: str = "",
+        installed: str = "",
     ) -> Response:
         root = studio.site_root(site_id)
         doc = read_site_toml(root)
@@ -751,6 +755,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         return render(
             request,
             "theme.html",
+            error=error,
+            installed=installed,
             site_id=site_id,
             current=current,
             available=available,
@@ -1104,6 +1110,29 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             result=result,
             error=error,
             admin_token=admin_token.strip(),
+        )
+
+    # ---- theme install ------------------------------------------------------------------------
+    @app.post("/themes/install")
+    async def theme_install(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        file: UploadFile = Form(...),
+        site_id: str = Form(""),
+    ) -> Response:
+        from constellation.core.themes import ThemeError, install_theme_zip
+
+        data = await file.read()
+        try:
+            theme = install_theme_zip(studio.workspace_root / "themes", data)
+        except (ThemeError, ValueError) as e:
+            from urllib.parse import quote
+
+            target = f"/sites/{site_id}/theme" if site_id else "/"
+            return RedirectResponse(f"{target}?error={quote(str(e))}", 303)
+        studio.state.audit("theme_installed", theme.name, client_host(request))
+        return RedirectResponse(
+            f"/sites/{site_id}/theme?installed={theme.name}" if site_id else "/", 303
         )
 
     # ---- account --------------------------------------------------------------------------
