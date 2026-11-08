@@ -39,12 +39,12 @@ Three programs, one codebase:
 | Templates | Jinja2 (sandboxed environment for themes) | The Python standard; `SandboxedEnvironment` limits what third-party themes can do. | Handlebars (Publii) has no good Python implementation. |
 | Studio web framework | FastAPI + Jinja2 + htmx | Server-rendered pages with partial updates; no JavaScript build step; one language for the owner to read. Async fits file watching and long-running publish jobs. | A React/Svelte SPA would need Node tooling and a second language for maintenance. |
 | Editor widget | CodeMirror 6, vendored as a prebuilt ES module bundle | Best Markdown editing in the browser (gutters for warnings, line highlighting). Vendoring one built file keeps Node out of the repo. | EasyMDE/SimpleMDE: simpler but weaker gutter and diagnostics support. |
-| Web server (VPS) | Hypercorn (ASGI) serving our Starlette app for static files and the publish API, with HTTP/2 and TLS; `sendfile` for static files | Same ASGI world as the studio; HTTP/2 and TLS built in; one dependency for both programs. | Uvicorn (no HTTP/2); nginx in front forever (contradicts "our own program serves everything", but remains supported as `behind-proxy` mode). |
+| Web server (VPS) | Hypercorn (ASGI) serving our Starlette app for static files and the publish API, with HTTP/2 and TLS | Same ASGI world as the studio; HTTP/2 and TLS built in; one dependency for both programs. Static-file throughput from Python is far beyond what a weekly blog needs. | Uvicorn (no HTTP/2); nginx in front forever (contradicts "our own program serves everything", but remains supported as `behind-proxy` mode). |
 | Gemini server | `asyncio.start_server` + stdlib `ssl` with `sni_callback` | The protocol is tiny; a few hundred lines; fully testable. | Reusing Agate: kept as an export target, not as the primary server. |
 | TLS automation | `acme` library (the one certbot is built on), HTTP-01 challenge served by our own port 80 | Well maintained, supports exactly what we need; our server owns port 80 so HTTP-01 is trivial. | Caddy in front: good fallback (`external` TLS mode), but adds a second program to configure. |
 | Certificates for Gemini | `cryptography` to generate self-signed certificates | Standard library of record for this. | |
 | Database | SQLite via stdlib `sqlite3` (WAL mode) | Analytics, server state, studio sessions. No external service. | |
-| Config files | TOML (`tomllib` stdlib to read, `tomli-w` to write) | Readable, typed, commentable. | YAML for config: too permissive. JSON: no comments. |
+| Config files | TOML, read and written with `tomlkit` so the owner's comments and formatting survive a save from the studio | Readable, typed, commentable. | `tomllib` + `tomli-w`: fine for reading, but writing discards comments. YAML for config: too permissive. JSON: no comments. |
 | Packaging | `uv` for development; published to PyPI; installed with `uv tool install constellationcms` or `pipx` | Works identically on Windows and Linux; no Node, no compiler. | PyInstaller single-file builds: possible later for Windows convenience, not required. |
 | Process management | systemd unit written by `constellation server install`; on Windows the studio runs in a console or as a scheduled task | Boring and documented. | |
 | Tests | pytest, hypothesis, syrupy (snapshots), pytest-asyncio, playwright (studio end-to-end) | See [09-testing](09-testing-and-quality.md). | |
@@ -95,8 +95,9 @@ constellationcms/                  (this repository)
 ```
 
 Rule: `core` imports nothing from `studio`, `server` or `publish`. `studio` and `publish` use
-`core`. `server` uses `core` only for shared tables (MIME to Gopher type, route conventions) so the
-VPS install stays small.
+`core`. `server` uses `core` only for shared tables (MIME to Gopher type, route conventions and
+the manifest format), never for parsing or rendering, so the server stays a thin file server
+that cannot be broken by a rendering change.
 
 ## The core interfaces
 
@@ -135,7 +136,7 @@ Renderers are pure functions of (document, config); the build is deterministic.
 ### Protocol plugin (server side)
 
 ```python
-class Protocol(Protocol):
+class ProtocolPlugin(Protocol):
     name: str                                          # "gemini"
     def listeners(self, cfg: ServerConfig) -> list[ListenerSpec]
     async def handle(self, conn: Connection, router: Router) -> None   # parse, route, respond, log
@@ -184,8 +185,9 @@ TLS modes for HTTPS, chosen per server:
 2. It fetches the current manifest for that site from the server the site is assigned to
    (decision 36: sites may live on different VPSes) and computes the diff per platform.
 3. It shows the diff (added, changed, removed files; warnings that are still unacknowledged).
-4. On confirm it uploads only missing blobs, then sends the manifest; the server assembles a
-   release directory, validates it, and switches the site's `current` pointer atomically.
+4. On confirm it sends the manifest; the server answers with the list of blobs it lacks; the
+   studio uploads only those; then it asks the server to commit, which validates the release and
+   switches the site's `current` pointer atomically.
 5. The server reloads routing, provisions certificates for any new hostname, and reports status.
 6. The studio records the release id in the site's `.constellation/releases.json`.
 

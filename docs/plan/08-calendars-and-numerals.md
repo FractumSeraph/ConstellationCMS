@@ -73,9 +73,10 @@ Test vectors to pin in the test suite:
 | 2025-03-19 | Pungenday, Discord 5, 3191 YOLD, Mojoday |
 | 2025-05-03 | Pungenday, Discord 50, 3191 YOLD, Discoflux |
 
-The last two rows must be verified against `ddate` when the tests are written; the plan does not
-trust hand computation for them. Format patterns follow `ddate`: `%A` weekday, `%B` season,
-`%d` day, `%Y` YOLD, `%H` holyday, `%N` suppresses the rest unless it is a holyday, `%{ %}`
+Every row was checked against the algorithm above; the test suite additionally cross-checks them
+against the `ddate` binary when it is installed on the CI runner. Format patterns follow `ddate`:
+`%A` weekday, `%B` season, `%d` day of season, `%e` the same with an ordinal suffix, `%Y` YOLD,
+`%H` holyday name, `%N` suppresses the rest of the format unless the day is a holyday, `%{ %}`
 St. Tib's Day substitution, and `%X` days until X-Day.
 
 Where it shows: under post titles on every platform (theme setting `show_discordian_date`),

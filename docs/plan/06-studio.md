@@ -38,7 +38,7 @@ serves pages on `http://127.0.0.1:8787` and opens the browser.
   views of the same data.
 - **Media**: drag an image into the editor; it is saved into the post bundle (name sanitized),
   resized variants are generated at build time, and `![alt](media:file.png)` is inserted with the
-  cursor in the alt text, because alt text is required on text platforms.
+  cursor in the alt text, because text platforms show the alt text in place of the image.
 - **Autosave** every few seconds to the file via atomic write; a visible "saved" indicator.
 - **Live rebuild**: a file watcher rebuilds the preview when the file changes on disk (for owners
   who also edit in another editor).
@@ -53,6 +53,9 @@ Rendering in the preview is the same code path as the build, so the preview is h
 - A studio password is set on first run (Argon2id hash in machine-local state).
 - `auto_login_local = true` (default) signs in requests from loopback automatically so the
   owner is not nagged on their own machine. Setting it to false requires the password locally too.
+  Auto-login is forced off whenever remote mode is on or the studio sits behind a reverse proxy
+  (`trust_proxy = true`), because then loopback is where the proxy's traffic comes from, not where
+  the owner sits.
 
 ### Remote mode
 
@@ -70,7 +73,9 @@ Then the studio binds the configured address (default `0.0.0.0:8787`) and applie
 - CSRF: every htmx request carries a per-session token header; non-htmx forms carry a hidden field;
 - login rate limiting (5 failures → 15 minute lockout per IP and per account), audit log of logins
   and publishes;
-- a strict Content-Security-Policy that still allows the editor, with `frame-ancestors 'none'`;
+- a strict Content-Security-Policy that still allows the editor, with `frame-ancestors 'none'`
+  on studio pages and `frame-ancestors 'self'` on preview responses, which the editor embeds in
+  an iframe;
 - uploads limited by size and type; all file paths resolved inside the workspace and rejected
   otherwise.
 
@@ -100,9 +105,14 @@ The workspace lives in Dropbox, OneDrive or Syncthing, possibly on several machi
 - **Conflict files**: files matching the sync clients' patterns (`* (conflicted copy *)`,
   `*.sync-conflict-*`, `*-<machine>.md`) are listed on the dashboard with a side-by-side diff and
   a "keep this one" action.
-- **Instance lock**: `.constellation/lock.json` records which machine and studio instance has a
-  site open, with a heartbeat. A second instance sees the lock and opens read-only until the first
-  releases it or the heartbeat is stale (5 minutes).
+- **Instance lock**: each studio instance writes its own `.constellation/locks/<machine-id>.json`
+  with a heartbeat every minute while a site is open. Separate files per machine mean two machines
+  never write the same file, so the sync client has nothing to conflict on. A second instance that
+  sees another machine's fresh lock opens the site read-only and offers "take over", which is
+  allowed once the other heartbeat is older than five minutes.
+- **Publish history** (`releases.json`) is a cache; the server's release list is the truth, and
+  the Publish screen reconciles from the server on open, so two machines publishing in turn never
+  disagree for long.
 - **Nothing secret in the workspace**, so sync exposure cannot leak tokens or passwords.
 - **Build cache and previews** go to the machine-local cache directory, not into the synced folder,
   so sync traffic stays small and Windows file-lock conflicts with the sync client are avoided.

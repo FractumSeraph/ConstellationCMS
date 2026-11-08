@@ -35,6 +35,12 @@
 
 Releases are immutable. Retention keeps the last 10 (configurable). Rollback is a symlink switch.
 
+The admin hostname belongs to the server, not to any site, and is set by `server install`
+(`--admin-hostname`). In `acme` mode the installer orders its certificate at once, so the studio
+can connect before any site exists; in `behind-proxy` mode the proxy terminates TLS for it. DNS
+for the admin hostname and for every site hostname must point at the VPS before certificates can
+be issued; the studio's server panel shows an ACME order that is waiting on DNS as exactly that.
+
 ### server.toml
 
 ```toml
@@ -65,7 +71,7 @@ cert_years = 5
 enabled = false
 
 [admin]
-bind_hostname = "fractumseraph.net"   # the hostname whose HTTPS listener exposes /_constellation/
+hostname = "vps1.fractumseraph.net"   # the server's own hostname; /_constellation/ is served only here
 token_hash = "argon2id$..."           # admin token, created by `server install`, shown once
 
 [limits]
@@ -88,6 +94,7 @@ request → listener (port, protocol) → server_name (SNI / Host header / none)
 
 - Unknown hostname on HTTPS: a built-in "no site here" page (HTTP 404). On Gemini: status
   `53 Proxy request refused` (the spec's answer for a hostname the server does not serve).
+- The admin hostname serves only `/_constellation/`; everything else there is 404.
 - Non-canonical web hostnames redirect (301) to the canonical one.
 - Directory requests serve `index.html` (web) or `index.gmi` (Gemini); a missing trailing slash
   redirects (web 301, Gemini 31).
@@ -100,7 +107,7 @@ request → listener (port, protocol) → server_name (SNI / Host header / none)
 |---|---|
 | `acme` | On startup and daily: for every hostname in every site's `site.json`, ensure a certificate exists and is more than 30 days from expiry, else order one via HTTP-01 (served on port 80 by the server itself). Reload the SNI table on success. Failures are logged and reported in the studio's server status panel, never fatal. |
 | `external` | Load certificate files from `cert_dir/<hostname>/` and watch for changes. |
-| `behind-proxy` | No TLS. Listen on `127.0.0.1:plain_port`; trust `X-Forwarded-Proto` and `X-Forwarded-For` from the proxy. The studio generates an nginx/openresty server block snippet for each site. |
+| `behind-proxy` | No TLS. Listen on `127.0.0.1:plain_port`; trust `X-Forwarded-Proto` and `X-Forwarded-For` only from the loopback proxy. The studio generates an nginx/openresty server block snippet for each site and for the admin hostname. |
 
 Gemini certificates are self-signed, one per hostname, five years, generated with the
 `cryptography` library when a hostname first appears. The SHA-256 fingerprint is shown in the
@@ -172,9 +179,10 @@ stores only an Argon2 hash. All bodies are JSON; blobs are raw bytes.
 
 Properties of the protocol:
 
-- **Idempotent**: re-sending the same manifest yields the same release id (the id is the hash of
-  the manifest). Interrupted uploads resume by re-running the steps; already-stored blobs are
-  skipped.
+- **Idempotent**: re-sending the same build yields the same release id. The id is the hash of
+  the `platforms` and `site_config` sections only, never of `built_at` or `generator`, so a
+  rebuild of unchanged content is the same release. Interrupted uploads resume by re-running the
+  steps; already-stored blobs are skipped.
 - **Atomic**: a release becomes visible only at commit; commit is a symlink rename.
 - **Deletion is implicit**: a file absent from the new manifest is absent from the new release.
   Nothing is deleted from the blob store until retention prunes releases no one references.
@@ -190,11 +198,13 @@ Properties of the protocol:
 ### Tokens
 
 - `constellation server install` prints a one-time admin token.
-- In the studio, "Connect server" takes the admin hostname and the admin token, then calls
+- In the studio, "Connect server" takes the admin URL and the admin token, then calls
   `POST /_constellation/sites/{site}/tokens` to mint a per-site publish token, which is stored
-  machine-locally (never in the synced workspace). The admin token is not retained by the studio.
+  machine-locally (never in the synced workspace). That call also creates the site's record on the
+  server if it is new. The admin token is not retained by the studio.
 - Tokens can be listed and revoked from the studio.
-- All admin and publish endpoints are rate-limited and refuse plain HTTP.
+- All admin and publish endpoints are rate-limited and are served only over HTTPS; in
+  `behind-proxy` mode that means only when the proxy reports `X-Forwarded-Proto: https`.
 
 ## Several servers, one studio
 
@@ -211,14 +221,19 @@ database on disk until the owner purges them.
 ## Installing the server
 
 ```
-$ uv tool install constellationcms
-$ sudo constellation server install --data-dir /var/lib/constellation --user constellation
+$ curl -LsSf https://astral.sh/uv/install.sh | sh          # once, as root
+$ uv venv /opt/constellation && uv pip install --python /opt/constellation constellationcms
+$ /opt/constellation/bin/constellation server install --data-dir /var/lib/constellation \
+      --user constellation --admin-hostname vps1.fractumseraph.net --tls-mode behind-proxy
 ```
 
-The installer creates the directories, writes `server.toml` in `behind-proxy` or `acme` mode
-as chosen, writes and enables a systemd unit (`AmbientCapabilities=CAP_NET_BIND_SERVICE`,
-`ProtectSystem=strict`, `ReadWritePaths=/var/lib/constellation`), prints the admin token, and
-prints the firewall ports to open. Upgrades are `uv tool upgrade constellationcms` followed by
+A dedicated virtual environment at a fixed path keeps the service independent of any user's
+home directory and gives the systemd unit an absolute interpreter path. The installer creates the
+directories, writes `server.toml`, writes and enables a systemd unit
+(`AmbientCapabilities=CAP_NET_BIND_SERVICE`, `ProtectSystem=strict`,
+`ReadWritePaths=/var/lib/constellation`), orders the admin hostname's certificate in `acme` mode,
+prints the admin token, and prints the firewall ports to open. Upgrades are
+`uv pip install --python /opt/constellation --upgrade constellationcms` followed by
 `systemctl restart constellation`; releases and certificates are untouched. Backups are the data
 directory; `constellation server backup` writes a tarball excluding the blob store duplicates.
 

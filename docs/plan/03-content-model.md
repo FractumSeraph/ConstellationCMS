@@ -39,15 +39,17 @@ Workspace/                              (the synced folder)
     │   ├── media/                      site-wide media (logo, favicon, shared images)
     │   ├── theme/                      optional per-site template overrides and custom CSS
     │   └── .constellation/             state that is fine to sync but is not content
-    │       ├── releases.json           what was published when, and the release ids
-    │       └── warnings-ack.json       acknowledged warnings by (post, code, line hash)
+    │       ├── releases.json           cache of what was published when; the server is the truth
+    │       ├── warnings-ack.json       acknowledged warnings by (post, code, line hash)
+    │       └── locks/<machine-id>.json one file per machine, so two machines never write the same file
     └── fractum-faith/ ...
 ```
 
 Posts are **bundles**: one folder per post containing `index.md` and its media. A bare
 `posts/slug.md` file is also accepted for posts without media. The folder name is
 `YYYY-MM-DD-slug` so the file list sorts by date; the date and slug come from front matter when
-present and from the folder name otherwise.
+present and from the folder name otherwise. A post whose name carries no date must set `date` in
+front matter; the loader reports a validation error otherwise.
 
 ## workspace.toml
 
@@ -57,12 +59,12 @@ version = 1
 [[servers]]                   # every VPS running `constellation server` (decision 36)
 id = "vps-1"
 name = "First VPS"
-admin_url = "https://fractumseraph.net/_constellation"
+admin_url = "https://vps1.fractumseraph.net/_constellation"   # the server's own admin hostname
 
 [[servers]]
 id = "vps-2"
 name = "Second VPS"
-admin_url = "https://fractum.faith/_constellation"
+admin_url = "https://vps2.fractumseraph.net/_constellation"
 
 [[sites]]
 id = "fractumseraph"          # folder name under sites/
@@ -160,7 +162,7 @@ image_notice = "[Image, web only. Alt text: {alt}]"
 
 [calendar]
 display = ["gregorian", "discordian"] # which calendars themes may show; order = preference
-numerals = "arabic"                   # or "cistercian" once confirmed
+numerals = "arabic"                   # arabic | cistercian | roman
 
 [analytics]
 forward_to_umami = { enabled = false, endpoint = "https://websites.fractumseraph.net/api/send", website_id = "..." }

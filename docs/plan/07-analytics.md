@@ -94,9 +94,16 @@ Umami's `POST /api/send` so one dashboard shows everything:
 Facts that shape this (from Umami's documentation): `/api/send` needs no token but **requires a
 User-Agent header**, and bot-like user agents are silently dropped; `/api/batch` accepts an array
 of the same bodies. The server therefore sends a configurable, browser-like User-Agent string and
-batches events every few seconds. Because Umami derives sessions from IP plus user agent, Gemini
-visitors will look like one browser family; the per-event `data.platform` property keeps them
-distinguishable. The forwarder is off by default and configured per site in `site.toml`.
+batches events every few seconds.
+
+Umami derives its visitor and session from the client IP and user agent it sees. If the forwarder
+sent nothing but the payload, every Gemini reader would collapse into one visitor (the VPS's own
+address with one user agent). The forwarder therefore passes the reader's address in the
+`X-Forwarded-For` header, which Umami reads for the client IP, and in the payload's `ip` field on
+Umami versions that accept it. Milestone 5 verifies this against the owner's Umami version before
+the feature is called done. The per-event `data.platform` property keeps Gemini and Gopher views
+distinguishable from web views in Umami. The forwarder is off by default and configured per site
+in `site.toml`.
 
 GA4's Measurement Protocol is not supported for forwarding (it needs a client id per browser and
 attributes nothing useful to server-sent hits). The owner's GA4 and Pixel snippets keep working on
@@ -106,6 +113,7 @@ the web through custom HTML injection.
 
 - Raw mode stores IP addresses, which count as personal data in some jurisdictions; retention and
   backup policy apply to them. Hash mode remains available and stores no personal data.
-- Forwarding to Umami sends the request path and hostname, not the IP (Umami sees the server's
-  IP), so Gemini readers are not individually identifiable there.
+- Forwarding to Umami sends the request path, hostname and the reader's IP address (so Umami can
+  count visitors), which is consistent with the owner's raw-IP choice; Umami hashes it into its
+  own visitor id. Forwarding can be disabled per site.
 - Web trackers injected through custom HTML are the owner's responsibility, as today.

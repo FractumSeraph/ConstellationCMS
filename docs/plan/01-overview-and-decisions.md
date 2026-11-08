@@ -54,7 +54,7 @@ interpretation. "Default" means the proposed default was accepted.
 | 1 | Canonical format | Markdown. The editor warns about constructs that do not translate to a platform and offers an alternative rendering there. Example given by the owner: an unsupported heading becomes a plain text line followed by a blank line. |
 | 2 | Inline links on Gemini | Hoisted onto their own link lines directly after the paragraph. |
 | 3 | Markdown features in use | Measured from fractum.faith: paragraphs, bold, italic, lists, h2 to h4, tables, horizontal rules, line breaks in quotes, blockquotes, one code-style box, one image. No footnotes today (the `<sup>` tags are the theme's post counters). |
-| 4 | Platform coverage | Every post is on every platform. HTML shows the most; text platforms show an alternative text, e.g. for images "[image only available on html version of this site. Alt text is: ...]". |
+| 4 | Platform coverage | Every post is on every platform. HTML shows the most; text platforms show an alternative text, e.g. for images "[image only available on html version of this site. Alt text is: ...]" (wording later shortened, decision 38). |
 | 5 | Editor | Markdown editor with a preview toggle between the HTML and Gemini renderings. |
 | 6 | Content types | All: posts, pages, tags, categories, series, archives. |
 | 7 | Drafts and scheduling | Draft flag; future-dated posts held back at build time; no server-side scheduler. |
@@ -118,13 +118,16 @@ Each of these is a judgment call the owner can overturn. They are stated so the 
   Gopher-enabled site needs its own IP address or port. The site model carries per-platform
   listener settings from the start so this needs no later redesign. The owner needs one Gopher
   site for now (decision 43).
-- **A9. Servers are a registry in the workspace; credentials are machine-local.** A site names
-  the server it publishes to by id. The server's address is shared through the synced workspace;
-  the tokens for it live only on the machines that have been connected to it.
 - **A7. The gemsub index label is `YYYY-MM-DD Title`** (no dash), the form Lagrange documents.
   The owner's current capsule uses an em dash; it is a one-line theme setting either way.
 - **A8. The studio requires a password even in local mode** but auto-logs-in on localhost by
-  default. Remote mode adds a second factor and HTTPS requirements.
+  default. Remote mode adds a second factor and HTTPS requirements, and disables auto-login.
+- **A9. Servers are a registry in the workspace; credentials are machine-local.** A site names
+  the server it publishes to by id. The server's address is shared through the synced workspace;
+  the tokens for it live only on the machines that have been connected to it.
+- **A10. Each server has its own admin hostname**, set at install time (for example
+  `vps1.fractumseraph.net`), separate from any site's hostnames, so moving or retiring a site never
+  cuts off the studio's access to the server.
 
 ## Resolved questions
 
