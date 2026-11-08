@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block body_class %}home{% endblock %}
+{% block content %}
+<section class="post-list">
+{% for post in posts %}
+  <article class="post-summary">
+    <h2><a href="{{ url_for('post', post.slug) }}">{{ post.meta.title }}</a></h2>
+    <p class="post-meta"><time datetime="{{ post.date | isoformat }}">{{ post.date | date('long') }}</time></p>
+    {% if summaries[post.slug] %}<p>{{ summaries[post.slug] }}</p>{% endif %}
+  </article>
+{% else %}
+  <p>No posts yet.</p>
+{% endfor %}
+</section>
+{% if pagination.pages > 1 %}
+<nav class="pagination" aria-label="Pages">
+  {% if pagination.prev %}<a rel="prev" href="{{ pagination.prev }}">Newer</a>{% endif %}
+  <span>Page {{ pagination.current }} of {{ pagination.pages }}</span>
+  {% if pagination.next %}<a rel="next" href="{{ pagination.next }}">Older</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

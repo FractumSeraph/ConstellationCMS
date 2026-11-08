@@ -1,0 +1,4 @@
+5:IMG-NO-ALT:warn
+7:IMG-INLINE:info
+9:IMG-EXTERNAL:info
+0:IMG-NO-ALT:warn:web

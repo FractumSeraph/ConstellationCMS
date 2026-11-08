@@ -1,0 +1,46 @@
+version = 1
+
+[site]
+title = "Demo Constellation"
+tagline = "A sample site used by the tests and the screenshots"
+language = "en"
+timezone = "America/Chicago"
+theme = "base"
+author = "seraph"
+
+[[authors]]
+id = "seraph"
+name = "Seraph"
+bio = "Keeper of the demo."
+url = "https://example.org/"
+
+[platforms.web]
+enabled = true
+base_url = "https://demo.example.org"
+hostnames = ["demo.example.org", "www.demo.example.org"]
+pagination = 3
+feeds = ["atom", "json"]
+
+[platforms.gemini]
+enabled = true
+base_url = "gemini://demo.example.org"
+hostnames = ["demo.example.org"]
+feeds = ["atom", "gemsub"]
+
+[menu]
+items = [
+  { label = "Home", ref = "home" },
+  { label = "About", ref = "page:about" },
+  { label = "Rites", ref = "series:the-rites" },
+  { label = "Source", url = "https://github.com/FractumSeraph/ConstellationCMS" },
+]
+
+[footer]
+text = "Mend what you can."
+social = [{ label = "Mastodon", url = "https://example.social/@demo" }]
+
+[seo]
+default_description = "A demo site for ConstellationCMS."
+
+[custom_html]
+head = "<!-- tracking snippets go here -->"

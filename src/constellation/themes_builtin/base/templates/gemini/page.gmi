@@ -1,0 +1,6 @@
+# {{ item.meta.title }}
+
+{{ body }}
+{{ hr }}
+{% if web_url %}=> {{ web_url }} Read this page on the web
+{% endif %}=> / Home

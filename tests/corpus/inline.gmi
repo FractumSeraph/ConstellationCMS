@@ -1,0 +1,9 @@
+Plain words with *emphasis*, **strong**, `code`, and struck text.
+
+Soft breaks join; hard breaks
+split
+twice.
+
+Entities & — and a smile :) with curly “quotes”.
+
+Inline Ctrl and ^2 tags.

@@ -1,0 +1,23 @@
+```table: A, B, C
+A  B  C
+-  -  -
+1  2  3
+4  5  6
+```
+
+* Rank: I. The Seeker
+  You have arrived when: You notice the brokenness and decide to act, however small the act.
+  The rite: Mend one thing.
+* Rank: II. The Hand
+  You have arrived when: You have mended for others without being asked.
+  The rite: Mend in secret.
+
+* Fractum — The great brokenness that we are called to mend together.
+
+```table: Site, Link
+Site  Link
+----  --------
+Docs  read [1]
+```
+
+=> https://docs.example [1] read

@@ -1,0 +1,11 @@
+[theme]
+name = "base"
+version = "0.1.0"
+description = "The minimal, readable theme every other theme extends. Covers web and Gemini."
+platforms = ["web", "gemini"]
+
+[[settings]]
+key = "show_discordian_date"
+type = "bool"
+label = "Show the Discordian date under post titles"
+default = false

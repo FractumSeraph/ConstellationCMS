@@ -1,0 +1,14 @@
+Raw HTML block with a link.
+Second line.
+
+=> https://d.example a link
+
+[Embedded content, web only]
+=> https://www.youtube.com/embed/abc www.youtube.com/embed/abc
+
+[Image, web only. Alt text: A picture]
+=> /media/posts/post/pic.jpg A picture
+The caption
+
+Click to expand
+Hidden text that is always shown on Gemini.

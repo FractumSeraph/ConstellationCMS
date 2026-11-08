@@ -1,0 +1,15 @@
+[Image, web only. Alt text: A cat on a bench]
+=> /media/posts/post/cat.png A cat on a bench
+
+[Image, web only. Alt text: A cat with a caption]
+=> /media/posts/post/cat.png A cat with a caption
+The caption
+
+[Image, web only. Alt text: ]
+=> /media/posts/post/no-alt.png image
+
+Inline [image: tiny icon] inside a sentence.
+=> /media/posts/post/icon.png tiny icon
+
+[Image, web only. Alt text: External]
+=> https://elsewhere.example/pic.jpg External

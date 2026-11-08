@@ -1,0 +1,6 @@
+Before.
+
+=> gemini://x.example/ A link line written by hand
+Plain gemtext line.
+
+After.

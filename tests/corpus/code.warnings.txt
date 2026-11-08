@@ -1,0 +1,3 @@
+6:PRE-NO-ALT:info
+10:PRE-NO-ALT:info
+12:PRE-FENCE-INSIDE:error
