@@ -19,6 +19,7 @@ from constellation.core.markdown.document import Document, Ref, Warning
 from constellation.core.markdown.parse import parse_markdown
 from constellation.core.models import Page, Post, Site, Term
 from constellation.core.render.gemtext import GemtextRenderer
+from constellation.core.render.gopher import GopherRenderer, GopherTarget, info_line, item_for_url
 from constellation.core.render.html import HtmlRenderer
 from constellation.core.render.plaintext import summary_text
 from constellation.core.routes import (
@@ -131,6 +132,8 @@ class Build:
 
 
 def media_type_for(path: str) -> str:
+    if Path(path).name == "gophermap":
+        return "text/plain; charset=utf-8"
     ext = Path(path).suffix.lower()
     if ext in MEDIA_TYPES:
         return MEDIA_TYPES[ext]
@@ -181,8 +184,8 @@ def build_site(
     image_sets = _image_sets(visible, pages, site) if "web" in wanted else {}
 
     for platform in wanted:
-        if platform not in ("web", "gemini"):
-            continue  # gopher arrives in milestone 9
+        if platform not in ("web", "gemini", "gopher"):
+            continue
         pb = PlatformBuild(platform)
         pb.warnings.extend(link_problems)
         env = make_environment(chain, platform, overrides=overrides if overrides.is_dir() else None)
@@ -314,6 +317,7 @@ class _Context:
         self.site = site
         self.image_sets = image_sets
         self.bodies: dict[str, str] = {}
+        self._gopher_text = ""
         self.summaries: dict[str, str] = {}
         self.cfg = site.config
         self.platform = platform
@@ -331,6 +335,15 @@ class _Context:
         self._install_globals()
 
     # ---- template environment -------------------------------------------------------------
+    def gopher_target(self) -> GopherTarget:
+        from urllib.parse import urlsplit
+
+        pcfg = self.cfg.platform("gopher")
+        host = (
+            pcfg.hostnames[0] if pcfg.hostnames else urlsplit(pcfg.base_url).hostname
+        ) or "localhost"
+        return GopherTarget(host, pcfg.port or 70)
+
     def _install_globals(self) -> None:
         cfg, platform = self.cfg, self.platform
 
@@ -360,6 +373,10 @@ class _Context:
                 "theme": self.theme_settings,
                 "now": self.build.now,
                 "hr": cfg.render.gemini.hr,
+                "gopher_item": self._gopher_item,
+                "gopher_info": lambda text: info_line(
+                    str(text), self.gopher_target().host, self.gopher_target().port
+                ),
             }
         )
         self.env.filters["date"] = _date_filter(cfg)
@@ -390,6 +407,10 @@ class _Context:
 
         if self.platform == "gemini":
             res = GemtextRenderer(self.cfg.render.gemini, u).render(doc)
+        elif self.platform == "gopher":
+            renderer = GopherRenderer(self.cfg.render.gopher, u, self.gopher_target())
+            res = renderer.render(doc)
+            self._gopher_text = renderer.render_text(doc).text
         else:
             srcsets = {
                 path: iset.srcset() for path, iset in self.image_sets.items() if iset.srcset()
@@ -447,6 +468,15 @@ class _Context:
                 )
                 series = {"slug": term.slug, "title": term.title, "part": part}
         ctx["series"] = series
+        if self.platform == "gopher":
+            ctx["text_selector"] = (
+                platform_path(self.cfg, "gopher", "post", post.slug).rstrip("/") + ".txt"
+            )
+            text = self.env.get_template("post.map").render(**ctx)
+            pb.add(output_file(self.cfg, "gopher", "post", post.slug), _tidy(text, "gopher"))
+            txt = self.env.get_template("post.txt").render(**{**ctx, "body": self._gopher_text})
+            pb.add(ctx["text_selector"].lstrip("/"), _tidy(txt, "gopher"))
+            return
         text = self.env.get_template(
             "post.gmi" if self.platform == "gemini" else "post.html"
         ).render(**ctx)
@@ -459,13 +489,11 @@ class _Context:
         pb.warnings.extend(rendered.warnings)
         ctx = self._common(page, rendered)
         name = page.meta.template or "page"
-        tpl = f"{name}.gmi" if self.platform == "gemini" else f"{name}.html"
+        ext = {"gemini": "gmi", "gopher": "map"}.get(self.platform, "html")
         try:
-            template = self.env.get_template(tpl)
+            template = self.env.get_template(f"{name}.{ext}")
         except Exception:
-            template = self.env.get_template(
-                "page.gmi" if self.platform == "gemini" else "page.html"
-            )
+            template = self.env.get_template(f"page.{ext}")
         text = template.render(**ctx)
         pb.add(output_file(self.cfg, self.platform, "page", page.slug), _tidy(text, self.platform))
 
@@ -476,7 +504,16 @@ class _Context:
         }
 
     def _tpl(self, name: str) -> Any:
-        return self.env.get_template(f"{name}.gmi" if self.platform == "gemini" else f"{name}.html")
+        ext = {"gemini": "gmi", "gopher": "map"}.get(self.platform, "html")
+        return self.env.get_template(f"{name}.{ext}")
+
+    def _gopher_item(self, item_type: str, text: object, selector: str) -> str:
+        target = self.gopher_target()
+        if not selector.startswith("URL:"):
+            selector = selector.rstrip("/") or "/"
+        if item_type == "auto":
+            return item_for_url(selector, str(text), target)
+        return f"{item_type}{str(text).replace(chr(9), '    ')}\t{selector}\t{target.host}\t{target.port}"
 
     def render_terms(self, pb: PlatformBuild) -> None:
         summaries = self._summaries()
@@ -603,7 +640,7 @@ class _Context:
                 src = self.site.root / "media" / name
                 if src.is_file():
                     pb.add(name, b"", media_type_for(name), source=src)
-        else:
+        elif self.platform == "gemini":
             pb.add("robots.txt", feeds.robots_gemini(), "text/plain")
             pb.add("favicon.txt", feeds.favicon_txt(self.site), "text/plain")
 
@@ -614,6 +651,12 @@ class _Context:
                 posts=self.listed, summaries=summaries, gemini_path="/"
             )
             pb.add("index.gmi", _tidy(text, "gemini"))
+            return
+        if self.platform == "gopher":
+            text = self.env.get_template("home.map").render(
+                posts=self.listed, summaries=summaries, gemini_path="/"
+            )
+            pb.add("gophermap", _tidy(text, "gopher"))
             return
         per_page = max(1, self.cfg.platform("web").pagination)
         pages = max(1, -(-len(self.listed) // per_page))
@@ -688,6 +731,11 @@ def _ddate(d: datetime, fmt: str, cfg: Any) -> str:
 
 
 def _tidy(text: str, platform: str) -> str:
+    if platform == "gopher":
+        lines = [ln.rstrip("\r") for ln in text.split("\n")]
+        while lines and lines[-1].strip() == "":
+            lines.pop()
+        return "\r\n".join(lines) + "\r\n"
     if platform == "gemini":
         lines = [ln.rstrip() for ln in text.split("\n")]
         out: list[str] = []

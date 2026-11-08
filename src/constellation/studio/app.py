@@ -425,6 +425,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             meta_json=json.dumps(_meta_for_form(item.meta)),
             read_only=studio.read_only_reason(site_id),
             gemini_enabled=bool(site and site.config.platform("gemini").enabled),
+            gopher_enabled=bool(site and site.config.platform("gopher").enabled),
         )
 
     @app.get("/sites/{site_id}/raw")
@@ -486,6 +487,26 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         from constellation.core.models import SiteConfig, SiteInfo
 
         cfg = cfg or SiteConfig(site=SiteInfo(title="Preview"))
+        if platform == "gopher":
+            from constellation.core.render.gopher import GopherRenderer, GopherTarget
+
+            pcfg = cfg.platform("gopher")
+            target = GopherTarget(
+                pcfg.hostnames[0] if pcfg.hostnames else "localhost", pcfg.port or 70
+            )
+            renderer = GopherRenderer(
+                cfg.render.gopher, lambda r: url_for(r, "gopher", cfg, item_slug=slug), target
+            )
+            res = renderer.render_text(doc)
+            map_res = renderer.render(doc)
+            return JSONResponse(
+                {
+                    "html": "",
+                    "text": res.text + "\n\n--- gophermap ---\n" + map_res.text,
+                    "media_base": "",
+                    "warnings": [w.as_dict() for w in map_res.warnings],
+                }
+            )
         if platform == "gemini":
             res = GemtextRenderer(
                 cfg.render.gemini if cfg else RenderGemini(),

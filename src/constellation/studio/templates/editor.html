@@ -4,7 +4,7 @@
 {% block main_class %}editor-main{% endblock %}
 {% block content %}
 <div id="editor-app" data-site="{{ site_id }}" data-rel="{{ rel }}" data-sha="{{ item.sha256 }}" data-kind="{{ item.kind }}" data-slug="{{ item.slug }}"
-     data-meta='{{ meta_json }}' data-gemini="{{ 'yes' if gemini_enabled else 'no' }}" data-readonly="{{ 'yes' if read_only else 'no' }}">
+     data-meta='{{ meta_json }}' data-gemini="{{ 'yes' if gemini_enabled else 'no' }}" data-gopher="{{ 'yes' if gopher_enabled else 'no' }}" data-readonly="{{ 'yes' if read_only else 'no' }}">
   <aside class="meta-panel">
     <h2 class="small">{{ item.kind | capitalize }}</h2>
     <label>Title <input id="m-title" value="{{ item.meta.title or '' }}" required></label>
@@ -45,12 +45,14 @@
       <span class="spacer"></span>
       <label class="toggle"><input type="radio" name="pv" value="web" checked> Web</label>
       {% if gemini_enabled %}<label class="toggle"><input type="radio" name="pv" value="gemini"> Gemini</label>{% endif %}
+      {% if gopher_enabled %}<label class="toggle"><input type="radio" name="pv" value="gopher"> Gopher</label>{% endif %}
     </div>
     <div id="cm" class="cm-host"></div>
   </section>
   <section class="preview-column">
     <div id="preview-web" class="preview-pane"><iframe id="preview-frame" title="Web preview" src="about:blank" sandbox="allow-same-origin"></iframe></div>
     <div id="preview-gemini" class="preview-pane gemini hidden"><div id="gemini-body" class="gemtext"></div></div>
+    <div id="preview-gopher" class="preview-pane gemini hidden"><pre id="gopher-body" class="gophertext"></pre></div>
     <div id="warnings" class="warnings"><p class="muted">Warnings appear here as you write.</p></div>
   </section>
 </div>

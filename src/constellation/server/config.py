@@ -40,7 +40,7 @@ class GeminiConfig(Strict):
 class GopherConfig(Strict):
     enabled: bool = False
     port: int = 70
-    site: str = ""
+    site: str = ""  # the one site this listener serves (Gopher has no virtual hosting); empty = the first with a gopher tree
 
 
 class AdminConfig(Strict):

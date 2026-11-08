@@ -1,0 +1,9 @@
+{{ gopher_info(item.meta.title | upper) }}
+{{ gopher_info(item.date | date('iso') ~ (" · " ~ author.name if author else "")) }}
+{{ gopher_item("0", "Plain text version", text_selector) }}
+{{ gopher_info("") }}
+{{ body }}{{ gopher_info("- - -") }}
+{% if prev_post %}{{ gopher_item("1", "Previous: " ~ prev_post.meta.title, url_for('post', prev_post.slug)) }}
+{% endif %}{% if next_post %}{{ gopher_item("1", "Next: " ~ next_post.meta.title, url_for('post', next_post.slug)) }}
+{% endif %}{% if web_url %}{{ gopher_item("h", "Read this post on the web", "URL:" ~ web_url) }}
+{% endif %}{{ gopher_item("1", "Home", "/") }}

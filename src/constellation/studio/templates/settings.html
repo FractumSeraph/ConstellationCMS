@@ -27,6 +27,13 @@
     <label>Hostnames <input name="f.platforms.gemini.hostnames" value="{{ gem.get('hostnames', []) | join(', ') }}"></label>
     <label>Feeds <input name="f.platforms.gemini.feeds" value="{{ gem.get('feeds', ['atom', 'gemsub']) | join(', ') }}"></label>
   </div></section>
+  {% set gop = doc.get('platforms', {}).get('gopher', {}) %}
+  <section class="card"><h2>Gopher</h2><div class="grid">
+    <label class="check"><input type="checkbox" name="f.platforms.gopher.enabled" {% if gop.get('enabled', False) %}checked{% endif %}> enabled</label>
+    <label>Base URL <input name="f.platforms.gopher.base_url" value="{{ gop.get('base_url', '') }}" placeholder="gopher://example.org"></label>
+    <label>Hostname <input name="f.platforms.gopher.hostnames" value="{{ gop.get('hostnames', []) | join(', ') }}"></label>
+    <label>Port <input type="number" name="f.platforms.gopher.port" value="{{ gop.get('port', 70) }}"></label>
+  </div></section>
   {% set rg = doc.get('render', {}).get('gemini', {}) %}
   <section class="card"><h2>Gemini rendering</h2><div class="grid">
     <label>Inline markup <select name="f.render.gemini.inline_markup">{% for v in ['markdown', 'strip'] %}<option {% if rg.get('inline_markup', 'markdown') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>

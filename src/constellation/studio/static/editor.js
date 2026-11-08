@@ -89,6 +89,8 @@ const frame = document.getElementById("preview-frame");
 const geminiPane = document.getElementById("preview-gemini");
 const webPane = document.getElementById("preview-web");
 const geminiBody = document.getElementById("gemini-body");
+const gopherPane = document.getElementById("preview-gopher");
+const gopherBody = document.getElementById("gopher-body");
 const warningsEl = document.getElementById("warnings");
 let platform = "web";
 
@@ -96,6 +98,7 @@ document.querySelectorAll('input[name="pv"]').forEach((r) => r.addEventListener(
   platform = r.value;
   webPane.classList.toggle("hidden", platform !== "web");
   geminiPane.classList.toggle("hidden", platform !== "gemini");
+  gopherPane.classList.toggle("hidden", platform !== "gopher");
   renderPreview();
 }));
 
@@ -111,6 +114,7 @@ function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeo
 async function renderPreview() {
   const { data } = await post(`/sites/${site}/render`, { platform, body: view.state.doc.toString(), meta: metaFromForm(), slug });
   if (platform === "gemini") geminiBody.innerHTML = data.html || "";
+  if (platform === "gopher") gopherBody.textContent = data.text || "";
   showWarnings(data.warnings || []);
 }
 

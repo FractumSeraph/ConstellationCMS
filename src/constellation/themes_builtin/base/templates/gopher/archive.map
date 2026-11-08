@@ -1,0 +1,6 @@
+{{ gopher_info(("Archive" ~ (": " ~ year if year else "")) | upper) }}
+{{ gopher_info("") }}
+{% if not year %}{% for y, count in years %}{{ gopher_item("1", y ~ " (" ~ count ~ ")", url_for('archive', '', year=y|string)) }}
+{% endfor %}{{ gopher_info("") }}
+{% endif %}{% for post in posts %}{{ gopher_item("1", post.date | date('iso') ~ " " ~ post.meta.title, url_for('post', post.slug)) }}
+{% endfor %}{{ gopher_item("1", "Home", "/") }}

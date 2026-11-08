@@ -40,6 +40,8 @@ def platform_path(cfg: SiteConfig, platform: str, kind: str, slug: str, **extra:
     path = web_path(cfg, kind, slug, **extra)
     if platform == "web":
         return path
+    if platform == "gopher":
+        return path if path.endswith("/") else path + "/"
     ext = PLATFORM_EXT.get(platform, ".txt")
     if path == "/":
         return "/"
@@ -51,6 +53,8 @@ def output_file(cfg: SiteConfig, platform: str, kind: str, slug: str, **extra: s
     path = platform_path(cfg, platform, kind, slug, **extra)
     if platform == "web":
         return path.lstrip("/") + "index.html" if path.endswith("/") else path.lstrip("/")
+    if platform == "gopher":
+        return path.lstrip("/") + "gophermap"
     if path == "/":
         return "index" + PLATFORM_EXT.get(platform, ".txt")
     return path.lstrip("/")
@@ -63,7 +67,7 @@ def index_path(cfg: SiteConfig, platform: str, kind: str) -> str:
     prefix = pattern.split("{", 1)[0]
     if not prefix.endswith("/"):
         prefix += "/"
-    if platform == "web":
+    if platform in ("web", "gopher"):
         return prefix
     return prefix.rstrip("/") + PLATFORM_EXT.get(platform, ".txt")
 
@@ -72,6 +76,8 @@ def index_output_file(cfg: SiteConfig, platform: str, kind: str) -> str:
     path = index_path(cfg, platform, kind)
     if platform == "web":
         return path.lstrip("/") + "index.html"
+    if platform == "gopher":
+        return path.lstrip("/") + "gophermap"
     return path.lstrip("/")
 
 

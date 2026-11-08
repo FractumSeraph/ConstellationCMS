@@ -102,3 +102,4 @@ body.gemini-page { background: #000; color: #d8c7e8; padding: 1rem 2rem; display
 .bar { flex: 1; display: flex; align-items: flex-end; min-width: 2px; }
 .bar span { display: block; width: 100%; background: var(--accent-2); min-height: 1px; border-radius: 2px 2px 0 0; }
 .filters a.current { font-weight: 700; }
+.gophertext { font-family: ui-monospace, Consolas, monospace; white-space: pre; color: #cfa0ff; margin: 0; }

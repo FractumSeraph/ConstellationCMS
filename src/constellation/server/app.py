@@ -17,6 +17,7 @@ from constellation.server.acme import AcmeClient, ChallengeStore, Orchestrator
 from constellation.server.analytics import Analytics, UmamiForwarder
 from constellation.server.config import ServerConfig
 from constellation.server.gemini import GeminiRoute, GeminiServer
+from constellation.server.gopher import GopherServer
 from constellation.server.http import HttpApp
 from constellation.server.releases import Store
 from constellation.server.tls import SniTable, ensure_self_signed, https_contexts, server_context
@@ -58,6 +59,7 @@ class Server:
         self.gemini_routes: dict[str, GeminiRoute] = {}
         self.sni: SniTable | None = None
         self.gemini: GeminiServer | None = None
+        self.gopher: GopherServer | None = None
         self.reload_gemini()
 
     def on_event(self, event: dict[str, object]) -> None:
@@ -126,6 +128,14 @@ class Server:
                 await asyncio.to_thread(self.acme.ensure_all)
             await asyncio.sleep(12 * 3600)
 
+    def gopher_root(self) -> tuple[str, Path] | None:
+        sites = [self.cfg.gopher.site] if self.cfg.gopher.site else self.store.sites()
+        for sid in sites:
+            root = self.store.site(sid).current_dir("gopher")
+            if root is not None:
+                return sid, root
+        return None
+
     def route_gemini(self, host: str) -> GeminiRoute | None:
         return self.gemini_routes.get(host.lower())
 
@@ -152,6 +162,35 @@ class Server:
                 on_event=self.on_event,
             )
             await self.gemini.start(self.cfg.gemini.bind, self.cfg.gemini.port)
+
+        if self.cfg.gopher.enabled:
+            gopher_host = (
+                self.cfg.gopher.site
+                and str(
+                    self.store.site(self.cfg.gopher.site)
+                    .site_config()
+                    .get("hostnames", {})
+                    .get("gopher", [""])[0]
+                )
+                or self.cfg.admin.hostname
+                or "localhost"
+            )
+            web = ""
+            route = self.gopher_root()
+            if route is not None:
+                web_hosts = (
+                    self.store.site(route[0]).site_config().get("hostnames", {}).get("web", [])
+                )
+                web = f"https://{web_hosts[0]}/" if web_hosts else ""
+            self.gopher = GopherServer(
+                self.gopher_root,
+                host=gopher_host,
+                port=self.cfg.gopher.port,
+                web_url=web,
+                read_timeout=self.cfg.limits.request_timeout_s,
+                on_event=self.on_event,
+            )
+            await self.gopher.start(self.cfg.gemini.bind, self.cfg.gopher.port)
 
         if self.cfg.https.tls_mode == "behind-proxy":
             http_cfg = uvicorn.Config(
@@ -209,6 +248,8 @@ class Server:
             self.forwarder.stop()
         if self.gemini:
             await self.gemini.stop()
+        if self.gopher:
+            await self.gopher.stop()
         for t in tasks:
             t.cancel()
 
