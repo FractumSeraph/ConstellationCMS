@@ -24,7 +24,7 @@
     {% if item.meta.tags %}<ul class="post-tags">{% for t in item.meta.tags %}<li><a href="{{ url_for('tag', t | slug) }}">#{{ t }}</a></li>{% endfor %}</ul>{% endif %}
     {% if series %}<p class="post-series">Part {{ series.part }} of <a href="{{ url_for('series', series.slug) }}">{{ series.title }}</a></p>{% endif %}
   </header>
-  {% if featured_image %}<figure class="featured"><img src="{{ featured_image }}" alt="{{ item.meta.image_alt }}"></figure>{% endif %}
+  {% if featured_image %}<figure class="featured"><img src="{{ featured_image }}" alt="{{ item.meta.image_alt }}"{% if featured_srcset %} srcset="{{ featured_srcset }}" sizes="(max-width: 48rem) 100vw, 48rem"{% endif %}></figure>{% endif %}
   <div class="post-body">
 {{ body | safe }}
   </div>

@@ -56,6 +56,25 @@ def output_file(cfg: SiteConfig, platform: str, kind: str, slug: str, **extra: s
     return path.lstrip("/")
 
 
+def index_path(cfg: SiteConfig, platform: str, kind: str) -> str:
+    """The index page of a taxonomy or the archive: the pattern up to its first placeholder."""
+    pattern = getattr(cfg.urls, kind)
+    assert isinstance(pattern, str)
+    prefix = pattern.split("{", 1)[0]
+    if not prefix.endswith("/"):
+        prefix += "/"
+    if platform == "web":
+        return prefix
+    return prefix.rstrip("/") + PLATFORM_EXT.get(platform, ".txt")
+
+
+def index_output_file(cfg: SiteConfig, platform: str, kind: str) -> str:
+    path = index_path(cfg, platform, kind)
+    if platform == "web":
+        return path.lstrip("/") + "index.html"
+    return path.lstrip("/")
+
+
 def media_path(item_slug: str | None, file: str) -> str:
     """Media lives at the same path on every platform."""
     if file.startswith("/"):

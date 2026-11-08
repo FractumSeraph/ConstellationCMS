@@ -1,0 +1,7 @@
+# Archive{% if year %}: {{ year }}{% endif %}
+{% if not year %}
+{% for y, count in years %}=> {{ url_for('archive', '', year=y|string) }} {{ y }} ({{ count }})
+{% endfor %}{% endif %}
+{% for post in posts %}=> {{ url_for('post', post.slug) }} {{ post.date | date('iso') }} {{ post.meta.title }}
+{% endfor %}
+=> / Home

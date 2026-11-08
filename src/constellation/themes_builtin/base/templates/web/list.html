@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ term.title }} · {{ site.config.site.title }}{% endblock %}
+{% block meta %}<meta name="description" content="{{ term.meta.description or site.config.seo.default_description }}">
+<link rel="canonical" href="{{ absolute_url(url_for(term.kind, term.slug)) }}">{% endblock %}
+{% block body_class %}list list-{{ term.kind }}{% endblock %}
+{% block content %}
+<section class="term">
+  <h1>{% if term.kind == 'tag' %}#{% endif %}{{ term.title }}</h1>
+  {% if term.meta.description %}<p class="term-description">{{ term.meta.description }}</p>{% endif %}
+  {% if term_body %}<div class="term-body">{{ term_body | safe }}</div>{% endif %}
+  {% if term.kind == 'series' %}<ol class="post-list series-list">{% else %}<ul class="post-list">{% endif %}
+  {% for post in posts %}
+    <li class="post-summary">
+      <h2><a href="{{ url_for('post', post.slug) }}">{{ post.meta.title }}</a></h2>
+      <p class="post-meta"><time datetime="{{ post.date | isoformat }}">{{ post.date | date('long') }}</time></p>
+      {% if summaries[post.slug] %}<p>{{ summaries[post.slug] }}</p>{% endif %}
+    </li>
+  {% endfor %}
+  {% if term.kind == 'series' %}</ol>{% else %}</ul>{% endif %}
+</section>
+{% endblock %}

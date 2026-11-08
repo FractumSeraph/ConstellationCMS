@@ -34,6 +34,28 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--json", action="store_true", help="machine-readable output")
     c.set_defaults(func=cmd_check)
 
+    e = sub.add_parser(
+        "export", help="export one platform's build to a folder, over SFTP, or with rsync"
+    )
+    e.add_argument("site", type=Path)
+    e.add_argument("--platform", required=True, choices=["web", "gemini"])
+    e.add_argument(
+        "--target",
+        required=True,
+        help="folder:/path | sftp://user@host[:port]/path | rsync:user@host:/path",
+    )
+    e.add_argument(
+        "--layout",
+        default="plain",
+        choices=["plain", "agate"],
+        help="plain release tree, or an Agate content tree (gemini)",
+    )
+    e.add_argument("--now", help="build time as ISO 8601 (default: now)")
+    e.add_argument("--dry-run", action="store_true", help="show the diff and stop")
+    e.add_argument("--yes", action="store_true", help="apply without asking")
+    e.add_argument("--no-delete", action="store_true", help="never delete remote files")
+    e.set_defaults(func=cmd_export)
+
     n = sub.add_parser("new", help="create a post or page")
     n.add_argument("kind", choices=["post", "page"])
     n.add_argument("site", type=Path)
@@ -101,6 +123,59 @@ def cmd_check(args: argparse.Namespace) -> int:
             loc = f"{r['item']}:{r['line']}" if r["item"] else "site"
             print(f"{r['severity']:5} [{r['platform']}] {loc} {r['code']}: {r['message']}")
     return 1 if any(r["severity"] == "error" for r in rows) else 0
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    from constellation.core.build.pipeline import build_site
+    from constellation.publish.export import (
+        apply_export,
+        export_rsync,
+        layout_files,
+        open_target,
+        plan_export,
+    )
+
+    site = _load(args.site)
+    now = datetime.fromisoformat(args.now) if args.now else datetime.now(UTC)
+    build = build_site(site, platforms=[args.platform], now=now)
+    errors = [w for w in build.warnings if w.severity == "error"]
+    for w in errors:
+        print(f"error [{w.platform}] {w.code}: {w.message}", file=sys.stderr)
+    if errors:
+        print(
+            "refusing to export with error-level warnings; fix them or run `constellation check`",
+            file=sys.stderr,
+        )
+        return 1
+    files = layout_files(build, args.platform, args.layout, site)
+    if args.target.startswith("rsync:"):
+        print(
+            export_rsync(files, args.target, dry_run=args.dry_run, delete=not args.no_delete),
+            end="",
+        )
+        return 0
+    target = open_target(args.target)
+    try:
+        plan = plan_export(files, target)
+        print(f"{target.describe()}: {plan.summary()}")
+        for p in plan.added:
+            print(f"  + {p}")
+        for p in plan.changed:
+            print(f"  ~ {p}")
+        for p in plan.removed:
+            print(f"  - {p}" + ("" if not args.no_delete else " (kept)"))
+        if args.dry_run or plan.empty:
+            return 0
+        if not args.yes:
+            answer = input("apply? [y/N] ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("aborted")
+                return 1
+        apply_export(files, target, plan, delete=not args.no_delete)
+        print("done")
+        return 0
+    finally:
+        target.close()
 
 
 def cmd_new(args: argparse.Namespace) -> int:

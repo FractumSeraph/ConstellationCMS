@@ -1,0 +1,5 @@
+# {{ heading }}
+
+{% for term in terms %}=> {{ url_for(kind, term.slug) }} {% if kind == 'tag' %}#{% endif %}{{ term.title }} ({{ term.posts | length }})
+{% endfor %}
+=> / Home

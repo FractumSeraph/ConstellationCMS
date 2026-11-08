@@ -257,12 +257,13 @@ class Term(BaseModel):
     kind: Literal["tag", "category", "series"]
     slug: str
     meta: TermMeta
+    name: str = ""
     body: str = ""
     posts: list[Post] = Field(default_factory=list)
 
     @property
     def title(self) -> str:
-        return self.meta.title or self.slug.replace("-", " ").title()
+        return self.meta.title or self.name or self.slug.replace("-", " ").title()
 
 
 class Site(BaseModel):

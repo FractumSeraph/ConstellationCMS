@@ -205,7 +205,7 @@ def _collect_terms(
                 continue
             term = terms.get(slug)
             if term is None:
-                term = Term(kind=kind, slug=slug, meta=TermMeta(title=name if name != slug else ""))  # type: ignore[arg-type]
+                term = Term(kind=kind, slug=slug, meta=TermMeta(), name=name)  # type: ignore[arg-type]
                 terms[slug] = term
             term.posts.append(post)
     if folder.is_dir():
