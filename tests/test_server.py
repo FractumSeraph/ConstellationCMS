@@ -104,7 +104,7 @@ def test_store_commit_activate_prune(tmp_path: Path) -> None:
     store.put_blob(hashlib.sha256(unique).hexdigest(), unique)
     store.commit(rid3)
     store.activate(rid2)
-    assert store.prune(1) == [rid3]
+    assert store.prune(0) == [rid3], "keep=0 drops everything but the active release"
     assert not store.has_blob(hashlib.sha256(unique).hexdigest()), "orphaned blob is dropped"
     tid, raw = store.mint_token("studio")
     assert store.verify_token(raw) and not store.verify_token("cst_nope")
@@ -185,8 +185,7 @@ def test_publish_protocol_end_to_end(server, tmp_path: Path) -> None:
     rel = publisher.releases("demo")
     assert rel["current"] == report.release_id and len(rel["releases"]) == 1
     assert admin.activate("demo", report.release_id)["status"] == "active"
-    r = admin.client.delete("/sites/demo")
-    assert r.status_code == 200 and store.site("demo").current() is None
+    assert admin.retire("demo")["ok"] and store.site("demo").current() is None
     admin.close()
     publisher.close()
 

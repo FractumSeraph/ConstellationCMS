@@ -3,6 +3,7 @@ API under ``/_constellation/`` on the admin hostname."""
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import logging
 import time
@@ -315,7 +316,7 @@ class HttpApp:
         if request.method == "GET":
             return JSONResponse(
                 {
-                    "releases": [r.__dict__ for r in store.list_releases()],
+                    "releases": [dataclasses.asdict(r) for r in store.list_releases()],
                     "current": store.current(),
                 }
             )

@@ -110,6 +110,9 @@ class PublishClient:
             self.client.post(self._url(f"/sites/{site}/tokens"), json={"label": label})
         )
 
+    def retire(self, site: str) -> dict[str, Any]:
+        return self._check(self.client.delete(self._url(f"/sites/{site}")))
+
     def status(self) -> dict[str, Any]:
         return self._check(self.client.get(self._url("/status")))
 
@@ -163,11 +166,11 @@ class PublishClient:
                 say(f"uploaded {uploaded}/{len(missing)}")
         res = self._check(self.client.post(self._url(f"/sites/{site}/releases/{rid}/commit")))
         say(f"release {rid} is active")
-        total = sum(len(f) for f in manifest["platforms"].values())
+        unique = {e["sha256"] for files in manifest["platforms"].values() for e in files.values()}
         return PublishReport(
             rid,
             uploaded,
-            total - uploaded,
+            len(unique) - uploaded,
             diff["added"],
             diff["changed"],
             diff["removed"],
