@@ -1,0 +1,24 @@
+<div class="server-admin">
+{% if error %}<p class="error">{{ error }}</p>{% else %}
+{% if result %}<p class="ok">Done{% if result.restart_required %}; restart the server for listener changes to apply{% endif %}{% if result.fingerprint %}; new fingerprint {{ result.fingerprint }}{% endif %}.</p>{% endif %}
+<p>Version {{ status.version }} · TLS mode <strong>{{ status.tls_mode }}</strong> · {{ status.sites | length }} sites</p>
+<h3>Certificates</h3>
+<table class="items small"><thead><tr><th>Platform</th><th>Hostname</th><th>Kind</th><th>Expires</th><th>Fingerprint (SHA-256)</th><th></th></tr></thead><tbody>
+{% for c in certs.certificates %}<tr><td>{{ c.platform }}</td><td>{{ c.hostname }}</td><td>{{ c.kind }}</td><td>{{ (c.expires or '')[:10] }}</td><td><code class="small">{{ c.fingerprint or c.error or '' }}</code></td>
+  <td>{% if c.platform == 'gemini' %}<form hx-post="/servers/{{ server.id }}/admin" hx-target="closest .server-admin" hx-swap="outerHTML" hx-confirm="Regenerate the Gemini certificate for {{ c.hostname }}? Readers will see a trust warning once." class="inline"><input type="hidden" name="admin_token" value="{{ admin_token }}"><input type="hidden" name="action" value="regenerate"><input type="hidden" name="host" value="{{ c.hostname }}"><button class="link">regenerate</button></form>{% endif %}</td></tr>
+{% endfor %}</tbody></table>
+{% if certs.acme %}<h3>ACME</h3><table class="items small"><tbody>{% for a in certs.acme %}<tr><td>{{ a.hostname }}</td><td>{{ a.state }}</td><td>{{ (a.expires or '')[:10] }}</td><td class="error">{{ a.error }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+<h3>Settings</h3>
+{% set cfg = config.config %}
+<form hx-post="/servers/{{ server.id }}/admin" hx-target="closest .server-admin" hx-swap="outerHTML" class="grid small">
+  <input type="hidden" name="admin_token" value="{{ admin_token }}"><input type="hidden" name="action" value="config">
+  <label>TLS mode <select name="c.https.tls_mode">{% for m in ['behind-proxy', 'external', 'acme'] %}<option {% if cfg.https.tls_mode == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+  <label>ACME e-mail <input name="c.https.acme_email" value="{{ cfg.https.acme_email }}"></label>
+  <label>Gemini certificate years <input type="number" name="c.gemini.cert_years" value="{{ cfg.gemini.cert_years }}"></label>
+  <label>Releases to keep <input type="number" name="c.limits.keep_releases" value="{{ cfg.limits.keep_releases }}"></label>
+  <label>IP policy <select name="c.analytics.ip_policy">{% for m in ['raw', 'truncate', 'hash', 'none'] %}<option {% if cfg.analytics.ip_policy == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+  <label>Analytics retention (days) <input type="number" name="c.analytics.retention_days" value="{{ cfg.analytics.retention_days }}"></label>
+  <button>Save server settings</button>
+</form>
+{% endif %}
+</div>

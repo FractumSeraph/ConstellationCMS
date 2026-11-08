@@ -1058,6 +1058,54 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             request, "analytics.html", site_id=site_id, server=server, data=data, days=days
         )
 
+    # ---- server administration (admin token per action) ---------------------------------------
+    @app.post("/servers/{server_id}/admin")
+    async def server_admin(
+        request: Request,
+        server_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        admin_token: str = Form(...),
+        action: str = Form("status"),
+    ) -> Response:
+        from constellation.publish.client import PublishClient, PublishError
+
+        ws = studio.workspace
+        server = ws.server(server_id)
+        if server is None:
+            raise HTTPException(404)
+        form = await request.form()
+        client = PublishClient(server.admin_url, admin_token.strip())
+        result: dict[str, Any] = {}
+        error = ""
+        try:
+            if action == "regenerate":
+                result = client.regenerate_gemini_cert(str(form.get("host", "")))
+            elif action == "config":
+                changes = {
+                    str(k)[2:]: str(v) for k, v in form.multi_items() if str(k).startswith("c.")
+                }
+                result = client.update_server_config(changes)
+            status = client.status()
+            certs = client.server_certs()
+            config = client.server_config()
+        except PublishError as e:
+            error = str(e)
+            status, certs, config = {}, {}, {}
+        finally:
+            client.close()
+        studio.state.audit("server_admin", f"{server_id}:{action}", client_host(request))
+        return render(
+            request,
+            "partials/server_admin.html",
+            server=server,
+            status=status,
+            certs=certs,
+            config=config,
+            result=result,
+            error=error,
+            admin_token=admin_token.strip(),
+        )
+
     # ---- account --------------------------------------------------------------------------
     @app.get("/account", response_class=HTMLResponse)
     async def account(
@@ -1337,7 +1385,7 @@ def _coerce(dotted: str, value: str) -> Any:
             return 0
     if key in ("hostnames", "feeds", "display"):
         return [x.strip() for x in value.split(",") if x.strip()]
-    if key == "items":
+    if key in ("items", "redirects"):
         try:
             return json.loads(value)
         except json.JSONDecodeError:

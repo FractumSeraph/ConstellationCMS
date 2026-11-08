@@ -141,7 +141,10 @@ def test_rollups_reports_and_bot_handling(tmp_path: Path) -> None:
         and content[0]["views"] == 3
         and content[0]["visitors"] == 2
     )
-    assert any(c["platform"] == "gemini" and c["path"] == "/posts/the-call.gmi" and c["views"] == 1 for c in content), "the crawler is excluded"
+    assert any(
+        c["platform"] == "gemini" and c["path"] == "/posts/the-call.gmi" and c["views"] == 1
+        for c in content
+    ), "the crawler is excluded"
     tech = a.technical("demo", 7, now=now)
     assert tech["statuses"]["404"] == 1 and tech["missing"][0]["path"] == "/nope/"
     assert tech["tls"].get("TLSv1.3") == 1 and 0 < tech["bot_share"] < 1

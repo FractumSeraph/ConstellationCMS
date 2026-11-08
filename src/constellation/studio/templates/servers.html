@@ -25,6 +25,13 @@
     </td></tr>
   {% endfor %}
   </tbody></table>
+  <details class="top-gap"><summary>Administer (certificates, settings)</summary>
+    <form hx-post="/servers/{{ s.id }}/admin" hx-target="#admin-{{ s.id }}" hx-swap="innerHTML" class="row">
+      <input type="hidden" name="action" value="status">
+      <input type="password" name="admin_token" placeholder="admin token" required><button>Open</button>
+    </form>
+    <div id="admin-{{ s.id }}"></div>
+  </details>
   <form method="post" action="/servers" class="inline top-gap" onsubmit="return confirm('Remove this server from the registry? Sites assigned to it become export-only.')">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ s.id }}"><input type="hidden" name="admin_url" value="https://-"><input type="hidden" name="delete" value="{{ s.id }}"><button class="link danger">remove server</button>
   </form>

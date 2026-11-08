@@ -7,17 +7,19 @@ import contextlib
 import logging
 import signal
 import ssl
+import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import uvicorn
 
+from constellation.server.acme import AcmeClient, ChallengeStore, Orchestrator
 from constellation.server.analytics import Analytics, UmamiForwarder
 from constellation.server.config import ServerConfig
 from constellation.server.gemini import GeminiRoute, GeminiServer
 from constellation.server.http import HttpApp
 from constellation.server.releases import Store
-from constellation.server.tls import SniTable, ensure_self_signed, server_context
+from constellation.server.tls import SniTable, ensure_self_signed, https_contexts, server_context
 
 log = logging.getLogger("constellation.server")
 EventSink = Callable[[dict[str, object]], Awaitable[None] | None]
@@ -39,8 +41,20 @@ class Server:
                 site_configs=lambda sid: self.store.site(sid).site_config(),
             )
         self._external_sink = on_event
+        self.challenges = ChallengeStore()
+        self.acme: Orchestrator | None = None
+        if cfg.https.tls_mode == "acme":
+            issuer = AcmeClient(
+                cfg.https.acme_directory, cfg.https.acme_email, cfg.data / "certs" / "acme-account"
+            )
+            self.acme = Orchestrator(
+                cfg.data, issuer, self.challenges, self.web_hostnames, on_change=self.reload_https
+            )
+        self.https_sni: SniTable | None = None
         self.http = HttpApp(cfg, self.store, on_event=self.on_event, on_release=self.on_release)
         self.http.analytics = self.analytics
+        self.http.challenges = self.challenges
+        self.http.server = self
         self.gemini_routes: dict[str, GeminiRoute] = {}
         self.sni: SniTable | None = None
         self.gemini: GeminiServer | None = None
@@ -79,9 +93,38 @@ class Server:
         if self.sni is not None:
             self.sni.set(contexts)
 
+    def web_hostnames(self) -> list[str]:
+        hosts = set(self.store.hostname_table().get("web", {}))
+        if self.cfg.admin.hostname:
+            hosts.add(self.cfg.admin.hostname.lower())
+        if self.cfg.studio.enabled and self.cfg.studio.hostname:
+            hosts.add(self.cfg.studio.hostname.lower())
+        return sorted(hosts)
+
+    def reload_https(self) -> None:
+        if self.https_sni is None:
+            return
+        _default, contexts = https_contexts(
+            self.cfg.data,
+            self.web_hostnames(),
+            fallback_host=self.cfg.admin.hostname or "localhost",
+        )
+        self.https_sni.set(contexts)
+
     def on_release(self, site: str) -> None:
         log.info("release switched for %s; reloading routes", site)
         self.reload_gemini()
+        self.reload_https()
+        if self.acme is not None:
+            threading.Thread(
+                target=self.acme.ensure_all, daemon=True, name="acme-on-release"
+            ).start()
+
+    async def renewal_loop(self) -> None:
+        while True:
+            if self.acme is not None:
+                await asyncio.to_thread(self.acme.ensure_all)
+            await asyncio.sleep(12 * 3600)
 
     def route_gemini(self, host: str) -> GeminiRoute | None:
         return self.gemini_routes.get(host.lower())
@@ -141,7 +184,18 @@ class Server:
                     ssl_certfile=str(cert),
                     server_header=False,
                 )
+                tls.load()
+                default, contexts = https_contexts(
+                    self.cfg.data,
+                    self.web_hostnames(),
+                    fallback_host=self.cfg.admin.hostname or "localhost",
+                )
+                self.https_sni = SniTable(default)
+                self.https_sni.set(contexts)
+                tls.ssl = default
                 tasks.append(asyncio.create_task(uvicorn.Server(tls).serve()))
+                if self.acme is not None:
+                    tasks.append(asyncio.create_task(self.renewal_loop()))
 
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):

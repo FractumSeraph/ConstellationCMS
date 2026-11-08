@@ -51,6 +51,8 @@ class HttpApp:
         self.on_event = on_event
         self.on_release = on_release
         self.analytics: Any = None
+        self.challenges: Any = None
+        self.server: Any = None
         self.table: dict[str, str] = {}
         self.canonical: dict[str, str] = {}
         self.redirects: dict[str, list[dict[str, Any]]] = {}
@@ -90,6 +92,14 @@ class HttpApp:
                     self.analytics_report,
                     methods=["GET"],
                 ),
+                Route("/_constellation/server/config", self.server_config, methods=["GET", "PUT"]),
+                Route("/_constellation/server/certs", self.server_certs, methods=["GET"]),
+                Route(
+                    "/_constellation/server/certs/{platform}/{host}/regenerate",
+                    self.regenerate_cert,
+                    methods=["POST"],
+                ),
+                Route("/.well-known/acme-challenge/{token}", self.acme_challenge, methods=["GET"]),
                 Route("/{path:path}", self.static, methods=["GET", "HEAD"]),
             ]
         )
@@ -146,6 +156,8 @@ class HttpApp:
         site = self.table.get(host)
         response: Response
         if site is None:
+            if request.url.path.startswith("/.well-known/acme-challenge/"):
+                return await self.acme_challenge(request)
             response = PlainTextResponse("No site is served at this address.\n", status_code=404)
         else:
             response = await self._serve(request, host, site)
@@ -155,6 +167,8 @@ class HttpApp:
     async def _serve(self, request: Request, host: str, site: str) -> Response:
         canon = self.canonical.get(host, host)
         path = request.url.path
+        if path.startswith("/.well-known/acme-challenge/"):
+            return await self.acme_challenge(request)
         if host != canon:
             return RedirectResponse(f"https://{canon}{path}", status_code=301)
         if (
@@ -305,6 +319,149 @@ class HttpApp:
         if self._admin_ok(request):
             return True
         return self.store.site(site).verify_token(raw)
+
+    async def acme_challenge(self, request: Request) -> Response:
+        token = request.path_params["token"]
+        value = self.challenges.get(token) if self.challenges is not None else None
+        if value is None:
+            return PlainTextResponse("not found\n", status_code=404)
+        return PlainTextResponse(value)
+
+    EDITABLE = {
+        "https.tls_mode": str,
+        "https.acme_email": str,
+        "https.acme_directory": str,
+        "https.cert_dir": str,
+        "https.plain_port": int,
+        "gemini.enabled": bool,
+        "gemini.port": int,
+        "gemini.cert_years": int,
+        "limits.keep_releases": int,
+        "limits.max_connections": int,
+        "limits.rate_limit_per_minute": int,
+        "analytics.enabled": bool,
+        "analytics.ip_policy": str,
+        "analytics.retention_days": int,
+        "studio.enabled": bool,
+        "studio.hostname": str,
+        "studio.upstream": str,
+        "http.port": int,
+        "https.port": int,
+    }
+    RESTART_KEYS = {
+        "https.tls_mode",
+        "https.plain_port",
+        "gemini.enabled",
+        "gemini.port",
+        "http.port",
+        "https.port",
+        "analytics.enabled",
+    }
+
+    async def server_config(self, request: Request) -> Response:
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if not self._admin_ok(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if request.method == "GET":
+            data = self.cfg.model_dump()
+            data["admin"].pop("token_hash", None)
+            return JSONResponse(
+                {
+                    "config": data,
+                    "editable": sorted(self.EDITABLE),
+                    "restart_required": sorted(self.RESTART_KEYS),
+                }
+            )
+        body = await request.json()
+        changes = body.get("changes", {}) if isinstance(body, dict) else {}
+        restart = False
+        try:
+            from constellation.server.config import ServerConfig, save_server_config
+
+            data = self.cfg.model_dump()
+            for dotted, value in changes.items():
+                if dotted not in self.EDITABLE:
+                    return JSONResponse({"error": f"{dotted} is not editable"}, status_code=400)
+                caster = self.EDITABLE[dotted]
+                section, key = dotted.split(".")
+                data[section][key] = (
+                    (value in (True, "true", "on", "1", 1)) if caster is bool else caster(value)
+                )
+                if dotted in self.RESTART_KEYS:
+                    restart = True
+            new_cfg = ServerConfig.model_validate(data)
+        except (ValueError, TypeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        for section in ("http", "https", "gemini", "gopher", "limits", "analytics", "studio"):
+            setattr(self.cfg, section, getattr(new_cfg, section))
+        save_server_config(self.cfg.data / "server.toml", self.cfg)
+        self.reload()
+        if self.server is not None:
+            self.server.reload_gemini()
+        return JSONResponse({"ok": True, "restart_required": restart})
+
+    async def server_certs(self, request: Request) -> Response:
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if not self._admin_ok(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        from constellation.server.tls import cert_dir, expiry, fingerprint
+
+        out: list[dict[str, Any]] = []
+        table = self.store.hostname_table()
+        for platform in ("gemini", "web"):
+            hosts = set(table.get(platform, {}))
+            if platform == "web" and self.cfg.admin.hostname:
+                hosts.add(self.cfg.admin.hostname)
+            for host in sorted(hosts):
+                d = cert_dir(self.cfg.data, platform, host)
+                cert = d / ("cert.pem" if platform == "gemini" else "fullchain.pem")
+                if not cert.is_file() and platform == "web":
+                    cert = d / "cert.pem"
+                if cert.is_file():
+                    try:
+                        out.append(
+                            {
+                                "platform": platform,
+                                "hostname": host,
+                                "fingerprint": fingerprint(cert),
+                                "expires": expiry(cert).isoformat(),
+                                "kind": "acme" if cert.name == "fullchain.pem" else "self-signed",
+                            }
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        out.append({"platform": platform, "hostname": host, "error": str(e)})
+                    continue
+                out.append({"platform": platform, "hostname": host, "kind": "none"})
+        acme = (
+            self.server.acme.report()
+            if self.server is not None and getattr(self.server, "acme", None)
+            else []
+        )
+        return JSONResponse(
+            {"certificates": out, "acme": acme, "tls_mode": self.cfg.https.tls_mode}
+        )
+
+    async def regenerate_cert(self, request: Request) -> Response:
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if not self._admin_ok(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        platform, host = request.path_params["platform"], request.path_params["host"].lower()
+        if platform != "gemini":
+            return JSONResponse(
+                {
+                    "error": "only Gemini certificates are regenerated here; HTTPS ones come from ACME"
+                },
+                status_code=400,
+            )
+        from constellation.server.tls import fingerprint, regenerate
+
+        _key, cert = regenerate(self.cfg.data, "gemini", host, years=self.cfg.gemini.cert_years)
+        if self.server is not None:
+            self.server.reload_gemini()
+        return JSONResponse({"ok": True, "fingerprint": fingerprint(cert)})
 
     async def analytics_report(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:

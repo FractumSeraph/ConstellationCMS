@@ -42,8 +42,8 @@ def site_config_for_release(site: Site) -> dict[str, Any]:
         "hostnames": hostnames,
         "canonical": canonical,
         "language": cfg.site.language,
-        "redirects": [],
-        "headers": {"web": {"Strict-Transport-Security": "max-age=31536000"}},
+        "redirects": [{"from": r.from_path, "to": r.to, "status": r.status} for r in cfg.redirects],
+        "headers": {"web": {"Strict-Transport-Security": "max-age=31536000", **cfg.headers}},
         "analytics": {"forward_to_umami": cfg.analytics.forward_to_umami.model_dump()},
     }
 
@@ -114,6 +114,18 @@ class PublishClient:
         return self._check(
             self.client.get(self._url(f"/sites/{site}/analytics/{report}"), params={"days": days})
         )
+
+    def server_config(self) -> dict[str, Any]:
+        return self._check(self.client.get(self._url("/server/config")))
+
+    def update_server_config(self, changes: dict[str, Any]) -> dict[str, Any]:
+        return self._check(self.client.put(self._url("/server/config"), json={"changes": changes}))
+
+    def server_certs(self) -> dict[str, Any]:
+        return self._check(self.client.get(self._url("/server/certs")))
+
+    def regenerate_gemini_cert(self, host: str) -> dict[str, Any]:
+        return self._check(self.client.post(self._url(f"/server/certs/gemini/{host}/regenerate")))
 
     def retire(self, site: str) -> dict[str, Any]:
         return self._check(self.client.delete(self._url(f"/sites/{site}")))

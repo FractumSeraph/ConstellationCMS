@@ -83,6 +83,27 @@ def server_context(cert_path: Path, key_path: Path) -> ssl.SSLContext:
     return ctx
 
 
+def https_contexts(
+    data: Path, hostnames: list[str], *, fallback_host: str
+) -> tuple[ssl.SSLContext, dict[str, ssl.SSLContext]]:
+    """Per-host HTTPS contexts from ACME files when present, self-signed otherwise; plus a default."""
+    contexts: dict[str, ssl.SSLContext] = {}
+    for host in hostnames:
+        d = cert_dir(data, "web", host)
+        cert, key = d / "fullchain.pem", d / "privkey.pem"
+        if not (cert.is_file() and key.is_file()):
+            key, cert = ensure_self_signed(data, "web", host)
+        try:
+            contexts[host.lower()] = server_context(cert, key)
+        except ssl.SSLError:
+            continue
+    default = contexts.get(fallback_host.lower())
+    if default is None:
+        key, cert = ensure_self_signed(data, "web", fallback_host)
+        default = server_context(cert, key)
+    return default, contexts
+
+
 class SniTable:
     """hostname → SSLContext, swapped as a whole on reload; the default serves unknown names."""
 

@@ -136,6 +136,14 @@ class AnalyticsConfig(Strict):
     forward_to_umami: UmamiForward = Field(default_factory=UmamiForward)
 
 
+class Redirect(Strict):
+    from_path: str = Field(alias="from")
+    to: str
+    status: int = 301
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
 class ExportSpec(Strict):
     name: str
     platform: Platform = "web"
@@ -147,6 +155,8 @@ class SiteConfig(Strict):
     version: int = 1
     site: SiteInfo
     exports: list[ExportSpec] = Field(default_factory=list)
+    redirects: list[Redirect] = Field(default_factory=list)
+    headers: dict[str, str] = Field(default_factory=dict)
     authors: list[Author] = Field(default_factory=list)
     platforms: dict[str, PlatformConfig] = Field(default_factory=dict)
     urls: UrlPatterns = Field(default_factory=UrlPatterns)

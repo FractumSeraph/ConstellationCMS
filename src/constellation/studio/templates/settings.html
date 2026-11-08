@@ -45,6 +45,9 @@
     <label>Default description <input name="f.seo.default_description" value="{{ doc.get('seo', {}).get('default_description', '') }}"></label>
     <label>Twitter handle <input name="f.seo.twitter" value="{{ doc.get('seo', {}).get('twitter', '') }}"></label>
   </div></section>
+  <section class="card"><h2>Redirects (served by our server)</h2>
+    <label>JSON list of {from, to, status} <textarea name="f.redirects" rows="4">{{ doc.get('redirects', []) | tojson_attr }}</textarea></label>
+  </section>
   {% set ch = doc.get('custom_html', {}) %}
   <section class="card"><h2>Custom HTML (web only)</h2>
     <p class="muted">Tracking snippets and anything else that belongs in the page. Injected verbatim.</p>
