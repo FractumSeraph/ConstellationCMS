@@ -74,7 +74,9 @@ def _expand_wikilinks(source: str) -> str:
         if stripped.startswith(("```", "~~~")):
             in_fence = not in_fence
         if not in_fence:
-            line = WIKILINK.sub(lambda m: f"[{m.group(2) or m.group(1)}](post:{m.group(1).strip()})", line)
+            line = WIKILINK.sub(
+                lambda m: f"[{m.group(2) or m.group(1)}](post:{m.group(1).strip()})", line
+            )
         out.append(line)
     return "\n".join(out)
 
@@ -112,9 +114,13 @@ class _Builder:
         if t == "dl":
             return [self.deflist(node)]
         if t.startswith("container_"):
-            platform = t[len("container_only-"):]
-            raw = "\n".join(self.lines[line[0]: line[1]]) if line[1] > line[0] else ""
-            return [Block("container", line, info=platform, text=raw, children=self.blocks(node.children))]
+            platform = t[len("container_only-") :]
+            raw = "\n".join(self.lines[line[0] : line[1]]) if line[1] > line[0] else ""
+            return [
+                Block(
+                    "container", line, info=platform, text=raw, children=self.blocks(node.children)
+                )
+            ]
         if t == "footnote_anchor":
             return []
         # Unknown node: keep its text so nothing silently disappears.
@@ -137,7 +143,7 @@ class _Builder:
                 m = TASK_RX.match(first.text)
                 if m:
                     item.task = "done" if m.group(1).lower() == "x" else "todo"
-                    first.text = first.text[m.end():]
+                    first.text = first.text[m.end() :]
         return item
 
     def table(self, node: SyntaxTreeNode) -> Block:
@@ -158,9 +164,13 @@ class _Builder:
         children: list[Block] = []
         for child in node.children:
             if child.type == "dt":
-                children.append(Block("def_term", _line(child), inlines=self.inlines(child.children)))
+                children.append(
+                    Block("def_term", _line(child), inlines=self.inlines(child.children))
+                )
             elif child.type == "dd":
-                children.append(Block("def_desc", _line(child), children=self.blocks(child.children)))
+                children.append(
+                    Block("def_desc", _line(child), children=self.blocks(child.children))
+                )
         return Block("deflist", _line(node), children=children)
 
     def footnotes(self, node: SyntaxTreeNode, doc: Document) -> None:
@@ -168,7 +178,9 @@ class _Builder:
             if fn.type != "footnote":
                 continue
             fid = int(fn.meta.get("id", 0)) + 1
-            doc.footnotes[str(fid)] = self.blocks([c for c in fn.children if c.type != "footnote_anchor"])
+            doc.footnotes[str(fid)] = self.blocks(
+                [c for c in fn.children if c.type != "footnote_anchor"]
+            )
 
     # ---- inlines ------------------------------------------------------------------------
     def inlines_of(self, node: SyntaxTreeNode) -> list[Inline]:
@@ -202,8 +214,14 @@ class _Builder:
                 ref = self.resolve(str(n.attrs.get("href", "")), False)
                 self.refs.append(ref)
                 title = n.attrs.get("title")
-                out.append(Inline("link", ref=ref, title=str(title) if title else None,
-                                  children=self.inlines(n.children)))
+                out.append(
+                    Inline(
+                        "link",
+                        ref=ref,
+                        title=str(title) if title else None,
+                        children=self.inlines(n.children),
+                    )
+                )
             elif t == "image":
                 ref = self.resolve(str(n.attrs.get("src", "")), True)
                 self.refs.append(ref)

@@ -15,21 +15,21 @@ Every request on every listener produces one event:
 ```python
 @dataclass
 class Event:
-    ts: datetime                 # UTC
+    ts: datetime  # UTC
     site: str
-    platform: str                # web | gemini | gopher
-    path: str                    # normalized request path or selector
-    status: int                  # HTTP status; Gemini status; Gopher synthesized (20 ok / 51 missing)
+    platform: str  # web | gemini | gopher
+    path: str  # normalized request path or selector
+    status: int  # HTTP status; Gemini status; Gopher synthesized (20 ok / 51 missing)
     bytes: int
     duration_ms: int
-    ip: str | None               # stored according to the IP policy (raw, by the owner's choice)
-    visitor: str                 # hash of (ip, user_agent or "", site) for unique counts
-    ip_class: str                # v4 | v6; plus "tor" / "known-bot" flags when determinable
-    referrer: str | None         # web only
-    user_agent: str | None       # web only
-    is_bot: bool                 # UA list for web; Gemini/Gopher: heuristic (rate, robots.txt fetch)
+    ip: str | None  # stored according to the IP policy (raw, by the owner's choice)
+    visitor: str  # hash of (ip, user_agent or "", site) for unique counts
+    ip_class: str  # v4 | v6; plus "tor" / "known-bot" flags when determinable
+    referrer: str | None  # web only
+    user_agent: str | None  # web only
+    is_bot: bool  # UA list for web; Gemini/Gopher: heuristic (rate, robots.txt fetch)
     tls_version: str | None
-    content_kind: str            # post | page | tag | category | series | archive | feed | media | other
+    content_kind: str  # post | page | tag | category | series | archive | feed | media | other
     content_slug: str | None
 ```
 

@@ -24,7 +24,9 @@ def parse(src: str) -> Document:
 
 def gem(src: str, cfg: RenderGemini | None = None) -> RenderResult:
     doc = parse(src)
-    return GemtextRenderer(cfg or RenderGemini(), lambda r: url_for(r, "gemini", CFG, item_slug="post")).render(doc)
+    return GemtextRenderer(
+        cfg or RenderGemini(), lambda r: url_for(r, "gemini", CFG, item_slug="post")
+    ).render(doc)
 
 
 def html(src: str) -> RenderResult:

@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-RefKind = Literal["post", "page", "tag", "category", "series", "media", "external", "fragment", "home"]
+RefKind = Literal[
+    "post", "page", "tag", "category", "series", "media", "external", "fragment", "home"
+]
 Severity = Literal["info", "warn", "error"]
 
 
@@ -31,8 +33,17 @@ class Inline:
     """A run of inline content inside a block."""
 
     kind: Literal[
-        "text", "emphasis", "strong", "code", "strike", "link", "image",
-        "footnote_ref", "hard_break", "soft_break", "html",
+        "text",
+        "emphasis",
+        "strong",
+        "code",
+        "strike",
+        "link",
+        "image",
+        "footnote_ref",
+        "hard_break",
+        "soft_break",
+        "html",
     ]
     text: str = ""
     ref: Ref | None = None
@@ -45,8 +56,19 @@ class Block:
     """A block-level element. ``line`` is the 1-based inclusive source line range."""
 
     kind: Literal[
-        "paragraph", "heading", "list", "list_item", "quote", "code", "table", "hr",
-        "html", "container", "deflist", "def_term", "def_desc",
+        "paragraph",
+        "heading",
+        "list",
+        "list_item",
+        "quote",
+        "code",
+        "table",
+        "hr",
+        "html",
+        "container",
+        "deflist",
+        "def_term",
+        "def_desc",
     ]
     line: tuple[int, int] = (0, 0)
     level: int = 0

@@ -37,32 +37,58 @@ and summarized at the end of this document.
 class Document:
     blocks: list[Block]
     footnotes: dict[str, list[Block]]
-    refs: list[Ref]                     # every link/image target, for route resolution and link checking
+    refs: list[Ref]  # every link/image target, for route resolution and link checking
+
 
 @dataclass
 class Block:
-    kind: Literal["paragraph","heading","list","list_item","quote","code","table","hr",
-                  "image","html","container","footnote_def"]
-    level: int | None                   # heading level, list nesting depth
+    kind: Literal[
+        "paragraph",
+        "heading",
+        "list",
+        "list_item",
+        "quote",
+        "code",
+        "table",
+        "hr",
+        "image",
+        "html",
+        "container",
+        "footnote_def",
+    ]
+    level: int | None  # heading level, list nesting depth
     ordered: bool | None
     start: int | None
-    info: str | None                    # code fence info string, container name
+    info: str | None  # code fence info string, container name
     inlines: list[Inline]
     children: list[Block]
-    rows: list[list[list[Inline]]] | None   # tables
-    line: tuple[int, int]               # source line range, from markdown-it-py token.map
+    rows: list[list[list[Inline]]] | None  # tables
+    line: tuple[int, int]  # source line range, from markdown-it-py token.map
+
 
 @dataclass
 class Inline:
-    kind: Literal["text","emphasis","strong","code","strike","link","image","footnote_ref","hard_break","html"]
+    kind: Literal[
+        "text",
+        "emphasis",
+        "strong",
+        "code",
+        "strike",
+        "link",
+        "image",
+        "footnote_ref",
+        "hard_break",
+        "html",
+    ]
     text: str
-    ref: Ref | None                     # link/image target
+    ref: Ref | None  # link/image target
     children: list[Inline]
+
 
 @dataclass
 class Ref:
-    kind: Literal["post","page","tag","category","series","media","external","fragment"]
-    target: str                         # slug, filename, or URL
+    kind: Literal["post", "page", "tag", "category", "series", "media", "external", "fragment"]
+    target: str  # slug, filename, or URL
     fragment: str | None
 ```
 
@@ -76,12 +102,12 @@ fail on links to drafts, future posts, or missing media.
 ```python
 @dataclass
 class Warning:
-    code: str                           # stable id, e.g. HEADING-TOO-DEEP
-    severity: Literal["info","warn","error"]
+    code: str  # stable id, e.g. HEADING-TOO-DEEP
+    severity: Literal["info", "warn", "error"]
     platform: str
     line: int
     message: str
-    alternatives: list[Alternative]     # each has a label and a Markdown edit the editor can apply
+    alternatives: list[Alternative]  # each has a label and a Markdown edit the editor can apply
 ```
 
 - `info`: counted in the preview's summary ("3 inline styles will be plain on Gemini").

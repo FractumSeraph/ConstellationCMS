@@ -128,8 +128,13 @@ def _load_post(source: Path, bundle: Path | None, name: str, tz: ZoneInfo) -> Po
                 _check_media_name(f)
                 media.append(f)
     return Post(
-        slug=slug, source=source, bundle=bundle, body=doc.content, media=media,
-        date=_localize(date, tz), updated=_localize(meta.updated, tz) if meta.updated else None,
+        slug=slug,
+        source=source,
+        bundle=bundle,
+        body=doc.content,
+        media=media,
+        date=_localize(date, tz),
+        updated=_localize(meta.updated, tz) if meta.updated else None,
         post_meta=meta,
     )
 
@@ -162,12 +167,18 @@ def _load_pages(folder: Path, tz: ZoneInfo, problems: list[str]) -> list[Page]:
                     if f.is_file() and f.name != "index.md" and not f.name.startswith("."):
                         _check_media_name(f)
                         media.append(f)
-            pages.append(Page(
-                slug=slug, source=source, bundle=bundle, body=doc.content, media=media,
-                date=_localize(meta.date, tz) if meta.date else EPOCH,
-                updated=_localize(meta.updated, tz) if meta.updated else None,
-                page_meta=meta,
-            ))
+            pages.append(
+                Page(
+                    slug=slug,
+                    source=source,
+                    bundle=bundle,
+                    body=doc.content,
+                    media=media,
+                    date=_localize(meta.date, tz) if meta.date else EPOCH,
+                    updated=_localize(meta.updated, tz) if meta.updated else None,
+                    page_meta=meta,
+                )
+            )
         except ValidationError as e:
             problems.append(f"{source}: {_fmt_validation(e)}")
         except ContentError as e:
@@ -176,7 +187,9 @@ def _load_pages(folder: Path, tz: ZoneInfo, problems: list[str]) -> list[Page]:
     return pages
 
 
-def _collect_terms(kind: str, posts: list[Post], folder: Path, problems: list[str]) -> dict[str, Term]:
+def _collect_terms(
+    kind: str, posts: list[Post], folder: Path, problems: list[str]
+) -> dict[str, Term]:
     terms: dict[str, Term] = {}
     for post in posts:
         if kind == "tag":
@@ -209,11 +222,23 @@ def _collect_terms(kind: str, posts: list[Post], folder: Path, problems: list[st
                 term = Term(kind=kind, slug=slug, meta=meta)  # type: ignore[arg-type]
                 terms[slug] = term
             else:
-                term.meta = meta if meta.title else TermMeta(title=term.meta.title, description=meta.description, image=meta.image)
+                term.meta = (
+                    meta
+                    if meta.title
+                    else TermMeta(
+                        title=term.meta.title, description=meta.description, image=meta.image
+                    )
+                )
             term.body = doc.content
     if kind == "series":
         for term in terms.values():
-            term.posts.sort(key=lambda p: (p.meta.series_part if p.meta.series_part is not None else 10**9, p.date, p.slug))
+            term.posts.sort(
+                key=lambda p: (
+                    p.meta.series_part if p.meta.series_part is not None else 10**9,
+                    p.date,
+                    p.slug,
+                )
+            )
     return dict(sorted(terms.items()))
 
 
@@ -225,7 +250,9 @@ def _localize(d: datetime, tz: ZoneInfo) -> datetime:
 
 def _check_slug(source: Path, slug: str) -> None:
     if not SLUG_RX.match(slug):
-        raise ContentError([f"{source}: slug {slug!r} must be lowercase ASCII letters, digits and hyphens"])
+        raise ContentError(
+            [f"{source}: slug {slug!r} must be lowercase ASCII letters, digits and hyphens"]
+        )
 
 
 def _check_media_name(path: Path) -> None:

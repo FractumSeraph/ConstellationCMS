@@ -67,7 +67,7 @@ class _State:
         self.warn = WarningSink("gemini")
         self.end_links: list[_Link] = []
         self.seen_urls: set[str] = set()
-        self.deferred: list[Block] = []   # code blocks lifted out of lists/quotes
+        self.deferred: list[Block] = []  # code blocks lifted out of lists/quotes
         self.marker_count = 0
 
     # ---- output helpers -------------------------------------------------------------------
@@ -82,12 +82,18 @@ class _State:
         """Emit one text line, defusing reserved prefixes and control characters."""
         if CTRL_RX.search(text):
             text = CTRL_RX.sub("", text)
-            self.warn.add("CTRL-CHAR", "warn", line_no, "Control characters were removed from this line.")
+            self.warn.add(
+                "CTRL-CHAR", "warn", line_no, "Control characters were removed from this line."
+            )
         text = text.rstrip()
         if not prefix and text.startswith(RESERVED_PREFIXES):
             text = " " + text
-            self.warn.add("PREFIX-ESCAPED", "info", line_no,
-                          f"Line started with {text.strip()[:2]!r}; a space was added so it is not read as markup.")
+            self.warn.add(
+                "PREFIX-ESCAPED",
+                "info",
+                line_no,
+                f"Line started with {text.strip()[:2]!r}; a space was added so it is not read as markup.",
+            )
         self.emit(prefix + text if text else prefix.rstrip())
 
     def output(self) -> str:
@@ -101,7 +107,9 @@ class _State:
         return "\n".join(out) + "\n" if out else ""
 
     # ---- inline conversion ----------------------------------------------------------------
-    def inline(self, inlines: list[Inline], links: list[_Link], line_no: int, *, context: str = "") -> str:
+    def inline(
+        self, inlines: list[Inline], links: list[_Link], line_no: int, *, context: str = ""
+    ) -> str:
         parts: list[str] = []
         keep = self.cfg.inline_markup == "markdown"
         for node in inlines:
@@ -126,35 +134,60 @@ class _State:
             elif k == "strike":
                 inner = self.inline(node.children, links, line_no, context=context)
                 parts.append(inner)
-                self.warn.add("STRIKE-LOST", "warn", line_no,
-                              "Struck-out text will read as normal text on Gemini.",
-                              [Alternative("Write it as [struck: text]"), Alternative("Reword it")])
+                self.warn.add(
+                    "STRIKE-LOST",
+                    "warn",
+                    line_no,
+                    "Struck-out text will read as normal text on Gemini.",
+                    [Alternative("Write it as [struck: text]"), Alternative("Reword it")],
+                )
             elif k == "link":
                 text = self.inline(node.children, links, line_no, context=context)
                 assert node.ref is not None
                 url = self.url_for(node.ref)
                 if node.ref.kind == "fragment":
-                    self.warn.add("LINK-FRAGMENT-SAME-PAGE", "info", line_no,
-                                  "Same-page anchor links are not available on Gemini; the text is kept.")
+                    self.warn.add(
+                        "LINK-FRAGMENT-SAME-PAGE",
+                        "info",
+                        line_no,
+                        "Same-page anchor links are not available on Gemini; the text is kept.",
+                    )
                     parts.append(text)
                     continue
                 label = collapse_ws(text) or display_url(url)
                 if is_generic_link_text(text, url):
                     if text.strip() and not text.strip().startswith(("http", "gemini", "www.")):
-                        self.warn.add("LINK-GENERIC-TEXT", "warn", line_no,
-                                      f"Link text {text.strip()!r} will be the only label on Gemini. Use descriptive link text.")
+                        self.warn.add(
+                            "LINK-GENERIC-TEXT",
+                            "warn",
+                            line_no,
+                            f"Link text {text.strip()!r} will be the only label on Gemini. Use descriptive link text.",
+                        )
                         ctx = _sentence_with(collapse_ws(context), text.strip())
                         if ctx:
-                            label = f"{label}: {ctx[:60].rstrip()}…" if len(ctx) > 60 else f"{label}: {ctx}"
+                            label = (
+                                f"{label}: {ctx[:60].rstrip()}…"
+                                if len(ctx) > 60
+                                else f"{label}: {ctx}"
+                            )
                     else:
                         label = display_url(url)
                 if node.title:
                     label = f"{label} — {node.title}"
-                    self.warn.add("LINK-TITLE-LOST", "info", line_no, "Link titles have no slot on Gemini; the title was appended to the label.")
+                    self.warn.add(
+                        "LINK-TITLE-LOST",
+                        "info",
+                        line_no,
+                        "Link titles have no slot on Gemini; the title was appended to the label.",
+                    )
                 marker = ""
                 if self.cfg.link_markers != "none":
                     self.marker_count += 1
-                    marker = f"[{self.marker_count}]" if self.cfg.link_markers == "numbers" else f"[{chr(96 + self.marker_count)}]"
+                    marker = (
+                        f"[{self.marker_count}]"
+                        if self.cfg.link_markers == "numbers"
+                        else f"[{chr(96 + self.marker_count)}]"
+                    )
                     text = text + marker
                     label = f"{marker} {label}"
                 parts.append(text)
@@ -165,8 +198,13 @@ class _State:
                 alt = node.text.strip()
                 parts.append(f"[image: {alt}]" if alt else "[image]")
                 links.insert(0, _Link(url, alt or "image"))
-                self.warn.add("IMG-INLINE", "info", line_no, "Inline image moved below the paragraph.",
-                              [Alternative("Move the image to its own paragraph")])
+                self.warn.add(
+                    "IMG-INLINE",
+                    "info",
+                    line_no,
+                    "Inline image moved below the paragraph.",
+                    [Alternative("Move the image to its own paragraph")],
+                )
                 if not alt:
                     self._no_alt(line_no)
             elif k == "footnote_ref":
@@ -177,16 +215,30 @@ class _State:
 
     def _style_note(self, line_no: int) -> None:
         if self.cfg.inline_markup == "markdown":
-            self.warn.add("INLINE-STYLE-KEPT", "info", line_no,
-                          "Bold, italic and code markers are kept as plain * ** ` characters on Gemini.", once=True)
+            self.warn.add(
+                "INLINE-STYLE-KEPT",
+                "info",
+                line_no,
+                "Bold, italic and code markers are kept as plain * ** ` characters on Gemini.",
+                once=True,
+            )
         else:
-            self.warn.add("INLINE-STYLE-LOST", "info", line_no,
-                          "Bold, italic and code spans appear as plain text on Gemini.", once=True)
+            self.warn.add(
+                "INLINE-STYLE-LOST",
+                "info",
+                line_no,
+                "Bold, italic and code spans appear as plain text on Gemini.",
+                once=True,
+            )
 
     def _no_alt(self, line_no: int) -> None:
-        self.warn.add("IMG-NO-ALT", "warn", line_no,
-                      "Image has no alt text. Gemini and Gopher readers will see an empty description.",
-                      [Alternative("Add alt text")])
+        self.warn.add(
+            "IMG-NO-ALT",
+            "warn",
+            line_no,
+            "Image has no alt text. Gemini and Gopher readers will see an empty description.",
+            [Alternative("Add alt text")],
+        )
 
     def _inline_html(self, raw: str, links: list[_Link], line_no: int) -> str:
         m = re.match(r"<a\s[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", raw, re.I | re.S)
@@ -198,7 +250,13 @@ class _State:
             return "^"
         text = strip_tags(raw)
         if raw.strip() and text != raw:
-            self.warn.add("INLINE-HTML-STRIPPED", "info", line_no, "Inline HTML tags were removed; the text is kept.", once=True)
+            self.warn.add(
+                "INLINE-HTML-STRIPPED",
+                "info",
+                line_no,
+                "Inline HTML tags were removed; the text is kept.",
+                once=True,
+            )
         return text
 
     def _add_link(self, links: list[_Link], link: _Link) -> None:
@@ -296,7 +354,12 @@ class _State:
         if not alt:
             self._no_alt(line_no)
         if img.ref.kind == "external":
-            self.warn.add("IMG-EXTERNAL", "info", line_no, "Image is hosted elsewhere; the link line points there.")
+            self.warn.add(
+                "IMG-EXTERNAL",
+                "info",
+                line_no,
+                "Image is hosted elsewhere; the link line points there.",
+            )
         self.text_line(self.cfg.image_notice.format(alt=alt), line_no)
         if self.cfg.image_link:
             self.emit(f"=> {_encode_url(url)} {alt or 'image'}")
@@ -310,9 +373,13 @@ class _State:
         text = collapse_ws(self.inline(b.inlines, links, line_no).replace("\n", " "))
         level = b.level
         if level == 1:
-            self.warn.add("H1-IN-BODY", "warn", line_no,
-                          "Body contains a level-1 heading; the post title is already the H1. It will be shown as a level-2 heading.",
-                          [Alternative("Change # to ##")])
+            self.warn.add(
+                "H1-IN-BODY",
+                "warn",
+                line_no,
+                "Body contains a level-1 heading; the post title is already the H1. It will be shown as a level-2 heading.",
+                [Alternative("Change # to ##")],
+            )
             level = 2
         self.blank()
         if prefix:
@@ -320,9 +387,17 @@ class _State:
         elif level <= 3:
             self.emit(f"{'#' * level} {text}")
         else:
-            self.warn.add("HEADING-TOO-DEEP", "warn", line_no,
-                          f"Level-{b.level} headings do not exist on Gemini; this one will be shown as a plain text line.",
-                          [Alternative("Promote to ###"), Alternative("Show in UPPER CASE"), Alternative("Show as — text —")])
+            self.warn.add(
+                "HEADING-TOO-DEEP",
+                "warn",
+                line_no,
+                f"Level-{b.level} headings do not exist on Gemini; this one will be shown as a plain text line.",
+                [
+                    Alternative("Promote to ###"),
+                    Alternative("Show in UPPER CASE"),
+                    Alternative("Show as — text —"),
+                ],
+            )
             if self.cfg.heading_overflow == "promote":
                 self.emit(f"### {text}")
             elif self.cfg.heading_overflow == "upper":
@@ -341,13 +416,20 @@ class _State:
                 para = item.children[0]
                 link = next(i for i in para.inlines if i.kind == "link")
                 assert link.ref is not None
-                label = collapse_ws(inline_text(link.children)) or display_url(self.url_for(link.ref))
+                label = collapse_ws(inline_text(link.children)) or display_url(
+                    self.url_for(link.ref)
+                )
                 self.emit(f"{prefix}=> {_encode_url(self.url_for(link.ref))} {label}")
             self.blank()
             return
         if b.ordered:
-            self.warn.add("LIST-ORDERED", "info", line_no, "Numbered lists are shown as numbered text lines (not bullets).",
-                          [Alternative("Use bullets with numbers inside: * 1. item")])
+            self.warn.add(
+                "LIST-ORDERED",
+                "info",
+                line_no,
+                "Numbered lists are shown as numbered text lines (not bullets).",
+                [Alternative("Use bullets with numbers inside: * 1. item")],
+            )
         self._list_items(b, prefix, links, depth=0)
         self.flush_links(links)
         self.blank()
@@ -356,7 +438,9 @@ class _State:
         for item in b.children:
             if len(item.children) != 1 or item.children[0].kind != "paragraph" or item.task:
                 return False
-            inl = [i for i in item.children[0].inlines if not (i.kind == "text" and not i.text.strip())]
+            inl = [
+                i for i in item.children[0].inlines if not (i.kind == "text" and not i.text.strip())
+            ]
             if len(inl) != 1 or inl[0].kind != "link":
                 return False
         return bool(b.children)
@@ -368,7 +452,9 @@ class _State:
             first = True
             for child in item.children:
                 if child.kind == "paragraph":
-                    text = self.inline(child.inlines, item_links, child.line[0], context=inline_text(child.inlines))
+                    text = self.inline(
+                        child.inlines, item_links, child.line[0], context=inline_text(child.inlines)
+                    )
                     parts = [collapse_ws(p) for p in text.split("\n")]
                     parts = [p for p in parts if p] or [""]
                     for i, part in enumerate(parts):
@@ -376,30 +462,54 @@ class _State:
                             self._bullet(part, b, number, item, depth, prefix, child.line[0])
                         else:
                             if i > 0 and first:
-                                self.warn.add("LIST-ITEM-BREAK", "info", child.line[0], "Line break inside a list item becomes an indented text line.")
+                                self.warn.add(
+                                    "LIST-ITEM-BREAK",
+                                    "info",
+                                    child.line[0],
+                                    "Line break inside a list item becomes an indented text line.",
+                                )
                             self.text_line(part, child.line[0], prefix=prefix + "  " * (depth + 1))
                     if not first:
-                        self.warn.add("LIST-ITEM-BLOCK", "warn", child.line[0],
-                                      "List item contains several paragraphs; only the first stays on the bullet.",
-                                      [Alternative("Split into separate lists")])
+                        self.warn.add(
+                            "LIST-ITEM-BLOCK",
+                            "warn",
+                            child.line[0],
+                            "List item contains several paragraphs; only the first stays on the bullet.",
+                            [Alternative("Split into separate lists")],
+                        )
                     first = False
                 elif child.kind == "list":
                     if first:
                         self._bullet("", b, number, item, depth, prefix, child.line[0])
                         first = False
-                    self.warn.add("LIST-NESTED", "warn", child.line[0],
-                                  "Nested lists are not supported on Gemini; sub-items will be shown as indented plain text.",
-                                  [Alternative("Flatten with a → prefix"), Alternative("Write as a sentence")])
+                    self.warn.add(
+                        "LIST-NESTED",
+                        "warn",
+                        child.line[0],
+                        "Nested lists are not supported on Gemini; sub-items will be shown as indented plain text.",
+                        [
+                            Alternative("Flatten with a → prefix"),
+                            Alternative("Write as a sentence"),
+                        ],
+                    )
                     if self.cfg.nested_lists == "sentence":
-                        texts = [collapse_ws(self.inline(gc.inlines, item_links, gc.line[0]))
-                                 for sub in child.children for gc in sub.children if gc.kind == "paragraph"]
+                        texts = [
+                            collapse_ws(self.inline(gc.inlines, item_links, gc.line[0]))
+                            for sub in child.children
+                            for gc in sub.children
+                            if gc.kind == "paragraph"
+                        ]
                         if self.lines:
                             self.lines[-1] = self.lines[-1].rstrip() + ": " + "; ".join(texts)
                     else:
                         self._list_items(child, prefix, item_links, depth=depth + 1)
                 elif child.kind == "code":
-                    self.warn.add("LIST-ITEM-BLOCK", "warn", child.line[0],
-                                  "Code block inside a list item is moved after the list.")
+                    self.warn.add(
+                        "LIST-ITEM-BLOCK",
+                        "warn",
+                        child.line[0],
+                        "Code block inside a list item is moved after the list.",
+                    )
                     self.deferred.append(child)
                 else:
                     sub_text = collapse_ws(inline_text(child.inlines)) if child.inlines else ""
@@ -409,7 +519,9 @@ class _State:
                 self.flush_links(item_links)
             number += 1
 
-    def _bullet(self, text: str, lst: Block, number: int, item: Block, depth: int, prefix: str, line_no: int) -> None:
+    def _bullet(
+        self, text: str, lst: Block, number: int, item: Block, depth: int, prefix: str, line_no: int
+    ) -> None:
         task = ""
         if item.task:
             task = "[x] " if item.task == "done" else "[ ] "
@@ -418,7 +530,11 @@ class _State:
             if self.cfg.nested_lists == "flatten":
                 self.emit(f"{prefix}* → {task}{text}".rstrip())
             else:
-                self.text_line(f"* {task}{text}" if not lst.ordered else f"{number}. {task}{text}", line_no, prefix=prefix + indent)
+                self.text_line(
+                    f"* {task}{text}" if not lst.ordered else f"{number}. {task}{text}",
+                    line_no,
+                    prefix=prefix + indent,
+                )
             return
         if lst.ordered:
             if self.cfg.ordered_lists == "bullet-numbered":
@@ -431,8 +547,13 @@ class _State:
     def quote(self, b: Block, prefix: str) -> None:
         line_no = b.line[0]
         if prefix.startswith(">"):
-            self.warn.add("QUOTE-NESTED", "warn", line_no, "Nested quotes are flattened on Gemini.",
-                          [Alternative("Keep a literal >> marker")])
+            self.warn.add(
+                "QUOTE-NESTED",
+                "warn",
+                line_no,
+                "Nested quotes are flattened on Gemini.",
+                [Alternative("Keep a literal >> marker")],
+            )
             self.blocks(b.children, prefix=prefix)
             return
         links: list[_Link] = []
@@ -445,22 +566,38 @@ class _State:
             if child.kind == "paragraph":
                 if not first:
                     self.emit(">")
-                text = self.inline(child.inlines, links, child.line[0], context=inline_text(child.inlines))
+                text = self.inline(
+                    child.inlines, links, child.line[0], context=inline_text(child.inlines)
+                )
                 for part in text.split("\n"):
                     part = collapse_ws(part)
                     self.emit(f"> {part}" if part else ">")
             elif child.kind == "code":
-                self.warn.add("QUOTE-CODE", "warn", child.line[0], "Code block inside a quote interrupts the quote on Gemini.")
+                self.warn.add(
+                    "QUOTE-CODE",
+                    "warn",
+                    child.line[0],
+                    "Code block inside a quote interrupts the quote on Gemini.",
+                )
                 self.blank()
                 self.code(child, "")
             elif child.kind == "quote":
-                self.warn.add("QUOTE-NESTED", "warn", child.line[0], "Nested quotes are flattened on Gemini.",
-                              [Alternative("Keep a literal >> marker")])
+                self.warn.add(
+                    "QUOTE-NESTED",
+                    "warn",
+                    child.line[0],
+                    "Nested quotes are flattened on Gemini.",
+                    [Alternative("Keep a literal >> marker")],
+                )
                 first = self._quote_body(child.children, links, first=first)
                 continue
             elif child.kind in ("list", "heading"):
-                self.warn.add("QUOTE-BLOCK-CONTENT", "info", child.line[0],
-                              "Lists and headings inside a quote are shown as quoted text.")
+                self.warn.add(
+                    "QUOTE-BLOCK-CONTENT",
+                    "info",
+                    child.line[0],
+                    "Lists and headings inside a quote are shown as quoted text.",
+                )
                 if child.kind == "heading":
                     self.emit("> " + collapse_ws(self.inline(child.inlines, links, child.line[0])))
                 else:
@@ -475,17 +612,25 @@ class _State:
         info = b.info.split()[0] if b.info else ""
         if not info:
             if b.info == "" and not b.text.strip().startswith(("+", "|", "/", "\\")):
-                self.warn.add("PRE-NO-ALT", "info", line_no,
-                              "Preformatted block has no alt text; screen-reader users hear nothing useful.",
-                              [Alternative("Add an info string after the opening fence")])
+                self.warn.add(
+                    "PRE-NO-ALT",
+                    "info",
+                    line_no,
+                    "Preformatted block has no alt text; screen-reader users hear nothing useful.",
+                    [Alternative("Add an info string after the opening fence")],
+                )
             info = "code" if b.info == "" else ""
         self.blank()
         self.emit(f"```{info}".rstrip())
         for raw in b.text.rstrip("\n").split("\n"):
             raw = raw.rstrip()
             if raw.startswith("```"):
-                self.warn.add("PRE-FENCE-INSIDE", "error", line_no,
-                              "A line inside this code block starts with ``` which cannot be represented in gemtext; it was indented by one space.")
+                self.warn.add(
+                    "PRE-FENCE-INSIDE",
+                    "error",
+                    line_no,
+                    "A line inside this code block starts with ``` which cannot be represented in gemtext; it was indented by one space.",
+                )
                 raw = " " + raw
             self.emit(raw)
         self.emit("```")
@@ -523,12 +668,21 @@ class _State:
         if mode == "auto":
             mode = "records" if (long_cells or total > self.cfg.wide_table_cols) else "pre"
         if mode == "pre":
-            self.warn.add("TABLE-PRE", "info", line_no, "Table is shown as preformatted text; it will not wrap on narrow screens.",
-                          [Alternative("Render as a record list")])
+            self.warn.add(
+                "TABLE-PRE",
+                "info",
+                line_no,
+                "Table is shown as preformatted text; it will not wrap on narrow screens.",
+                [Alternative("Render as a record list")],
+            )
             if long_cells or total > self.cfg.wide_table_cols:
-                self.warn.add("TABLE-LONG-CELLS", "warn", line_no,
-                              "This table has long cells and will be very wide on Gemini. Consider the record-list rendering.",
-                              [Alternative("Render as a record list")])
+                self.warn.add(
+                    "TABLE-LONG-CELLS",
+                    "warn",
+                    line_no,
+                    "This table has long cells and will be very wide on Gemini. Consider the record-list rendering.",
+                    [Alternative("Render as a record list")],
+                )
             self.blank()
             self.emit("```table: " + ", ".join(h for h in header if h))
             self.emit("  ".join(h.ljust(widths[i]) for i, h in enumerate(header)).rstrip())
@@ -538,8 +692,13 @@ class _State:
             self.emit("```")
             self.blank()
         else:
-            self.warn.add("TABLE-RECORDS", "info", line_no, "Table is shown as a record list on Gemini (one entry per row).",
-                          [Alternative("Render as preformatted text")])
+            self.warn.add(
+                "TABLE-RECORDS",
+                "info",
+                line_no,
+                "Table is shown as a record list on Gemini (one entry per row).",
+                [Alternative("Render as preformatted text")],
+            )
             for r in body:
                 if ncols == 2:
                     self.emit(f"* {r[0]} — {r[1]}".rstrip(" —"))
@@ -557,7 +716,9 @@ class _State:
 
     def deflist(self, b: Block) -> None:
         line_no = b.line[0]
-        self.warn.add("DEFLIST", "info", line_no, "Definition lists are shown as bullets: Term — definition.")
+        self.warn.add(
+            "DEFLIST", "info", line_no, "Definition lists are shown as bullets: Term — definition."
+        )
         links: list[_Link] = []
         term = ""
         for child in b.children:
@@ -566,7 +727,9 @@ class _State:
             elif child.kind == "def_desc":
                 paras = [c for c in child.children if c.kind == "paragraph"]
                 if len(paras) == 1 and len(child.children) == 1:
-                    desc = collapse_ws(self.inline(paras[0].inlines, links, paras[0].line[0]).replace("\n", " "))
+                    desc = collapse_ws(
+                        self.inline(paras[0].inlines, links, paras[0].line[0]).replace("\n", " ")
+                    )
                     self.emit(f"* {term} — {desc}")
                 else:
                     self.text_line(term, child.line[0])
@@ -582,23 +745,39 @@ class _State:
         info = _HtmlInfo(raw)
         links: list[_Link] = []
         if info.embed_tag in ("script", "style") and not info.text_lines():
-            self.warn.add("HTML-STRIPPED", "info", line_no, f"<{info.embed_tag}> block has no place on Gemini and was dropped.")
+            self.warn.add(
+                "HTML-STRIPPED",
+                "info",
+                line_no,
+                f"<{info.embed_tag}> block has no place on Gemini and was dropped.",
+            )
             return
         if info.embed_tag:
-            self.warn.add("HTML-EMBED", "warn", line_no,
-                          f"Embedded <{info.embed_tag}> is not available on Gemini; a notice and link were inserted.",
-                          [Alternative("Write a Gemini alternative in a :::only-gemini block")])
+            self.warn.add(
+                "HTML-EMBED",
+                "warn",
+                line_no,
+                f"Embedded <{info.embed_tag}> is not available on Gemini; a notice and link were inserted.",
+                [Alternative("Write a Gemini alternative in a :::only-gemini block")],
+            )
             self.text_line(self.cfg.embed_notice, line_no)
             if info.embed_src:
                 self.emit(f"=> {_encode_url(info.embed_src)} {display_url(info.embed_src)}")
             self.blank()
             return
         if info.img_src is not None:
-            fake = Inline("image", info.img_alt, ref=self._external_or_media(info.img_src), title=info.caption or None)
+            fake = Inline(
+                "image",
+                info.img_alt,
+                ref=self._external_or_media(info.img_src),
+                title=info.caption or None,
+            )
             self.image_block(fake, line_no)
             return
         if info.details_summary is not None:
-            self.warn.add("HTML-DETAILS", "info", line_no, "Collapsible section is always expanded on Gemini.")
+            self.warn.add(
+                "HTML-DETAILS", "info", line_no, "Collapsible section is always expanded on Gemini."
+            )
             self.text_line(info.details_summary, line_no)
         else:
             self.warn.add("HTML-STRIPPED", "info", line_no, "HTML block converted to plain text.")
@@ -615,7 +794,9 @@ class _State:
         return RefResolver().resolve(src, is_image=True)
 
     def footnotes(self) -> None:
-        self.warn.add("FOOTNOTE-END", "info", 0, "Footnotes are gathered under a Notes heading at the end.")
+        self.warn.add(
+            "FOOTNOTE-END", "info", 0, "Footnotes are gathered under a Notes heading at the end."
+        )
         self.blank()
         if self.cfg.notes_heading:
             self.emit(self.cfg.notes_heading)
@@ -625,10 +806,16 @@ class _State:
             texts: list[str] = []
             for child in blocks:
                 if child.kind == "paragraph":
-                    texts.append(collapse_ws(self.inline(child.inlines, links, child.line[0]).replace("\n", " ")))
+                    texts.append(
+                        collapse_ws(
+                            self.inline(child.inlines, links, child.line[0]).replace("\n", " ")
+                        )
+                    )
                 else:
                     texts.append(collapse_ws(inline_text(child.inlines)))
-            self.text_line(f"[{key}] " + " ".join(t for t in texts if t), blocks[0].line[0] if blocks else 0)
+            self.text_line(
+                f"[{key}] " + " ".join(t for t in texts if t), blocks[0].line[0] if blocks else 0
+            )
             self.flush_links(links)
         self.blank()
 

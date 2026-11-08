@@ -52,19 +52,27 @@ def load_theme(name: str, *, search: list[Path] | None = None) -> Theme:
         path = base / name
         if (path / "theme.toml").is_file():
             return _read(path)
-    raise ThemeError(f"theme {name!r} not found (looked in {', '.join(str(c) for c in candidates)})")
+    raise ThemeError(
+        f"theme {name!r} not found (looked in {', '.join(str(c) for c in candidates)})"
+    )
 
 
 def _read(path: Path) -> Theme:
     with (path / "theme.toml").open("rb") as fh:
         data = tomllib.load(fh)
     t = data.get("theme", {})
-    settings = [ThemeSetting(s["key"], s.get("type", "string"), s.get("label", s["key"]), s.get("default"))
-                for s in data.get("settings", [])]
+    settings = [
+        ThemeSetting(s["key"], s.get("type", "string"), s.get("label", s["key"]), s.get("default"))
+        for s in data.get("settings", [])
+    ]
     return Theme(
-        name=t.get("name", path.name), path=path, platforms=list(t.get("platforms", ["web"])),
+        name=t.get("name", path.name),
+        path=path,
+        platforms=list(t.get("platforms", ["web"])),
         extends=t.get("extends") or (None if path.name == "base" else "base"),
-        settings=settings, version=t.get("version", ""), description=t.get("description", ""),
+        settings=settings,
+        version=t.get("version", ""),
+        description=t.get("description", ""),
     )
 
 
@@ -80,7 +88,9 @@ def theme_chain(theme: Theme, *, search: list[Path] | None = None) -> list[Theme
     return chain
 
 
-def make_environment(chain: list[Theme], platform: str, *, overrides: Path | None = None) -> SandboxedEnvironment:
+def make_environment(
+    chain: list[Theme], platform: str, *, overrides: Path | None = None
+) -> SandboxedEnvironment:
     dirs: list[str] = []
     if overrides is not None and (overrides / platform).is_dir():
         dirs.append(str(overrides / platform))
@@ -91,6 +101,8 @@ def make_environment(chain: list[Theme], platform: str, *, overrides: Path | Non
     env = SandboxedEnvironment(
         loader=ChoiceLoader([FileSystemLoader(d) for d in dirs]),
         autoescape=select_autoescape(["html", "xml"]) if platform == "web" else False,
-        trim_blocks=False, lstrip_blocks=False, keep_trailing_newline=True,
+        trim_blocks=False,
+        lstrip_blocks=False,
+        keep_trailing_newline=True,
     )
     return env

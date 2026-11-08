@@ -10,7 +10,18 @@ from constellation.core.markdown.document import Alternative, Ref, Warning
 
 UrlFor = Callable[[Ref], str]
 
-GENERIC_LINK_TEXT = {"here", "this", "link", "click here", "read more", "more", "source", "url", "this link", "this page"}
+GENERIC_LINK_TEXT = {
+    "here",
+    "this",
+    "link",
+    "click here",
+    "read more",
+    "more",
+    "source",
+    "url",
+    "this link",
+    "this page",
+}
 EMBED_TAGS = ("iframe", "video", "audio", "script", "style", "form", "embed", "object", "canvas")
 
 
@@ -28,8 +39,16 @@ class WarningSink:
         self.items: list[Warning] = []
         self._once: set[str] = set()
 
-    def add(self, code: str, severity: str, line: int, message: str,
-            alternatives: list[Alternative] | None = None, *, once: bool = False) -> None:
+    def add(
+        self,
+        code: str,
+        severity: str,
+        line: int,
+        message: str,
+        alternatives: list[Alternative] | None = None,
+        *,
+        once: bool = False,
+    ) -> None:
         if once:
             if code in self._once:
                 return

@@ -18,7 +18,10 @@ def test_demo_site_loads() -> None:
     assert [p.slug for p in site.posts][:2] == ["scheduled-for-later", "rebuilding-the-workbench"]
     assert site.post_by_slug("a-draft").meta.status == "draft"
     assert site.tags["foundations"].meta.description.startswith("The posts")
-    assert [p.slug for p in site.series["the-rites"].posts] == ["the-veiled-ascent", "the-rites-of-ascension"]
+    assert [p.slug for p in site.series["the-rites"].posts] == [
+        "the-veiled-ascent",
+        "the-rites-of-ascension",
+    ]
     assert site.page_by_slug("about") is not None
 
 
@@ -71,11 +74,17 @@ def test_web_pagination_and_media() -> None:
 def test_html_output_has_metadata_and_web_only_block() -> None:
     build = build_site(load_site(DEMO), now=NOW)
     page = build.platforms["web"].files["posts/rebuilding-the-workbench/index.html"].data.decode()
-    assert '<link rel="canonical" href="https://demo.example.org/posts/rebuilding-the-workbench/">' in page
+    assert (
+        '<link rel="canonical" href="https://demo.example.org/posts/rebuilding-the-workbench/">'
+        in page
+    )
     assert 'class="web-only"' in page
     assert "Gemini readers: start with" not in page
     assert "<!-- tracking snippets go here -->" in page
-    assert 'Also on Gemini: <a href="gemini://demo.example.org/posts/rebuilding-the-workbench.gmi">' in page
+    assert (
+        'Also on Gemini: <a href="gemini://demo.example.org/posts/rebuilding-the-workbench.gmi">'
+        in page
+    )
 
 
 def test_write_build_and_manifest(tmp_path: Path) -> None:
@@ -86,7 +95,9 @@ def test_write_build_and_manifest(tmp_path: Path) -> None:
     assert (tmp_path / "web" / "posts" / "the-call" / "index.html").is_file()
     entry = manifest["platforms"]["gemini"]["posts/the-call.gmi"]
     assert entry["type"] == "text/gemini" and len(entry["sha256"]) == 64
-    d = diff_manifests(manifest["platforms"]["web"], {**manifest["platforms"]["web"], "new.txt": {"sha256": "x"}})
+    d = diff_manifests(
+        manifest["platforms"]["web"], {**manifest["platforms"]["web"], "new.txt": {"sha256": "x"}}
+    )
     assert d["added"] == ["new.txt"] and not d["removed"]
 
 
@@ -96,7 +107,9 @@ def test_broken_internal_links_are_errors(tmp_path: Path) -> None:
     shutil.copytree(DEMO, tmp_path / "site")
     post = tmp_path / "site" / "content" / "posts" / "2026-11-01-broken"
     post.mkdir()
-    (post / "index.md").write_text("---\ntitle: Broken\n---\n\nSee [x](post:nope) and [d](post:a-draft) and ![i](missing.png).\n")
+    (post / "index.md").write_text(
+        "---\ntitle: Broken\n---\n\nSee [x](post:nope) and [d](post:a-draft) and ![i](missing.png).\n"
+    )
     build = build_site(load_site(tmp_path / "site"), now=NOW)
     codes = sorted({w.code for w in build.platforms["gemini"].warnings if w.severity == "error"})
     assert codes == ["LINK-BROKEN-INTERNAL", "LINK-BROKEN-MEDIA", "LINK-UNPUBLISHED"]
@@ -107,7 +120,9 @@ def test_content_errors_are_collected(tmp_path: Path) -> None:
     (site / "content" / "posts").mkdir(parents=True)
     (site / "site.toml").write_text('[site]\ntitle = "S"\n')
     (site / "content" / "posts" / "no-date.md").write_text("---\ntitle: X\n---\n")
-    (site / "content" / "posts" / "bad-slug.md").write_text("---\ntitle: Y\nslug: Not Valid\ndate: 2026-01-01\n---\n")
+    (site / "content" / "posts" / "bad-slug.md").write_text(
+        "---\ntitle: Y\nslug: Not Valid\ndate: 2026-01-01\n---\n"
+    )
     with pytest.raises(ContentError) as e:
         load_site(site)
     msgs = "\n".join(e.value.problems)
@@ -117,7 +132,19 @@ def test_content_errors_are_collected(tmp_path: Path) -> None:
 def test_cli_build_and_check(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from constellation.cli import main
 
-    assert main(["build", str(DEMO), "--out", str(tmp_path / "out"), "--now", "2026-11-09T00:00:00+00:00"]) == 0
+    assert (
+        main(
+            [
+                "build",
+                str(DEMO),
+                "--out",
+                str(tmp_path / "out"),
+                "--now",
+                "2026-11-09T00:00:00+00:00",
+            ]
+        )
+        == 0
+    )
     assert (tmp_path / "out" / "manifest.json").is_file()
     assert main(["check", str(DEMO)]) == 0
     out = capsys.readouterr().out

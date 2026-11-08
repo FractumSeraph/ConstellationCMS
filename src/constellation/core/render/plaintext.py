@@ -69,7 +69,11 @@ def _block(b: Block) -> list[str]:
     if k == "container":
         return [t for c in b.children for t in _block(c)] if b.info == "web" else []
     if k == "deflist":
-        return [t for c in b.children for t in (_block(c) if c.kind == "def_desc" else [_inline(c.inlines)])]
+        return [
+            t
+            for c in b.children
+            for t in (_block(c) if c.kind == "def_desc" else [_inline(c.inlines)])
+        ]
     return [_inline(b.inlines)]
 
 

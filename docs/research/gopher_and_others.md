@@ -697,11 +697,13 @@ Sketch (Python, typing only):
 
 ```python
 class RendererPlugin(Protocol):
-    platform: str                      # "html" | "gemini" | "gopher" | "finger" | "nex" | ...
-    caps: RenderCaps                   # inline_links, hard_wrap_width, images, tables, headings...
+    platform: str  # "html" | "gemini" | "gopher" | "finger" | "nex" | ...
+    caps: RenderCaps  # inline_links, hard_wrap_width, images, tables, headings...
+
     def render_document(self, doc: Document, ctx: RenderContext) -> RenderResult: ...
     def render_menu(self, menu: MenuDocument, ctx: RenderContext) -> RenderResult: ...
-    def url_for(self, ref: Ref, ctx: RenderContext) -> str: ...   # gopher inserts type char
+    def url_for(self, ref: Ref, ctx: RenderContext) -> str: ...  # gopher inserts type char
+
     # RenderResult = list[OutputFile] + list[RenderWarning]
     # OutputFile = (path_or_selector, bytes, mime, item_type, line_ending, wire_ready: bool)
 ```
@@ -729,14 +731,17 @@ Sketch:
 
 ```python
 class ProtocolPlugin(Protocol):
-    name: str                                   # "gopher"
-    schemes: tuple[str, ...]                    # ("gopher", "gophers")
+    name: str  # "gopher"
+    schemes: tuple[str, ...]  # ("gopher", "gophers")
+
     def listeners(self, cfg: SiteNetCfg) -> list[ListenerSpec]: ...
     async def parse_request(self, conn: Conn, limits: Limits) -> Request: ...
-    def route(self, req: Request, sites: SiteIndex) -> Site: ...      # no-name protocols → default site
-    async def respond(self, req: Request, site: Site) -> Response: ...  # Response(item_type, mime, body)
+    def route(self, req: Request, sites: SiteIndex) -> Site: ...  # no-name protocols → default site
+    async def respond(
+        self, req: Request, site: Site
+    ) -> Response: ...  # Response(item_type, mime, body)
     def frame(self, resp: Response) -> AsyncIterable[bytes]: ...
-    def error(self, code: int, msg: str) -> Response: ...               # gopher: type-3 menu
+    def error(self, code: int, msg: str) -> Response: ...  # gopher: type-3 menu
     def log_fields(self, req: Request, resp: Response) -> dict: ...
 ```
 

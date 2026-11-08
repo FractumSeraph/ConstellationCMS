@@ -7,7 +7,13 @@ from hypothesis import strategies as st
 
 from tests.helpers import gem
 
-WORD = st.text(alphabet=st.characters(whitelist_categories=("L", "N", "P", "S", "Zs"), blacklist_characters="\r\x0b\x0c  "), min_size=1, max_size=12)
+WORD = st.text(
+    alphabet=st.characters(
+        whitelist_categories=("L", "N", "P", "S", "Zs"), blacklist_characters="\r\x0b\x0c  "
+    ),
+    min_size=1,
+    max_size=12,
+)
 WORDS = st.lists(WORD, min_size=1, max_size=8).map(" ".join)
 INLINE = st.one_of(
     WORDS,
@@ -21,11 +27,14 @@ INLINE = st.one_of(
 PARAGRAPH = st.lists(INLINE, min_size=1, max_size=5).map(" ".join)
 HEADING = st.tuples(st.integers(1, 6), WORDS).map(lambda t: "#" * t[0] + " " + t[1])
 LIST = st.lists(WORDS, min_size=1, max_size=4).map(lambda xs: "\n".join(f"- {x}" for x in xs))
-OLIST = st.lists(WORDS, min_size=1, max_size=4).map(lambda xs: "\n".join(f"{i + 1}. {x}" for i, x in enumerate(xs)))
+OLIST = st.lists(WORDS, min_size=1, max_size=4).map(
+    lambda xs: "\n".join(f"{i + 1}. {x}" for i, x in enumerate(xs))
+)
 QUOTE = st.lists(WORDS, min_size=1, max_size=3).map(lambda xs: "\n".join(f"> {x}" for x in xs))
 FENCE = st.lists(WORDS, min_size=0, max_size=3).map(lambda xs: "```\n" + "\n".join(xs) + "\n```")
 TABLE = st.lists(st.tuples(WORDS, WORDS), min_size=1, max_size=3).map(
-    lambda rows: "| A | B |\n|---|---|\n" + "\n".join(f"| {a} | {b} |" for a, b in rows))
+    lambda rows: "| A | B |\n|---|---|\n" + "\n".join(f"| {a} | {b} |" for a, b in rows)
+)
 BLOCK = st.one_of(PARAGRAPH, HEADING, LIST, OLIST, QUOTE, FENCE, TABLE, st.just("---"))
 DOCUMENT = st.lists(BLOCK, min_size=1, max_size=8).map(lambda bs: "\n\n".join(bs) + "\n")
 

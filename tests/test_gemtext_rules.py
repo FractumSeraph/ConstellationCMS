@@ -47,8 +47,13 @@ def test_missing_alt_is_a_warning_not_an_error() -> None:
 
 
 def test_inline_markup_kept_by_default_and_strippable() -> None:
-    assert gem("some *em* and **strong** and `code`\n").text == "some *em* and **strong** and `code`\n"
-    assert gem("some *em* and **strong** and `code`\n", RenderGemini(inline_markup="strip")).text == "some em and strong and code\n"
+    assert (
+        gem("some *em* and **strong** and `code`\n").text == "some *em* and **strong** and `code`\n"
+    )
+    assert (
+        gem("some *em* and **strong** and `code`\n", RenderGemini(inline_markup="strip")).text
+        == "some em and strong and code\n"
+    )
 
 
 def test_reserved_prefix_is_defused() -> None:
@@ -73,7 +78,10 @@ def test_ordered_list_numbers_are_text_lines() -> None:
 
 
 def test_list_of_links_becomes_link_lines() -> None:
-    assert gem("- [Alpha](post:alpha)\n- [Foo](post:foo)\n").text == "=> /posts/alpha.gmi Alpha\n=> /posts/foo.gmi Foo\n"
+    assert (
+        gem("- [Alpha](post:alpha)\n- [Foo](post:foo)\n").text
+        == "=> /posts/alpha.gmi Alpha\n=> /posts/foo.gmi Foo\n"
+    )
 
 
 def test_nested_list_indent_default_and_flatten() -> None:
@@ -106,7 +114,10 @@ def test_fence_inside_code_is_escaped_and_errors() -> None:
 
 def test_embed_is_replaced_by_notice_and_link() -> None:
     res = gem('<iframe src="https://www.youtube.com/embed/x"></iframe>\n')
-    assert res.text == "[Embedded content, web only]\n=> https://www.youtube.com/embed/x www.youtube.com/embed/x\n"
+    assert (
+        res.text
+        == "[Embedded content, web only]\n=> https://www.youtube.com/embed/x www.youtube.com/embed/x\n"
+    )
     assert "HTML-EMBED" in codes(res)
 
 

@@ -7,5 +7,7 @@ from datetime import datetime
 
 def format_date(d: datetime, style: str, calendar: str) -> str:
     if calendar == "gregorian":
-        return f"{d.strftime('%B')} {d.day}, {d.year}" if style == "long" else d.strftime("%Y-%m-%d")
+        return (
+            f"{d.strftime('%B')} {d.day}, {d.year}" if style == "long" else d.strftime("%Y-%m-%d")
+        )
     raise ValueError(f"unknown calendar {calendar!r}")

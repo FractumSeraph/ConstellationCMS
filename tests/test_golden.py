@@ -26,7 +26,8 @@ def test_golden(name: str, request: pytest.FixtureRequest) -> None:
     outputs = {
         ".gmi": g.text,
         ".html": h.text,
-        ".warnings.txt": _warnings_text(g.warnings) + "".join(f"{w.line}:{w.code}:{w.severity}:web\n" for w in h.warnings),
+        ".warnings.txt": _warnings_text(g.warnings)
+        + "".join(f"{w.line}:{w.code}:{w.severity}:web\n" for w in h.warnings),
     }
     if request.config.getoption("--update-goldens"):
         for ext, text in outputs.items():
@@ -35,4 +36,6 @@ def test_golden(name: str, request: pytest.FixtureRequest) -> None:
     for ext, text in outputs.items():
         golden = CORPUS / f"{name}{ext}"
         assert golden.exists(), f"missing golden {golden.name}; run pytest --update-goldens"
-        assert text == golden.read_text(encoding="utf-8"), f"{golden.name} differs; run pytest --update-goldens and review"
+        assert text == golden.read_text(encoding="utf-8"), (
+            f"{golden.name} differs; run pytest --update-goldens and review"
+        )

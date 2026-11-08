@@ -44,8 +44,12 @@ class _State:
         if k == "heading":
             level = b.level
             if level == 1:
-                self.warn.add("H1-IN-BODY", "warn", b.line[0],
-                              "Body contains a level-1 heading; the post title is already the H1. It will be shown as a level-2 heading.")
+                self.warn.add(
+                    "H1-IN-BODY",
+                    "warn",
+                    b.line[0],
+                    "Body contains a level-1 heading; the post title is already the H1. It will be shown as a level-2 heading.",
+                )
                 level = 2
             text = self.inlines(b.inlines)
             hid = self._heading_id(inline_text(b.inlines))
@@ -119,7 +123,11 @@ class _State:
         src = self.r.url_for(img.ref)
         alt = escape(img.text, quote=True)
         srcset = self.r.image_srcset.get(src)
-        extra = f' srcset="{escape(srcset, quote=True)}" sizes="(max-width: 48rem) 100vw, 48rem"' if srcset else ""
+        extra = (
+            f' srcset="{escape(srcset, quote=True)}" sizes="(max-width: 48rem) 100vw, 48rem"'
+            if srcset
+            else ""
+        )
         cap = f"<figcaption>{escape(img.title)}</figcaption>" if img.title else ""
         if not img.text.strip():
             self.warn.add("IMG-NO-ALT", "warn", 0, "Image has no alt text.")
@@ -153,9 +161,13 @@ class _State:
                 assert n.ref is not None
                 src = escape(self.r.url_for(n.ref), quote=True)
                 title = f' title="{escape(n.title, quote=True)}"' if n.title else ""
-                out.append(f'<img src="{src}" alt="{escape(n.text, quote=True)}"{title} loading="lazy">')
+                out.append(
+                    f'<img src="{src}" alt="{escape(n.text, quote=True)}"{title} loading="lazy">'
+                )
             elif k == "footnote_ref":
-                out.append(f'<sup class="footnote-ref"><a href="#fn-{n.text}" id="fnref-{n.text}">{n.text}</a></sup>')
+                out.append(
+                    f'<sup class="footnote-ref"><a href="#fn-{n.text}" id="fnref-{n.text}">{n.text}</a></sup>'
+                )
             elif k == "html":
                 out.append(n.text)
         return "".join(out)

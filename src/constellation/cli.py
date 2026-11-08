@@ -20,7 +20,9 @@ def main(argv: list[str] | None = None) -> int:
 
     b = sub.add_parser("build", help="build a site into one output tree per platform")
     b.add_argument("site", type=Path, help="path to the site folder (contains site.toml)")
-    b.add_argument("--out", type=Path, default=Path("out"), help="output directory (default: ./out)")
+    b.add_argument(
+        "--out", type=Path, default=Path("out"), help="output directory (default: ./out)"
+    )
     b.add_argument("--platform", action="append", help="limit to a platform (repeatable)")
     b.add_argument("--now", help="build time as ISO 8601 (default: now)")
     b.add_argument("--drafts", action="store_true", help="include drafts and future-dated posts")
@@ -69,8 +71,11 @@ def cmd_build(args: argparse.Namespace) -> int:
                 errors += 1
                 print(f"error [{w.platform}] {w.code}: {w.message}", file=sys.stderr)
     counts = {name: len(pb.files) for name, pb in build.platforms.items()}
-    print(f"built {args.site.name}: " + ", ".join(f"{k} {v} files" for k, v in counts.items())
-          + f"; release {build.release_id()}; {len(build.warnings)} warnings")
+    print(
+        f"built {args.site.name}: "
+        + ", ".join(f"{k} {v} files" for k, v in counts.items())
+        + f"; release {build.release_id()}; {len(build.warnings)} warnings"
+    )
     return 1 if (errors and args.strict) else 0
 
 

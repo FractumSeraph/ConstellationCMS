@@ -44,13 +44,14 @@ WEEKDAYS = ["Sweetmorn", "Boomtime", "Pungenday", "Prickle-Prickle", "Setting Or
 APOSTLE = ["Mungday", "Mojoday", "Syaday", "Zaraday", "Maladay"]
 SEASONAL = ["Chaoflux", "Discoflux", "Confuflux", "Bureflux", "Afflux"]
 
+
 def discordian(d: date) -> DiscordianDate:
     yold = d.year + 1166
-    doy = d.timetuple().tm_yday - 1               # 0-based
+    doy = d.timetuple().tm_yday - 1  # 0-based
     leap = calendar.isleap(d.year)
     if leap and d.month == 2 and d.day == 29:
         return DiscordianDate(yold, st_tibs=True)
-    if leap and doy > 59:                          # after Feb 29: ignore St. Tib's Day
+    if leap and doy > 59:  # after Feb 29: ignore St. Tib's Day
         doy -= 1
     season, day = divmod(doy, 73)
     weekday = doy % 5

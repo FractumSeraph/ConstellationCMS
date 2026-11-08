@@ -541,7 +541,8 @@ Skeleton:
 ```python
 import asyncio, ssl
 
-contexts: dict[str, ssl.SSLContext] = {}   # host (A-label) -> context with that host's cert
+contexts: dict[str, ssl.SSLContext] = {}  # host (A-label) -> context with that host's cert
+
 
 def make_ctx(certfile, keyfile):
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -549,26 +550,34 @@ def make_ctx(certfile, keyfile):
     ctx.load_cert_chain(certfile, keyfile)
     return ctx
 
+
 def sni(sock, server_name, _ctx):
     # server_name is the A-label (punycode) or None; must return None to continue
     if server_name and server_name.lower() in contexts:
         sock.context = contexts[server_name.lower()]
     return None
 
+
 base = make_ctx(default_cert, default_key)
 base.sni_callback = sni
+
 
 async def handle(reader, writer):
     try:
         line = await asyncio.wait_for(reader.readuntil(b"\r\n"), timeout=10)
     except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, asyncio.TimeoutError):
-        writer.write(b"59 Bad request\r\n"); await writer.drain(); writer.close(); return
+        writer.write(b"59 Bad request\r\n")
+        await writer.drain()
+        writer.close()
+        return
     ...  # validate URL (<=1024 bytes before CRLF), host/port, path; serve; status line; body
-    writer.close()                       # asyncio performs the TLS shutdown (close_notify)
+    writer.close()  # asyncio performs the TLS shutdown (close_notify)
     await writer.wait_closed()
 
-server = await asyncio.start_server(handle, "::", 1965, ssl=base,
-                                    ssl_handshake_timeout=10, limit=1026)
+
+server = await asyncio.start_server(
+    handle, "::", 1965, ssl=base, ssl_handshake_timeout=10, limit=1026
+)
 ```
 
 (`limit=1026` makes `readuntil` raise `LimitOverrunError` once more than 1024 + CRLF bytes

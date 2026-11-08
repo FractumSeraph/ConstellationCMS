@@ -9,7 +9,20 @@ from urllib.parse import urlsplit
 from constellation.core.markdown.document import Ref
 from constellation.core.models import SiteConfig
 
-EXTERNAL_SCHEMES = ("http", "https", "gemini", "gopher", "mailto", "xmpp", "finger", "spartan", "nex", "tel", "irc", "ftp")
+EXTERNAL_SCHEMES = (
+    "http",
+    "https",
+    "gemini",
+    "gopher",
+    "mailto",
+    "xmpp",
+    "finger",
+    "spartan",
+    "nex",
+    "tel",
+    "irc",
+    "ftp",
+)
 PLATFORM_EXT = {"gemini": ".gmi", "gopher": ".txt"}
 
 
@@ -80,8 +93,13 @@ class RefResolver:
     site-absolute paths matching the URL patterns, and absolute URLs to the site's own hostnames.
     """
 
-    def __init__(self, cfg: SiteConfig | None = None, *, post_slugs: set[str] | None = None,
-                 page_slugs: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        cfg: SiteConfig | None = None,
+        *,
+        post_slugs: set[str] | None = None,
+        page_slugs: set[str] | None = None,
+    ) -> None:
         self.cfg = cfg
         self.post_slugs = post_slugs or set()
         self.page_slugs = page_slugs or set()
@@ -109,7 +127,11 @@ class RefResolver:
             return Ref("home", "", frag, raw)
         parts = urlsplit(target)
         if parts.scheme:
-            if parts.scheme in EXTERNAL_SCHEMES and parts.hostname and parts.hostname.lower() in self.hostnames:
+            if (
+                parts.scheme in EXTERNAL_SCHEMES
+                and parts.hostname
+                and parts.hostname.lower() in self.hostnames
+            ):
                 inner = self._site_path(parts.path)
                 if inner is not None:
                     return inner.with_fragment(frag)
@@ -138,7 +160,7 @@ class RefResolver:
         if path == "/":
             return Ref("home", "", None, path)
         if path.startswith("/media/"):
-            rest = path[len("/media/"):]
+            rest = path[len("/media/") :]
             if rest.startswith("posts/"):
                 _, _, file = rest.partition("/")
                 _slug, _, file = file.partition("/")
