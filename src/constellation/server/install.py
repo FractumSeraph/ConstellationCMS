@@ -140,15 +140,14 @@ def install(
 
 def ensure_service_user(user: str, data_dir: Path) -> None:
     """Create a system account for the service if it does not exist (Linux, as root)."""
+    if sys.platform == "win32":
+        return
+    import pwd
     import shutil
     import subprocess
 
     try:
-        import pwd
-
         pwd.getpwnam(user)
-        return
-    except ImportError:  # pragma: no cover - not POSIX
         return
     except KeyError:
         pass
@@ -175,11 +174,13 @@ def ensure_service_user(user: str, data_dir: Path) -> None:
 
 def give_to_user(user: str, data_dir: Path) -> None:
     """Make the data directory and everything in it belong to the service user."""
-    try:
-        import pwd
+    if sys.platform == "win32":
+        return
+    import pwd
 
+    try:
         entry = pwd.getpwnam(user)
-    except (ImportError, KeyError):
+    except KeyError:
         return
     for path in [data_dir, *data_dir.rglob("*")]:
         with contextlib.suppress(OSError):
