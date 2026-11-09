@@ -261,7 +261,7 @@ def test_preview_roots_for_every_platform(studio) -> None:  # noqa: F811
 
 
 def test_export_targets_are_validated(studio) -> None:  # noqa: F811
-    client, _state, _ws = studio
+    client, _state, ws = studio
     csrf = _setup(client)
     bad = [
         {"name": "my folder", "target": "folder:/srv/out"},
@@ -277,7 +277,12 @@ def test_export_targets_are_validated(studio) -> None:  # noqa: F811
         assert r.status_code == 400, case
     r = client.post(
         "/sites/demo/exports",
-        data={"csrf": csrf, "name": "gopher-out", "platform": "gopher", "target": "folder:/srv/x"},
+        data={
+            "csrf": csrf,
+            "name": "gopher-out",
+            "platform": "gopher",
+            "target": f"folder:{ws / 'out'}",  # absolute on every OS
+        },
         follow_redirects=False,
     )
     assert r.status_code == 303
