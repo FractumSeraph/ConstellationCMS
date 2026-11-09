@@ -1,0 +1,16 @@
+# {{ site.config.site.title }}
+{% if site.config.site.tagline %}
+{{ site.config.site.tagline }}
+{% endif %}{% if theme.welcome %}
+{{ theme.welcome }}
+{% endif %}
+## {{ theme.heading_prefix }}Posts
+{% for post in posts %}=> {{ url_for('post', post.slug) }} {{ post.date | date('iso') }} {{ post.meta.title }}
+{% endfor %}{% set ns = namespace(links=false) %}{% for item in site.config.menu.items %}{% if item.children or item.ref != 'home' %}{% set ns.links = true %}{% endif %}{% endfor %}{% if ns.links %}
+## {{ theme.heading_prefix }}Links
+{% for item in site.config.menu.items %}{% if not item.children and item.ref != 'home' %}=> {{ menu_url(item) }} {{ item.label }}
+{% endif %}{% for c in item.children %}=> {{ menu_url(c) }} {{ c.label }}
+{% endfor %}{% endfor %}{% endif %}{% if "atom" in site.config.platform("gemini").feeds %}=> /feed.xml Atom feed
+{% endif %}{% if site.config.footer.text %}
+{{ site.config.footer.text }}
+{% endif %}

@@ -1,0 +1,12 @@
+{# One post in a list: the title with its dotted rule, date :: author, tags, summary, read more.
+   Included by home.html and list.html with `post` set. #}
+<article class="entry">
+  <header>
+    <h2 class="entry__title"><a href="{{ url_for('post', post.slug) }}">{{ post.meta.title }}</a></h2>
+    <p class="entry__meta"><time datetime="{{ post.date | isoformat }}">{{ post.date | date('long') }}</time>
+    {%- if theme.list_tags %}{% set a = site.config.author_by_id(post.meta.author or site.config.site.author) %}{% if a %}<span class="entry__author">{{ a.name }}</span>{% endif %}{% endif %}</p>
+    {% if theme.list_tags and post.meta.tags %}<p class="entry__tags">{% for t in post.meta.tags %}<a href="{{ url_for('tag', t | slug) }}">#{{ t }}</a>{% if not loop.last %} {% endif %}{% endfor %}</p>{% endif %}
+  </header>
+  {% if summaries[post.slug] %}<p class="entry__summary">{{ summaries[post.slug] }}</p>{% endif %}
+  {% if theme.read_more %}<a class="read-more" href="{{ url_for('post', post.slug) }}">{{ theme.read_more }}</a>{% endif %}
+</article>

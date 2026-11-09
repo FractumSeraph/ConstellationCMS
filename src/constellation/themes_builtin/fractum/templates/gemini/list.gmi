@@ -1,0 +1,10 @@
+# {% if term.kind == 'tag' %}#{% endif %}{{ term.title }}
+{% if term.meta.description %}
+{{ term.meta.description }}
+{% endif %}{% if term_body %}
+{{ term_body | prefix_headings(theme.heading_prefix) }}
+{% endif %}
+## {{ theme.heading_prefix }}Posts
+{% for post in posts %}=> {{ url_for('post', post.slug) }} {{ post.date | date('iso') }} {{ post.meta.title }}
+{% endfor %}
+=> / Home

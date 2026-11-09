@@ -9,3 +9,6 @@ __pycache__/
 .ruff_cache/
 .hypothesis/
 /out/
+
+# Cloudflare cf CLI cache (account details)
+/.cloudflare/

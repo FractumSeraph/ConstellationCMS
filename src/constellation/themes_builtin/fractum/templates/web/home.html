@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body_class %}home{% endblock %}
+{% block content %}
+{% if theme.welcome and pagination.current <= 1 %}<div class="framed welcome"><p>{{ theme.welcome }}</p></div>{% endif %}
+<section class="entries">
+{% for post in posts %}
+{% include "summary.html" %}
+{% else %}
+  <p>No posts yet.</p>
+{% endfor %}
+</section>
+{% if pagination.pages > 1 %}
+<nav class="pagination" aria-label="Pages">
+  {% if pagination.prev %}<a class="pagination__newer" rel="prev" href="{{ pagination.prev }}">← Newer</a>{% endif %}
+  <span>Page {{ pagination.current }} of {{ pagination.pages }}</span>
+  {% if pagination.next %}<a class="pagination__older" rel="next" href="{{ pagination.next }}">Older →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

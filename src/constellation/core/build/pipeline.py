@@ -22,7 +22,7 @@ from constellation.core.build.images import ImageSet, make_variants
 from constellation.core.markdown.document import Document, Ref, Severity, Warning
 from constellation.core.markdown.parse import parse_markdown
 from constellation.core.models import Page, Post, Site, Term
-from constellation.core.render.gemtext import GemtextRenderer
+from constellation.core.render.gemtext import GemtextRenderer, prefix_headings
 from constellation.core.render.gopher import GopherRenderer, GopherTarget, info_line, item_for_url
 from constellation.core.render.html import HtmlRenderer
 from constellation.core.render.plaintext import summary_text
@@ -438,6 +438,7 @@ class _Context:
 
         self.env.filters["numeral"] = numeral
         self.env.filters["css_value"] = css_value
+        self.env.filters["prefix_headings"] = prefix_headings
         self.env.filters["ddate"] = lambda d, fmt="%{%A, %B %d%}, %Y YOLD": _ddate(d, fmt, cfg)
 
     def _render_body(self, item: Post | Page) -> Rendered:

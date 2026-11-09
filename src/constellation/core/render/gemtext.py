@@ -912,3 +912,24 @@ class _HtmlInfo(HTMLParser):
         if self.details_summary is not None:
             text = text.replace(self.details_summary, "", 1)
         return [collapse_ws(p) for p in text.split("\n") if collapse_ws(p)]
+
+
+def prefix_headings(text: str, prefix: str, levels: tuple[int, ...] = (2, 3)) -> str:
+    """Put ``prefix`` in front of the text of gemtext headings at ``levels`` (a theme filter).
+
+    Lines inside preformatted blocks are left alone, as are headings that already start with
+    the prefix. ``## Posts`` with prefix ``"// "`` becomes ``## // Posts``.
+    """
+    if not prefix:
+        return text
+    out: list[str] = []
+    pre = False
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            pre = not pre
+        elif not pre:
+            m = re.match(r"(#{1,3})[ \t]*(.*)$", line)
+            if m and len(m.group(1)) in levels and not m.group(2).startswith(prefix.strip()):
+                line = f"{m.group(1)} {prefix}{m.group(2)}"
+        out.append(line)
+    return "\n".join(out)

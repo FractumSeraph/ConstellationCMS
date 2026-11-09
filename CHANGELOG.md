@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Themes: a new built-in `fractum` theme (terminal style, configurable colours, a framed
+  welcome box, drop-down menus, `//` section headings on web, Gemini and Gopher, bundled
+  JetBrains Mono). A `prefix_headings` template filter for gemtext.
+
 Fixes from a full review before first deployment.
 
 - Content: bad dates, broken YAML and non-UTF-8 files are reported instead of crashing; a bare

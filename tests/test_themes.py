@@ -117,3 +117,124 @@ def test_install_theme_zip_checks_paths_and_structure(tmp_path: Path) -> None:
     build = build_site(site, now=NOW, theme_search=[themes])
     page = build.platforms["web"].files["index.html"].data.decode()
     assert "<!-- v -->" in page and "assets/velvet/style.css" in build.platforms["web"].files
+
+
+# ---- fractum ------------------------------------------------------------------------------
+
+
+def _gopher_on(root: Path) -> None:
+    toml = root / "site.toml"
+    toml.write_text(
+        toml.read_text(encoding="utf-8")
+        + '\n[platforms.gopher]\nenabled = true\nbase_url = "gopher://demo.example.org"\n'
+        'hostnames = ["demo.example.org"]\n',
+        encoding="utf-8",
+    )
+
+
+def test_fractum_loads_and_covers_every_platform() -> None:
+    fractum = load_theme("fractum")
+    assert [t.name for t in theme_chain(fractum)] == ["fractum", "base"]
+    assert fractum.platforms == ["web", "gemini", "gopher"]
+    keys = {s.key for s in fractum.settings}
+    assert {"accent", "background", "foreground", "welcome", "heading_prefix"} <= keys
+    assert (fractum.static_dir() / "fonts" / "OFL.txt").is_file(), (
+        "the bundled font keeps its licence"
+    )
+
+
+def test_fractum_web_has_its_look_with_default_settings(tmp_path: Path) -> None:
+    root = _site(tmp_path, "fractum")
+    build = build_site(load_site(root), now=NOW)
+    web = build.platforms["web"].files
+    home = web["index.html"].data.decode()
+    assert "--accent: #de7aeb" in home and "--bg: #222129" in home
+    assert '--heading-prefix: "// "' in home, "the trailing space of the prefix survives"
+    assert "site-brand--label" in home and "frame--lines" in home
+    assert "/assets/fractum/fonts/jetbrainsmono.woff2" in home
+    assert "assets/fractum/fonts/jetbrainsmono.woff2" in web
+    assert "assets/fractum/fonts/OFL.txt" in web
+    assert 'class="entry__title"' in home and 'class="entry__author">Seraph' in home
+    assert 'class="read-more"' in home and "Read more →" in home
+    assert "#foundations" in web["posts/the-call/index.html"].data.decode()
+    assert "framed welcome" not in home, "no welcome box unless the setting has text"
+    # Lists use the same entry markup.
+    tag = web["tags/foundations/index.html"].data.decode()
+    assert 'class="term__title"' in tag and 'class="entry__title"' in tag
+
+
+def test_fractum_menu_groups_become_drop_downs(tmp_path: Path) -> None:
+    root = _site(tmp_path, "fractum")
+    toml = root / "site.toml"
+    toml.write_text(
+        toml.read_text(encoding="utf-8").replace(
+            '  { label = "About", ref = "page:about" },',
+            '  { label = "Core", children = [ { label = "About", ref = "page:about" } ] },',
+        ),
+        encoding="utf-8",
+    )
+    home = build_site(load_site(root), now=NOW).platforms["web"].files["index.html"].data.decode()
+    assert '<li class="menu-group" tabindex="0">' in home
+    assert 'aria-haspopup="true">Core</span>' in home and '<ul class="submenu">' in home
+
+
+def test_fractum_settings_change_the_output_and_stay_safe(tmp_path: Path) -> None:
+    extra = (
+        "\n[theme.settings]\n"
+        'welcome = "Welcome, <Seeker>."\n'
+        'heading_prefix = ""\n'
+        "title_label = false\n"
+        "page_frame = false\n"
+        "bundled_font = false\n"
+        'read_more = ""\n'
+        'accent = "red; } body { display: none"\n'
+    )
+    root = _site(tmp_path, "fractum", extra)
+    _gopher_on(root)
+    build = build_site(load_site(root), now=NOW)
+    home = build.platforms["web"].files["index.html"].data.decode()
+    assert '<div class="framed welcome"><p>Welcome, &lt;Seeker&gt;.</p></div>' in home
+    assert "site-brand--label" not in home and "frame--lines" not in home
+    assert "jetbrainsmono.woff2" not in home and 'class="read-more"' not in home
+    assert "body { display" not in home, "a colour setting cannot open a new CSS rule"
+    gem = build.platforms["gemini"].files["index.gmi"].data.decode()
+    assert "## Posts" in gem and "Welcome, <Seeker>." in gem
+    post = build.platforms["gemini"].files["posts/the-call.gmi"].data.decode()
+    assert "## The Vow" in post and "## // " not in post
+    gopher = build.platforms["gopher"].files["gophermap"].data.decode()
+    assert "iPosts\t" in gopher and "i// " not in gopher
+
+
+def test_fractum_gemini_and_gopher_use_the_heading_prefix(tmp_path: Path) -> None:
+    root = _site(tmp_path, "fractum")
+    _gopher_on(root)
+    build = build_site(load_site(root), now=NOW)
+    gem = build.platforms["gemini"].files
+    home = gem["index.gmi"].data.decode()
+    assert home.startswith("# Demo Constellation\n"), "the first line stays the plain title"
+    assert "\n## // Posts\n" in home and "\n## // Links\n" in home
+    post = gem["posts/the-call.gmi"].data.decode()
+    assert "\n## // The Vow\n" in post and "2026-10-21 :: Seraph" in post
+    rites = gem["posts/the-rites-of-ascension.gmi"].data.decode()
+    assert "\n### // The First Rite\n" in rites
+    gopher = build.platforms["gopher"].files["gophermap"].data.decode()
+    assert "i// Posts\t" in gopher and "i// Links\t" in gopher
+
+
+def test_prefix_headings_leaves_preformatted_text_and_titles_alone() -> None:
+    from constellation.core.render.gemtext import prefix_headings
+
+    text = "# Title\n## Two\n```\n## not a heading\n```\n### Three\n## // Already\ntext ## no"
+    out = prefix_headings(text, "// ")
+    assert out.split("\n") == [
+        "# Title",
+        "## // Two",
+        "```",
+        "## not a heading",
+        "```",
+        "### // Three",
+        "## // Already",
+        "text ## no",
+    ]
+    assert prefix_headings(text, "") == text
+    assert prefix_headings(out, "// ") == out, "applying it twice changes nothing"

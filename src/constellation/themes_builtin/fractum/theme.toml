@@ -1,0 +1,78 @@
+[theme]
+name = "fractum"
+version = "1.0.0"
+description = "Terminal style: monospace, a filled title label with a barcode rule, dotted title rules, '//' section headings and drop-down menus. One configurable look for web, Gemini and Gopher."
+platforms = ["web", "gemini", "gopher"]
+extends = "base"
+
+[[settings]]
+key = "accent"
+type = "color"
+label = "Accent colour"
+default = "#de7aeb"
+
+[[settings]]
+key = "background"
+type = "color"
+label = "Background colour"
+default = "#222129"
+
+[[settings]]
+key = "foreground"
+type = "color"
+label = "Text colour"
+default = "#ffffff"
+
+[[settings]]
+key = "font"
+type = "string"
+label = "Font stack (CSS font-family)"
+default = "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace"
+
+[[settings]]
+key = "bundled_font"
+type = "bool"
+label = "Load the bundled JetBrains Mono web font"
+default = true
+
+[[settings]]
+key = "title_label"
+type = "bool"
+label = "Show the site title as a filled label followed by a barcode rule"
+default = true
+
+[[settings]]
+key = "page_frame"
+type = "bool"
+label = "Draw faint lines down both sides of the page"
+default = true
+
+[[settings]]
+key = "page_width"
+type = "string"
+label = "Page width (CSS length)"
+default = "64rem"
+
+[[settings]]
+key = "welcome"
+type = "string"
+label = "Welcome text in a framed box at the top of the home page (empty: none)"
+default = ""
+
+[[settings]]
+key = "heading_prefix"
+type = "string"
+label = "Prefix for section headings on every platform (empty: none)"
+default = "// "
+
+[[settings]]
+key = "list_tags"
+type = "bool"
+label = "Show tags and the author in post lists"
+default = true
+
+[[settings]]
+key = "read_more"
+type = "string"
+label = "Link text under each summary in post lists (empty: no link)"
+default = "Read more →"

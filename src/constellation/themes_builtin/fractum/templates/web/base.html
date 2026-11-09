@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="{{ site.config.site.language }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ site.config.site.title }}{% endblock %}</title>
+{% block meta %}<meta name="description" content="{{ site.config.seo.default_description }}">{% endblock %}
+<meta name="generator" content="ConstellationCMS">
+<meta name="color-scheme" content="dark">
+{% if theme.bundled_font %}<link rel="preload" href="{{ asset('fonts/jetbrainsmono.woff2') }}" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: "JetBrains Mono"; src: url("{{ asset('fonts/jetbrainsmono.woff2') }}") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("{{ asset('fonts/jetbrainsmono-italic.woff2') }}") format("woff2"); font-weight: 100 800; font-style: italic; font-display: swap; }
+</style>
+{% endif %}<link rel="stylesheet" href="{{ asset('style.css') }}">
+<style>:root { --accent: {{ theme.accent | css_value }}; --bg: {{ theme.background | css_value }}; --fg: {{ theme.foreground | css_value }}; --font: {{ theme.font | css_value }}; --page-width: {{ theme.page_width | css_value }}; --heading-prefix: "{{ theme.heading_prefix | replace('"', '') | css_value }}{% if theme.heading_prefix.endswith(' ') %} {% endif %}"; }</style>
+{% if "atom" in site.config.platform("web").feeds %}<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="{{ site.config.site.title }}">{% endif %}
+{% if "json" in site.config.platform("web").feeds %}<link rel="alternate" type="application/feed+json" href="/feed.json" title="{{ site.config.site.title }}">{% endif %}
+{% include 'head_extra.html' ignore missing %}
+{{ site.config.custom_html.head | safe }}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{{ site.config.custom_html.body_start | safe }}
+<div class="frame{% if theme.page_frame %} frame--lines{% endif %}">
+<header class="site-header">
+  <div class="site-brand{% if theme.title_label %} site-brand--label{% endif %}">
+    <a class="site-title" href="/">{{ site.config.site.title }}</a>
+  </div>
+  {% if site.config.site.tagline %}<p class="site-tagline">{{ site.config.site.tagline }}</p>{% endif %}
+  {% if site.config.menu.items %}
+  <nav class="site-nav" aria-label="Main">
+    <ul class="menu">
+    {% for item in site.config.menu.items %}
+      {% if item.children %}
+      <li class="menu-group" tabindex="0"><span class="menu-group__label" aria-haspopup="true">{{ item.label }}</span>
+        <ul class="submenu">{% for c in item.children %}<li><a href="{{ menu_url(c) }}">{{ c.label }}</a></li>{% endfor %}</ul>
+      </li>
+      {% else %}
+      <li><a href="{{ menu_url(item) }}">{{ item.label }}</a></li>
+      {% endif %}
+    {% endfor %}
+    </ul>
+  </nav>
+  {% endif %}
+</header>
+<main class="content">
+{% block content %}{% endblock %}
+</main>
+<footer class="site-footer">
+  {% if site.config.footer.text %}<p>{{ site.config.footer.text }}</p>{% endif %}
+  {% if site.config.footer.social %}<ul class="social">{% for s in site.config.footer.social %}<li><a href="{{ s.url }}" rel="me">{{ s.label }}</a></li>{% endfor %}</ul>{% endif %}
+  {% if site.config.platform("gemini").enabled and site.config.platform("gemini").base_url %}<p class="also-on">Also on Gemini: <a href="{{ site.config.platform("gemini").base_url }}{{ gemini_path }}">{{ site.config.platform("gemini").base_url }}{{ gemini_path }}</a></p>{% endif %}
+</footer>
+</div>
+{{ site.config.custom_html.body_end | safe }}
+</body>
+</html>
