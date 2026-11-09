@@ -12,7 +12,6 @@ Internal post link, foo, page link, tag link, same page.
 Twice in one block: one and two.
 => https://dup.example one
 
-A paragraph that is only a link
 => https://solo.example A paragraph that is only a link
 
 ## Heading with a link

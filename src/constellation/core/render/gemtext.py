@@ -337,6 +337,11 @@ class _State:
             return
         links: list[_Link] = []
         text = self.inline(b.inlines, links, line_no, context=inline_text(b.inlines))
+        if not prefix and _is_link_paragraph(b) and len(links) == 1:
+            # The link line already carries the text; printing it again reads as an echo.
+            self.flush_links(links)
+            self.blank()
+            return
         for part in text.split("\n"):
             part = collapse_ws(part)
             if part or prefix:
@@ -823,6 +828,12 @@ class _State:
 def _is_image_paragraph(b: Block) -> bool:
     real = [i for i in b.inlines if not (i.kind in ("text", "soft_break") and not i.text.strip())]
     return len(real) == 1 and real[0].kind == "image"
+
+
+def _is_link_paragraph(b: Block) -> bool:
+    """A paragraph whose only content is one link (``[text](url)`` on a line of its own)."""
+    real = [i for i in b.inlines if not (i.kind in ("text", "soft_break") and not i.text.strip())]
+    return len(real) == 1 and real[0].kind == "link"
 
 
 def _sentence_with(context: str, needle: str) -> str:

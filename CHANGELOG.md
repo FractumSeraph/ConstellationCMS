@@ -5,6 +5,8 @@
 - Themes: a new built-in `fractum` theme (terminal style, configurable colours, a framed
   welcome box, drop-down menus, `//` section headings on web, Gemini and Gopher, bundled
   JetBrains Mono). A `prefix_headings` template filter for gemtext.
+- Gemini: a paragraph that is only a link now renders as just the `=>` line, as the rendering
+  plan specifies, instead of the text followed by the same link.
 
 Fixes from a full review before first deployment.
 
