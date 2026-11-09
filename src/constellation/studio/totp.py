@@ -27,19 +27,37 @@ def totp(secret: str, *, at: float | None = None, step: int = 30) -> str:
     return _code(secret, int((at if at is not None else time.time()) // step))
 
 
-def verify(
+def match(
     secret: str, code: str, *, at: float | None = None, step: int = 30, window: int = 1
-) -> bool:
-    """Accept the current code and ``window`` steps either side, in constant time."""
+) -> int | None:
+    """The time step a code belongs to (current, or ``window`` steps either side), or None."""
     code = code.strip().replace(" ", "")
     if not code.isdigit():
-        return False
+        return None
     now = int((at if at is not None else time.time()) // step)
-    ok = False
+    found: int | None = None
     for offset in range(-window, window + 1):
         if hmac.compare_digest(_code(secret, now + offset), code):
-            ok = True
-    return ok
+            found = now + offset
+    return found
+
+
+def verify(
+    secret: str,
+    code: str,
+    *,
+    at: float | None = None,
+    step: int = 30,
+    window: int = 1,
+    after: int | None = None,
+) -> bool:
+    """Accept the current code and ``window`` steps either side, in constant time.
+
+    With ``after``, a code from that time step or earlier is refused, so a code that was
+    already used to sign in cannot be replayed.
+    """
+    counter = match(secret, code, at=at, step=step, window=window)
+    return counter is not None and (after is None or counter > after)
 
 
 def provisioning_uri(secret: str, account: str, issuer: str = "ConstellationCMS") -> str:

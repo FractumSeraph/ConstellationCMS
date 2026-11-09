@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -55,6 +55,41 @@ def release_manifest(build: Build, site: Site) -> dict[str, Any]:
     return m
 
 
+class _Guarded:
+    """An httpx client whose network failures arrive as readable :class:`PublishError`."""
+
+    def __init__(self, client: httpx.Client, origin: str) -> None:
+        self._client = client
+        self._origin = origin
+
+    def _call(self, method: str, *args: Any, **kwargs: Any) -> httpx.Response:
+        try:
+            return cast(httpx.Response, getattr(self._client, method)(*args, **kwargs))
+        except httpx.TimeoutException:
+            raise PublishError(f"{self._origin} did not answer in time") from None
+        except httpx.HTTPError as e:
+            raise PublishError(f"cannot reach {self._origin}: {e}") from None
+
+    def get(self, *args: Any, **kwargs: Any) -> httpx.Response:
+        return self._call("get", *args, **kwargs)
+
+    def post(self, *args: Any, **kwargs: Any) -> httpx.Response:
+        return self._call("post", *args, **kwargs)
+
+    def put(self, *args: Any, **kwargs: Any) -> httpx.Response:
+        return self._call("put", *args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> httpx.Response:
+        return self._call("delete", *args, **kwargs)
+
+    def close(self) -> None:
+        self._client.close()
+
+    @property
+    def headers(self) -> httpx.Headers:
+        return self._client.headers
+
+
 class PublishClient:
     """Talks to ``<admin_url>`` (``https://host/_constellation``). Tests inject an ``httpx.Client``."""
 
@@ -73,10 +108,11 @@ class PublishClient:
             raise PublishError("the admin URL must use https")
         self.prefix = parts.path.rstrip("/")
         self.headers = {"Authorization": f"Bearer {token}", "User-Agent": "constellation-publish"}
-        self.client = client or httpx.Client(
+        raw_client = client or httpx.Client(
             base_url=f"{parts.scheme}://{parts.netloc}", timeout=timeout
         )
-        self.client.headers.update(self.headers)
+        raw_client.headers.update(self.headers)
+        self.client = _Guarded(raw_client, f"{parts.scheme}://{parts.netloc}")
 
     def close(self) -> None:
         self.client.close()
@@ -85,13 +121,27 @@ class PublishClient:
         return self.prefix + path
 
     def _check(self, r: httpx.Response) -> dict[str, Any]:
+        where = f"{r.request.method} {r.request.url.path}"
         if r.status_code >= 400:
+            msg: object = r.text[:300]
             try:
-                msg = r.json().get("error", r.text)
+                data = r.json()
+                if isinstance(data, dict):
+                    msg = data.get("error", msg)
             except ValueError:
-                msg = r.text
-            raise PublishError(f"{r.request.method} {r.request.url.path}: {r.status_code} {msg}")
-        return dict(r.json()) if r.content else {}
+                pass
+            raise PublishError(f"{where}: {r.status_code} {msg}")
+        if not r.content:
+            return {}
+        try:
+            data = r.json()
+        except ValueError:
+            raise PublishError(
+                f"{where}: the server did not answer with JSON; is the admin URL right?"
+            ) from None
+        if not isinstance(data, dict):
+            raise PublishError(f"{where}: unexpected answer from the server")
+        return dict(data)
 
     def current_manifest(self, site: str) -> dict[str, Any] | None:
         r = self.client.get(self._url(f"/sites/{site}/manifest"))

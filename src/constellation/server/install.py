@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import secrets
 import sys
 from pathlib import Path
@@ -26,7 +27,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome={protect_home}
 PrivateTmp=true
 ReadWritePaths={data}
 
@@ -69,6 +70,7 @@ def install(
     studio_hostname: str = "",
     studio_workspace: Path | None = None,
     studio_port: int = 8787,
+    create_user: bool = False,
 ) -> tuple[Path, str]:
     """Create the data directory and server.toml, mint the admin token, write the unit file.
 
@@ -77,6 +79,8 @@ def install(
     data_dir = Path(data_dir)
     for sub in ("sites", "certs", "logs"):
         (data_dir / sub).mkdir(parents=True, exist_ok=True)
+    if create_user:
+        ensure_service_user(user, data_dir)
     token = "cst_admin_" + secrets.token_urlsafe(32)
     cfg = ServerConfig(data_dir=str(data_dir))
     cfg.admin.hostname = admin_hostname.lower()
@@ -91,13 +95,31 @@ def install(
     save_server_config(config_path, cfg)
     with contextlib.suppress(OSError):
         config_path.chmod(0o600)
+    if create_user:
+        give_to_user(user, data_dir)
     if write_unit:
         exe = exe or Path(sys.argv[0]).resolve()
         unit_dir = unit_dir or Path("/etc/systemd/system")
+        in_home = exe.is_relative_to("/root") or exe.is_relative_to("/home")
+        if exe.is_relative_to("/root"):
+            print(
+                f"warning: {exe} is inside /root, which the {user!r} service user cannot read. "
+                "Install into a shared location instead, for example: "
+                "uv venv /opt/constellation && uv pip install --python /opt/constellation "
+                "constellationcms",
+                file=sys.stderr,
+            )
         try:
             unit_dir.mkdir(parents=True, exist_ok=True)
             (unit_dir / "constellation.service").write_text(
-                UNIT.format(user=user, exe=exe, config=config_path, data=data_dir), encoding="utf-8"
+                UNIT.format(
+                    user=user,
+                    exe=exe,
+                    config=config_path,
+                    data=data_dir,
+                    protect_home="read-only" if in_home else "true",
+                ),
+                encoding="utf-8",
             )
         except OSError as e:
             print(f"warning: could not write the systemd unit: {e}", file=sys.stderr)
@@ -116,6 +138,55 @@ def install(
     return config_path, token
 
 
+def ensure_service_user(user: str, data_dir: Path) -> None:
+    """Create a system account for the service if it does not exist (Linux, as root)."""
+    if sys.platform == "win32":
+        return
+    import pwd
+    import shutil
+    import subprocess
+
+    try:
+        pwd.getpwnam(user)
+        return
+    except KeyError:
+        pass
+    useradd = shutil.which("useradd")
+    if not useradd:
+        print(f"warning: create the {user!r} user yourself; useradd was not found", file=sys.stderr)
+        return
+    nologin = shutil.which("nologin") or "/usr/sbin/nologin"
+    subprocess.run(
+        [
+            useradd,
+            "--system",
+            "--home-dir",
+            str(data_dir),
+            "--no-create-home",
+            "--shell",
+            nologin,
+            "--user-group",
+            user,
+        ],
+        check=True,
+    )
+
+
+def give_to_user(user: str, data_dir: Path) -> None:
+    """Make the data directory and everything in it belong to the service user."""
+    if sys.platform == "win32":
+        return
+    import pwd
+
+    try:
+        entry = pwd.getpwnam(user)
+    except KeyError:
+        return
+    for path in [data_dir, *data_dir.rglob("*")]:
+        with contextlib.suppress(OSError):
+            os.chown(path, entry.pw_uid, entry.pw_gid, follow_symlinks=False)
+
+
 def proxy_snippet(hostnames: list[str], plain_port: int, admin_hostname: str) -> str:
     """An nginx/openresty server block for behind-proxy mode."""
     names = " ".join(sorted(set(hostnames + [admin_hostname])))
@@ -130,7 +201,8 @@ def proxy_snippet(hostnames: list[str], plain_port: int, admin_hostname: str) ->
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Replace, not append: the server trusts this header for client addresses.
+        proxy_set_header X-Forwarded-For $remote_addr;
     }}
 }}
 """

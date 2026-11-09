@@ -46,44 +46,117 @@ def release_id_for(manifest: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
+_LABEL_RX = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
+_HEADER_NAME_RX = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$")
+_LANG_RX = re.compile(r"^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$")
+PLATFORM_NAMES = ("web", "gemini", "gopher")
+
+
+def valid_hostname(host: object) -> bool:
+    """A DNS name made of real labels: no empty labels, no ``..``, at most 253 characters."""
+    if not isinstance(host, str):
+        return False
+    h = host.lower().rstrip(".")
+    return 0 < len(h) <= 253 and all(_LABEL_RX.match(label) for label in h.split("."))
+
+
+def _check_site_config(cfg: object) -> None:
+    """The server-facing part of a release. Every field is checked, because a bad value
+    would otherwise surface only when the server reloads its routing tables."""
+    if not isinstance(cfg, dict):
+        raise ReleaseError("site_config must be a mapping")
+    hostnames = cfg.get("hostnames", {})
+    if not isinstance(hostnames, dict):
+        raise ReleaseError("site_config.hostnames must be a mapping")
+    for platform, hosts in hostnames.items():
+        if platform not in PLATFORM_NAMES or not isinstance(hosts, list):
+            raise ReleaseError("site_config.hostnames maps a platform to a list")
+        for h in hosts:
+            if not valid_hostname(h):
+                raise ReleaseError(f"bad hostname {h!r} for {platform}")
+    canonical = cfg.get("canonical", {})
+    if not isinstance(canonical, dict):
+        raise ReleaseError("site_config.canonical must be a mapping")
+    for platform, host in canonical.items():
+        if platform not in PLATFORM_NAMES or not valid_hostname(host):
+            raise ReleaseError(f"bad canonical hostname for {platform}")
+    language = cfg.get("language", "en")
+    if not isinstance(language, str) or not _LANG_RX.match(language):
+        raise ReleaseError("site_config.language must be a language tag such as en or en-US")
+    redirects = cfg.get("redirects", [])
+    if not isinstance(redirects, list):
+        raise ReleaseError("site_config.redirects must be a list")
+    for r in redirects:
+        if (
+            not isinstance(r, dict)
+            or not isinstance(r.get("from"), str)
+            or not isinstance(r.get("to"), str)
+            or not r["from"].startswith("/")
+            or int(r.get("status", 301)) not in (301, 302, 307, 308)
+            or any(c in r["to"] for c in "\r\n")
+        ):
+            raise ReleaseError(f"bad redirect {r!r}")
+    headers = cfg.get("headers", {})
+    if not isinstance(headers, dict):
+        raise ReleaseError("site_config.headers must be a mapping")
+    for platform, values in headers.items():
+        if platform not in PLATFORM_NAMES or not isinstance(values, dict):
+            raise ReleaseError("site_config.headers maps a platform to a mapping")
+        for k, v in values.items():
+            if (
+                not _HEADER_NAME_RX.match(str(k))
+                or not isinstance(v, str)
+                or any(c in v for c in "\r\n\0")
+            ):
+                raise ReleaseError(f"bad header {k!r}")
+    analytics = cfg.get("analytics", {})
+    if not isinstance(analytics, dict):
+        raise ReleaseError("site_config.analytics must be a mapping")
+
+
 def validate_manifest(manifest: dict[str, Any], *, max_bytes: int) -> None:
-    if manifest.get("version") != 1:
+    if not isinstance(manifest, dict) or manifest.get("version") != 1:
         raise ReleaseError("unsupported manifest version")
     platforms = manifest.get("platforms")
     if not isinstance(platforms, dict) or not platforms:
         raise ReleaseError("manifest has no platforms")
     total = 0
     for name, files in platforms.items():
-        if name not in ("web", "gemini", "gopher"):
+        if name not in PLATFORM_NAMES:
             raise ReleaseError(f"unknown platform {name!r}")
         if not isinstance(files, dict):
             raise ReleaseError(f"platform {name} is not a mapping")
         for path, entry in files.items():
             if (
-                not SAFE_PATH_RX.match(path)
+                not isinstance(path, str)
+                or not SAFE_PATH_RX.match(path)
                 or path.startswith("/")
+                or path.endswith("/")
+                or "" in path.split("/")
                 or ".." in path.split("/")
+                or "." in path.split("/")
                 or "\\" in path
             ):
                 raise ReleaseError(f"unsafe path {path!r}")
+            if not isinstance(entry, dict):
+                raise ReleaseError(f"bad entry for {path}")
             sha = entry.get("sha256", "")
             if not re.fullmatch(r"[0-9a-f]{64}", str(sha)):
                 raise ReleaseError(f"bad sha256 for {path}")
-            size = int(entry.get("size", -1))
-            if size < 0:
+            size = entry.get("size", -1)
+            if not isinstance(size, int) or isinstance(size, bool) or size < 0:
                 raise ReleaseError(f"bad size for {path}")
             total += size
+        # A file and a folder of the same name cannot both exist on disk.
+        paths = set(files)
+        for path in paths:
+            parts = path.split("/")
+            for i in range(1, len(parts)):
+                if "/".join(parts[:i]) in paths:
+                    raise ReleaseError(f"{path!r} needs {'/'.join(parts[:i])!r} to be a folder")
     if total > max_bytes:
         raise ReleaseError("release exceeds the configured size limit")
-    cfg = manifest.get("site_config", {})
-    if not isinstance(cfg, dict):
-        raise ReleaseError("site_config must be a mapping")
-    for platform, hosts in cfg.get("hostnames", {}).items():
-        if not isinstance(hosts, list):
-            raise ReleaseError("hostnames must be lists")
-        for h in hosts:
-            if not re.fullmatch(r"[a-z0-9.-]{1,253}", str(h).lower()):
-                raise ReleaseError(f"bad hostname {h!r} for {platform}")
+    _check_site_config(manifest.get("site_config", {}))
 
 
 @dataclass(slots=True)
@@ -160,22 +233,9 @@ class SiteStore:
         """Materialise the trees from blobs and switch ``current`` atomically."""
         with self._lock:
             manifest = self.manifest(rid)
-            rdir = self.releases / rid
-            for platform, files in manifest["platforms"].items():
-                for path, entry in files.items():
-                    src = self.blobs / entry["sha256"]
-                    if not src.is_file():
-                        raise ReleaseError(f"missing blob for {path}")
-                    dest = rdir / platform / path
-                    if dest.exists():
-                        continue
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        os.link(src, dest)
-                    except OSError:
-                        shutil.copyfile(src, dest)
+            self._materialise(rid, manifest)
             manifest["committed_at"] = time.time()
-            (rdir / "manifest.json").write_text(
+            (self.releases / rid / "manifest.json").write_text(
                 json.dumps(manifest, sort_keys=True), encoding="utf-8"
             )
             self._write_current(rid)
@@ -187,6 +247,37 @@ class SiteStore:
             }
             _atomic_json(self.root / "site.json", site_json)
             return manifest
+
+    def _materialise(self, rid: str, manifest: dict[str, Any]) -> None:
+        """Build a release's file trees from the blob store (hard links where possible)."""
+        rdir = self.releases / rid
+        for platform, files in manifest["platforms"].items():
+            for path, entry in files.items():
+                src = self.blobs / entry["sha256"]
+                if not src.is_file():
+                    raise ReleaseError(f"missing blob for {path}")
+                dest = rdir / platform / path
+                if dest.exists():
+                    continue
+                try:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        os.link(src, dest)
+                    except OSError:
+                        shutil.copyfile(src, dest)
+                except OSError as e:
+                    raise ReleaseError(f"cannot write {platform}/{path}: {e}") from e
+
+    def rebuild_trees(self) -> None:
+        """Recreate the trees of every committed release, for example after a restore.
+        Commit times, the active release and staged-but-uncommitted releases are untouched."""
+        with self._lock:
+            for d in sorted(self.releases.iterdir()) if self.releases.is_dir() else []:
+                if not (d / "manifest.json").is_file():
+                    continue
+                manifest = self.manifest(d.name)
+                if "committed_at" in manifest:
+                    self._materialise(d.name, manifest)
 
     def activate(self, rid: str) -> dict[str, Any]:
         with self._lock:
@@ -328,13 +419,30 @@ class SiteStore:
         return False
 
     def retire(self) -> None:
-        """Stop serving: forget the current pointer and hostnames; keep the data on disk."""
+        """Stop serving: forget the current pointer and hostnames, and revoke every publish
+        token so the site cannot come back without the admin minting a new one. The release
+        data stays on disk."""
         with self._lock:
             (self.root / "current").unlink(missing_ok=True)
             _atomic_json(
                 self.root / "site.json",
-                {"site": self.site_id, "release": None, "site_config": {}, "platforms": []},
+                {
+                    "site": self.site_id,
+                    "release": None,
+                    "site_config": {},
+                    "platforms": [],
+                    "retired": True,
+                },
             )
+            if (self.root / "tokens.json").exists():
+                _atomic_json(self.root / "tokens.json", {"tokens": []})
+
+    def retired(self) -> bool:
+        try:
+            data = json.loads((self.root / "site.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return bool(data.get("retired"))
 
 
 class Store:
@@ -353,14 +461,41 @@ class Store:
         return sorted(p.name for p in d.iterdir() if p.is_dir() and SITE_ID_RX.match(p.name))
 
     def hostname_table(self) -> dict[str, dict[str, str]]:
-        """platform → hostname (lowercase) → site id, from every site's active config."""
+        """platform → hostname (lowercase) → site id, from every site's active config.
+
+        Publishing refuses a hostname another site already serves, so a name normally has
+        one owner. If two sites still claim one (data from before that check), the site that
+        committed first keeps it.
+        """
         table: dict[str, dict[str, str]] = {"web": {}, "gemini": {}, "gopher": {}}
+        owners: list[tuple[float, str]] = []
         for sid in self.sites():
+            site = self.site(sid)
+            m = site.current_manifest() or {}
+            owners.append((float(m.get("committed_at", 0) or 0), sid))
+        for _when, sid in sorted(owners):
             cfg = self.site(sid).site_config()
-            for platform, hosts in cfg.get("hostnames", {}).items():
+            hostnames = cfg.get("hostnames", {})
+            if not isinstance(hostnames, dict):
+                continue
+            for platform, hosts in hostnames.items():
+                if not isinstance(hosts, list):
+                    continue
                 for h in hosts:
-                    table.setdefault(platform, {})[str(h).lower()] = sid
+                    table.setdefault(platform, {}).setdefault(str(h).lower(), sid)
         return table
+
+    def hostname_conflicts(self, site_id: str, site_config: dict[str, Any]) -> list[str]:
+        """Hostnames in ``site_config`` that another site already serves."""
+        table = self.hostname_table()
+        clashes: list[str] = []
+        hostnames = site_config.get("hostnames", {})
+        for platform, hosts in hostnames.items() if isinstance(hostnames, dict) else []:
+            for h in hosts if isinstance(hosts, list) else []:
+                owner = table.get(platform, {}).get(str(h).lower())
+                if owner and owner != site_id:
+                    clashes.append(f"{h} ({platform}, served by {owner})")
+        return clashes
 
 
 def _atomic_json(path: Path, data: Any) -> None:

@@ -81,16 +81,32 @@ def index_output_file(cfg: SiteConfig, platform: str, kind: str) -> str:
     return path.lstrip("/")
 
 
-def media_path(item_slug: str | None, file: str) -> str:
-    """Media lives at the same path on every platform."""
+def media_path(item_slug: str | None, file: str, item_kind: str = "post") -> str:
+    """Media lives at the same path on every platform.
+
+    A leading slash means site-wide media (``site/media/``); otherwise the file belongs to the
+    bundle of the post or page that references it.
+    """
     if file.startswith("/"):
         return "/media/" + file.lstrip("/")
+    file = posixpath.normpath(file).lstrip("/")
     if item_slug is None:
         return "/media/" + file
-    return f"/media/posts/{item_slug}/{file}"
+    folder = "pages" if item_kind == "page" else "posts"
+    return f"/media/{folder}/{item_slug}/{file}"
 
 
-def url_for(ref: Ref, platform: str, cfg: SiteConfig, *, item_slug: str | None = None) -> str:
+INDEX_KINDS = ("tag", "category", "series", "archive")
+
+
+def url_for(
+    ref: Ref,
+    platform: str,
+    cfg: SiteConfig,
+    *,
+    item_slug: str | None = None,
+    item_kind: str = "post",
+) -> str:
     """Resolve a ref to a site-relative URL (or the external URL as given)."""
     frag = f"#{ref.fragment}" if ref.fragment else ""
     if ref.kind == "external":
@@ -100,11 +116,15 @@ def url_for(ref: Ref, platform: str, cfg: SiteConfig, *, item_slug: str | None =
     if ref.kind == "home":
         return "/" + frag
     if ref.kind == "media":
-        return media_path(item_slug, ref.target) + frag
+        return media_path(item_slug, ref.target, item_kind) + frag
+    if ref.kind == "index":
+        return index_path(cfg, platform, ref.target) + frag
     return platform_path(cfg, platform, ref.kind, ref.target) + frag
 
 
 def absolute_url(cfg: SiteConfig, platform: str, path: str) -> str:
+    if urlsplit(path).scheme:
+        return path
     base = cfg.platform(platform).base_url
     return base + path if base else path
 
@@ -175,7 +195,7 @@ class RefResolver:
                 return Ref("page", slug, frag, raw)
             return Ref("post", slug, frag, raw)
         if is_image or "." in posixpath.basename(target):
-            return Ref("media", target, frag, raw)
+            return Ref("media", posixpath.normpath(target), frag, raw)
         return Ref("post", _strip_date(target.strip("/")), frag, raw)
 
     def _site_path(self, path: str) -> Ref | None:
@@ -186,11 +206,18 @@ class RefResolver:
             return Ref("home", "", None, path)
         if path.startswith("/media/"):
             rest = path[len("/media/") :]
-            if rest.startswith("posts/"):
+            if rest.startswith(("posts/", "pages/")):
                 _, _, file = rest.partition("/")
                 _slug, _, file = file.partition("/")
                 return Ref("media", file, None, path)
             return Ref("media", "/" + rest, None, path)
+        # Taxonomy and archive indexes come before the item patterns, which they would
+        # otherwise match (``/tags/`` looks like a page called "tags").
+        for index_kind in INDEX_KINDS:
+            for platform in ("web", "gemini", "gopher"):
+                index = index_path(self.cfg, platform, index_kind)
+                if path in (index, index.rstrip("/")):
+                    return Ref("index", index_kind, None, path)
         for kind in ("post", "page", "tag", "category", "series"):
             pattern = getattr(self.cfg.urls, kind)
             rx = "^" + re.escape(pattern).replace(r"\{slug\}", r"(?P<slug>[^/]+)") + "$"

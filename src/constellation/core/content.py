@@ -9,6 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import frontmatter
+import yaml
 from pydantic import ValidationError
 from slugify import slugify
 
@@ -119,8 +120,34 @@ def _load_posts(folder: Path, tz: tzinfo, problems: list[str]) -> list[Post]:
     return posts
 
 
+def _read_front_matter(source: Path) -> frontmatter.Post:
+    """Parse a Markdown file with front matter, turning parse errors into problems."""
+    try:
+        text = source.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raise ContentError([f"{source}: not UTF-8 text; save it as UTF-8"]) from None
+    try:
+        return frontmatter.loads(text)
+    except yaml.YAMLError as e:
+        detail = " ".join(str(e).split())
+        raise ContentError([f"{source}: front matter is not valid YAML ({detail})"]) from None
+
+
+def _bundle_media(bundle: Path) -> list[Path]:
+    """Every file in a bundle except the Markdown source, including sub-folders."""
+    media: list[Path] = []
+    for f in sorted(bundle.rglob("*")):
+        rel = f.relative_to(bundle)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if f.is_file() and rel.as_posix() != "index.md":
+            _check_media_name(f)
+            media.append(f)
+    return media
+
+
 def _load_post(source: Path, bundle: Path | None, name: str, tz: tzinfo) -> Post:
-    doc = frontmatter.loads(source.read_text(encoding="utf-8"))
+    doc = _read_front_matter(source)
     meta = PostMeta.model_validate(doc.metadata)
     m = DATED_NAME.match(name)
     name_slug = m.group("slug") if m else name
@@ -128,15 +155,15 @@ def _load_post(source: Path, bundle: Path | None, name: str, tz: tzinfo) -> Post
     _check_slug(source, slug)
     date = meta.date
     if date is None and m:
-        date = datetime.strptime(m.group("date"), "%Y-%m-%d")
+        try:
+            date = datetime.strptime(m.group("date"), "%Y-%m-%d")
+        except ValueError:
+            raise ContentError(
+                [f"{source}: {m.group('date')!r} in the name is not a real date"]
+            ) from None
     if date is None:
         raise ContentError([f"{source}: no date in front matter and none in the folder name"])
-    media: list[Path] = []
-    if bundle is not None:
-        for f in sorted(bundle.iterdir()):
-            if f.is_file() and f.name != "index.md" and not f.name.startswith("."):
-                _check_media_name(f)
-                media.append(f)
+    media = _bundle_media(bundle) if bundle is not None else []
     return Post(
         slug=slug,
         source=source,
@@ -167,16 +194,11 @@ def _load_pages(folder: Path, tz: tzinfo, problems: list[str]) -> list[Page]:
         else:
             continue
         try:
-            doc = frontmatter.loads(source.read_text(encoding="utf-8"))
+            doc = _read_front_matter(source)
             meta = PageMeta.model_validate(doc.metadata)
             slug = meta.slug or slugify(name) or slugify(meta.title)
             _check_slug(source, slug)
-            media: list[Path] = []
-            if bundle is not None:
-                for f in sorted(bundle.iterdir()):
-                    if f.is_file() and f.name != "index.md" and not f.name.startswith("."):
-                        _check_media_name(f)
-                        media.append(f)
+            media = _bundle_media(bundle) if bundle is not None else []
             pages.append(
                 Page(
                     slug=slug,
@@ -221,10 +243,13 @@ def _collect_terms(
     if folder.is_dir():
         for entry in sorted(folder.glob("*.md")):
             try:
-                doc = frontmatter.loads(entry.read_text(encoding="utf-8"))
+                doc = _read_front_matter(entry)
                 meta = TermMeta.model_validate(doc.metadata)
             except ValidationError as e:
                 problems.append(f"{entry}: {_fmt_validation(e)}")
+                continue
+            except ContentError as e:
+                problems.extend(e.problems)
                 continue
             slug = entry.stem
             term = terms.get(slug)

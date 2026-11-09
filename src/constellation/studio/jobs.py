@@ -33,6 +33,8 @@ class Jobs:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
         self._running_per_site: set[tuple[str, str]] = set()
+        # The event loop keeps only weak references to tasks; hold them until they finish.
+        self._tasks: set[asyncio.Task[None]] = set()
 
     def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
@@ -51,6 +53,7 @@ class Jobs:
                 raise RuntimeError(f"a {kind} job is already running for {site}")
             job = Job(id=uuid.uuid4().hex[:10], kind=kind, site=site)
             self._jobs[job.id] = job
+            self._prune()
             self._running_per_site.add((site, kind))
 
         async def runner() -> None:
@@ -66,5 +69,15 @@ class Jobs:
                 with self._lock:
                     self._running_per_site.discard((site, kind))
 
-        asyncio.get_running_loop().create_task(runner())
+        task = asyncio.get_running_loop().create_task(runner())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return job
+
+    def _prune(self, keep: int = 200) -> None:
+        """Forget the oldest finished jobs so a long-running studio does not grow forever."""
+        finished = sorted(
+            (j for j in self._jobs.values() if j.status != "running"), key=lambda j: j.started
+        )
+        for j in finished[: max(0, len(self._jobs) - keep)]:
+            self._jobs.pop(j.id, None)

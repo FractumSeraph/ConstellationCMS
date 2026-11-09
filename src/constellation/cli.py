@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import UTC, datetime
@@ -38,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         "export", help="export one platform's build to a folder, over SFTP, or with rsync"
     )
     e.add_argument("site", type=Path)
-    e.add_argument("--platform", required=True, choices=["web", "gemini"])
+    e.add_argument("--platform", required=True, choices=["web", "gemini", "gopher"])
     e.add_argument(
         "--target",
         required=True,
@@ -54,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--dry-run", action="store_true", help="show the diff and stop")
     e.add_argument("--yes", action="store_true", help="apply without asking")
     e.add_argument("--no-delete", action="store_true", help="never delete remote files")
+    e.add_argument(
+        "--mirror",
+        action="store_true",
+        help="rsync only: also delete every remote file that is not in this export",
+    )
     e.set_defaults(func=cmd_export)
 
     s = sub.add_parser("studio", help="run the studio web app")
@@ -141,13 +147,23 @@ def main(argv: list[str] | None = None) -> int:
 
 def _load(path: Path) -> Site:
     from constellation.core.content import ContentError, load_site
+    from constellation.core.themes import ThemeError, load_theme, workspace_theme_dirs
 
     try:
-        return load_site(path)
+        site = load_site(path)
     except ContentError as e:
         for p in e.problems:
             print(f"error: {p}", file=sys.stderr)
         raise SystemExit(2) from e
+    except OSError as e:
+        print(f"error: cannot read the site: {e}", file=sys.stderr)
+        raise SystemExit(2) from e
+    try:
+        load_theme(site.config.site.theme, search=workspace_theme_dirs(site.root))
+    except ThemeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        raise SystemExit(2) from e
+    return site
 
 
 def cmd_build(args: argparse.Namespace) -> int:
@@ -220,10 +236,17 @@ def cmd_export(args: argparse.Namespace) -> int:
         return 1
     files = layout_files(build, args.platform, args.layout, site)
     if args.target.startswith("rsync:"):
-        print(
-            export_rsync(files, args.target, dry_run=args.dry_run, delete=not args.no_delete),
-            end="",
-        )
+        # Show what rsync would do, then ask, as the other targets do.
+        print(export_rsync(files, args.target, dry_run=True, delete=args.mirror), end="")
+        if args.dry_run:
+            return 0
+        if not args.yes:
+            answer = input("apply? [y/N] ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("aborted")
+                return 1
+        print(export_rsync(files, args.target, dry_run=False, delete=args.mirror), end="")
+        print("done")
         return 0
     target = open_target(args.target)
     try:
@@ -305,6 +328,7 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         plain_port=args.plain_port,
         studio_hostname=args.with_studio,
         studio_workspace=args.studio_workspace,
+        create_user=not args.no_unit and hasattr(os, "geteuid") and os.geteuid() == 0,
     )
     if args.with_studio:
         print(

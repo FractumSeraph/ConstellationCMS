@@ -8,6 +8,7 @@ are included.
 from __future__ import annotations
 
 import datetime as dt
+import os
 import tarfile
 from pathlib import Path
 
@@ -18,6 +19,9 @@ def backup(data_dir: Path, out_dir: Path) -> Path:
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     target = out_dir / f"constellation-backup-{stamp}.tar.gz"
     tmp = target.with_suffix(".tmp")
+    # The archive holds private keys, token hashes and visitor addresses.
+    tmp.touch(mode=0o600)
+    os.chmod(tmp, 0o600)
     with tarfile.open(tmp, "w:gz") as tar:
         for path in sorted(data_dir.rglob("*")):
             if not path.is_file():
@@ -55,14 +59,7 @@ def restore(archive: Path, data_dir: Path) -> list[str]:
 
     store = Store(data_dir)
     for sid in store.sites():
-        site = store.site(sid)
-        current = site.current()
-        for d in sorted((site.releases).iterdir()) if site.releases.is_dir() else []:
-            if (d / "manifest.json").is_file():
-                try:
-                    site.commit(d.name)
-                except Exception:  # noqa: BLE001
-                    continue
-        if current:
-            site.activate(current)
+        # Rebuild trees only; the active release, retired sites and retention order stay as
+        # they were when the backup was taken.
+        store.site(sid).rebuild_trees()
     return store.sites()

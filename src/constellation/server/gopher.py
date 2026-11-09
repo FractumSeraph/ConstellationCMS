@@ -14,6 +14,7 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+WRITE_TIMEOUT = 30.0
 log = logging.getLogger("constellation.server.gopher")
 EventSink = Callable[[dict[str, object]], Awaitable[None] | None]
 TEXT_EXT = (".txt", ".md", ".gmi", ".xml", ".json", ".csv")
@@ -73,7 +74,7 @@ class GopherServer:
                 else:
                     selector = raw.split(b"\t", 1)[0].decode("utf-8", "replace")
                     status, nbytes, site = await self._serve(writer, selector)
-                await writer.drain()
+                await asyncio.wait_for(writer.drain(), timeout=WRITE_TIMEOUT)
             except (ConnectionError, OSError) as e:
                 log.debug("connection error: %s", e)
             finally:
@@ -138,6 +139,15 @@ class GopherServer:
             return self._error(writer, "Not found"), 0, site
         if not resolved.is_file():
             return self._error(writer, "Not found"), 0, site
+        if resolved.suffix.lower() not in TEXT_EXT:
+            # Binary files (images, downloads) are streamed, never held whole in memory.
+            sent = 0
+            with resolved.open("rb") as fh:
+                while chunk := fh.read(65536):
+                    writer.write(chunk)
+                    sent += len(chunk)
+                    await asyncio.wait_for(writer.drain(), timeout=WRITE_TIMEOUT)
+            return 20, sent, site
         data = resolved.read_bytes()
         if resolved.suffix.lower() in TEXT_EXT:
             lines = data.decode("utf-8", "replace").split("\n")

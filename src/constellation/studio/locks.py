@@ -76,10 +76,14 @@ def held_elsewhere(site_root: Path, machine_id: str) -> Lock | None:
 
 
 def take_over(site_root: Path, machine_id: str) -> None:
-    """Remove stale locks from other machines (only allowed once they are stale)."""
+    """Remove other machines' locks at the user's explicit request.
+
+    The banner offering this appears while another lock looks fresh, which is also what a
+    machine that crashed or lost its sync connection leaves behind. The other machine sees
+    this machine's lock on its next heartbeat and becomes read-only.
+    """
     for lock in other_locks(site_root, machine_id):
-        if not lock.fresh:
-            release_lock(site_root, lock.machine_id)
+        release_lock(site_root, lock.machine_id)
 
 
 def machine_label() -> str:

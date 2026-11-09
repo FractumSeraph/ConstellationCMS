@@ -3,9 +3,11 @@ API under ``/_constellation/`` on the admin hostname."""
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import hashlib
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -26,7 +28,23 @@ from constellation import __version__
 from constellation.server.config import ServerConfig
 from constellation.server.releases import ReleaseError, Store, verify_admin_token
 
+STUDIO_MAX_BODY = 30 * 1024 * 1024
 log = logging.getLogger("constellation.server.http")
+
+
+async def _read_capped(request: Request, limit: int) -> bytes | None:
+    """The request body, or None once it passes ``limit`` (chunked bodies included)."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        return None
+    buf = bytearray()
+    async for chunk in request.stream():
+        buf += chunk
+        if len(buf) > limit:
+            return None
+    return bytes(buf)
+
+
 EventSink = Callable[[dict[str, object]], Awaitable[None] | None]
 MAX_BLOB = 256 * 1024 * 1024
 MAX_MANIFEST = 32 * 1024 * 1024
@@ -59,6 +77,8 @@ class HttpApp:
         self.headers: dict[str, dict[str, str]] = {}
         self.site_lang: dict[str, str] = {}
         self._rate: dict[str, list[float]] = {}
+        self._auth_ok: dict[str, float] = {}
+        self._verify_slots: asyncio.Semaphore | None = None
         self.reload()
         self.app = Starlette(
             routes=[
@@ -100,8 +120,13 @@ class HttpApp:
                     methods=["POST"],
                 ),
                 Route("/.well-known/acme-challenge/{token}", self.acme_challenge, methods=["GET"]),
-                Route("/{path:path}", self.static, methods=["GET", "HEAD"]),
-            ]
+                Route(
+                    "/{path:path}",
+                    self.static,
+                    methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+                ),
+            ],
+            exception_handlers={ReleaseError: self._release_error},
         )
 
     # ---- routing tables ------------------------------------------------------------------
@@ -111,16 +136,26 @@ class HttpApp:
         redirects: dict[str, list[dict[str, Any]]] = {}
         headers: dict[str, dict[str, str]] = {}
         for sid in self.store.sites():
-            cfg = self.store.site(sid).site_config()
-            hosts = [str(h).lower() for h in cfg.get("hostnames", {}).get("web", [])]
-            canon = str(cfg.get("canonical", {}).get("web") or (hosts[0] if hosts else "")).lower()
+            try:
+                cfg = self.store.site(sid).site_config()
+                hosts = [str(h).lower() for h in cfg.get("hostnames", {}).get("web", [])]
+                canon = str(
+                    cfg.get("canonical", {}).get("web") or (hosts[0] if hosts else "")
+                ).lower()
+                site_redirects = list(cfg.get("redirects", []))
+                site_headers = {
+                    str(k): str(v) for k, v in cfg.get("headers", {}).get("web", {}).items()
+                }
+                lang = str(cfg.get("language", "en"))
+            except (AttributeError, TypeError, ValueError):
+                # One site's bad config must not take every other site down.
+                log.exception("ignoring the server config of site %s", sid)
+                continue
             for h in hosts:
                 canonical[h] = canon
-            redirects[sid] = list(cfg.get("redirects", []))
-            headers[sid] = {
-                str(k): str(v) for k, v in cfg.get("headers", {}).get("web", {}).items()
-            }
-            self.site_lang[sid] = str(cfg.get("language", "en"))
+            redirects[sid] = site_redirects
+            headers[sid] = site_headers
+            self.site_lang[sid] = lang
         self.table, self.canonical, self.redirects, self.headers = (
             table,
             canonical,
@@ -129,11 +164,12 @@ class HttpApp:
         )
 
     def _host(self, request: Request) -> str:
+        raw = request.headers.get("host") or ""
         if self.cfg.https.tls_mode == "behind-proxy":
             fwd = request.headers.get("x-forwarded-host")
             if fwd:
-                return fwd.split(",")[0].strip().split(":")[0].lower()
-        return (request.headers.get("host") or "").split(":")[0].lower()
+                raw = fwd.split(",")[-1].strip()
+        return raw.split(":")[0].lower().rstrip(".")
 
     def _is_https(self, request: Request) -> bool:
         if self.cfg.https.tls_mode == "behind-proxy":
@@ -144,7 +180,9 @@ class HttpApp:
         if self.cfg.https.tls_mode == "behind-proxy":
             fwd = request.headers.get("x-forwarded-for")
             if fwd:
-                return fwd.split(",")[0].strip()
+                # The proxy appends the address it saw; entries to its left are whatever the
+                # client chose to send.
+                return fwd.split(",")[-1].strip()
         return request.client.host if request.client else ""
 
     # ---- static -----------------------------------------------------------------------------
@@ -153,6 +191,8 @@ class HttpApp:
         host = self._host(request)
         if self.cfg.studio.enabled and host == self.cfg.studio.hostname.lower():
             return await self._proxy_studio(request)
+        if request.method not in ("GET", "HEAD"):
+            return PlainTextResponse("Method not allowed.\n", status_code=405)
         site = self.table.get(host)
         response: Response
         if site is None:
@@ -167,16 +207,21 @@ class HttpApp:
     async def _serve(self, request: Request, host: str, site: str) -> Response:
         canon = self.canonical.get(host, host)
         path = request.url.path
+        query = f"?{request.url.query}" if request.url.query else ""
         if path.startswith("/.well-known/acme-challenge/"):
             return await self.acme_challenge(request)
+        port = "" if self.cfg.https.port == 443 else f":{self.cfg.https.port}"
         if host != canon:
-            return RedirectResponse(f"https://{canon}{path}", status_code=301)
+            return RedirectResponse(f"https://{canon}{port}{path}{query}", status_code=301)
         if (
             not self._is_https(request)
             and self.cfg.https.enabled
             and self.cfg.https.tls_mode != "behind-proxy"
         ):
-            return RedirectResponse(f"https://{host}{path}", status_code=301)
+            return RedirectResponse(f"https://{host}{port}{path}{query}", status_code=301)
+        if "//" in path:
+            # "//about" would otherwise become a protocol-relative redirect to host "about".
+            return RedirectResponse(re.sub(r"/{2,}", "/", path) + query, status_code=301)
         for rule in self.redirects.get(site, []):
             if rule.get("from") == path:
                 return RedirectResponse(
@@ -196,7 +241,7 @@ class HttpApp:
             return self._not_found(root)
         if resolved.is_dir():
             if not path.endswith("/"):
-                return RedirectResponse(path + "/", status_code=301)
+                return RedirectResponse(path + "/" + query, status_code=301)
             resolved = resolved / "index.html"
         if not resolved.is_file():
             return self._not_found(root)
@@ -219,7 +264,9 @@ class HttpApp:
         headers["X-Forwarded-Proto"] = "https"
         headers["X-Forwarded-Host"] = self.cfg.studio.hostname
         headers["Host"] = self.cfg.studio.hostname
-        body = await request.body()
+        body = await _read_capped(request, STUDIO_MAX_BODY)
+        if body is None:
+            return PlainTextResponse("Request too large.\n", status_code=413)
         async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
             try:
                 r = await client.request(request.method, url, headers=headers, content=body)
@@ -234,6 +281,9 @@ class HttpApp:
             not in ("content-encoding", "transfer-encoding", "connection", "content-length")
         }
         return Response(r.content, status_code=r.status_code, headers=out_headers)
+
+    async def _release_error(self, request: Request, exc: Exception) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
     def _not_found(self, root: Path) -> Response:
         page = root / "404.html"
@@ -293,6 +343,8 @@ class HttpApp:
             return JSONResponse({"error": "not the admin hostname"}, status_code=404)
         ip = self._client_ip(request)
         now = time.time()
+        if len(self._rate) > 10_000:
+            self._rate = {k: v for k, v in self._rate.items() if v and now - v[-1] < 60}
         bucket = [t for t in self._rate.get(ip, []) if now - t < 60]
         if len(bucket) >= self.cfg.limits.rate_limit_per_minute:
             return JSONResponse({"error": "rate limited"}, status_code=429)
@@ -300,25 +352,65 @@ class HttpApp:
         self._rate[ip] = bucket
         return None
 
+    def _hostname_problem(self, site: str, site_config: Any) -> str:
+        """A release may only claim hostnames no other site serves, and never the server's
+        own admin or studio hostname."""
+        if not isinstance(site_config, dict):
+            return ""
+        reserved = {h.lower() for h in (self.cfg.admin.hostname, self.cfg.studio.hostname) if h}
+        hostnames = site_config.get("hostnames", {})
+        for hosts in hostnames.values() if isinstance(hostnames, dict) else []:
+            for h in hosts if isinstance(hosts, list) else []:
+                if str(h).lower() in reserved:
+                    return f"{h} is this server's own hostname and cannot be used by a site"
+        clashes = self.store.hostname_conflicts(site, site_config)
+        if clashes:
+            return "hostnames already used by another site: " + ", ".join(clashes)
+        return ""
+
     def _bearer(self, request: Request) -> str:
         auth = request.headers.get("authorization", "")
         return auth[7:].strip() if auth.lower().startswith("bearer ") else ""
 
-    def _admin_ok(self, request: Request) -> bool:
-        raw = self._bearer(request)
-        return (
-            bool(raw)
-            and bool(self.cfg.admin.token_hash)
-            and verify_admin_token(self.cfg.admin.token_hash, raw)
-        )
+    async def _verified(self, raw: str, scope: str, check: Callable[[], bool]) -> bool:
+        """Run an Argon2 token check off the event loop, at most two at a time, and remember
+        tokens that passed so a publish's many blob uploads verify once."""
+        key = hashlib.sha256(f"{scope}\0{raw}".encode()).hexdigest()
+        now = time.monotonic()
+        if self._auth_ok.get(key, 0.0) > now:
+            return True
+        if self._verify_slots is None:
+            self._verify_slots = asyncio.Semaphore(2)
+        async with self._verify_slots:
+            ok = await asyncio.to_thread(check)
+        if ok:
+            if len(self._auth_ok) > 1000:
+                self._auth_ok = {k: t for k, t in self._auth_ok.items() if t > now}
+            self._auth_ok[key] = now + 600
+        return ok
 
-    def _site_ok(self, request: Request, site: str) -> bool:
+    def forget_tokens(self) -> None:
+        """Drop remembered tokens after any change to who may publish."""
+        self._auth_ok.clear()
+
+    async def _admin_ok(self, request: Request) -> bool:
+        raw = self._bearer(request)
+        hashed = self.cfg.admin.token_hash
+        if not raw or not hashed or not raw.startswith("cst_admin_"):
+            return False
+        return await self._verified(raw, "admin", lambda: verify_admin_token(hashed, raw))
+
+    async def _site_ok(self, request: Request, site: str) -> bool:
         raw = self._bearer(request)
         if not raw:
             return False
-        if self._admin_ok(request):
-            return True
-        return self.store.site(site).verify_token(raw)
+        if raw.startswith("cst_admin_"):
+            return await self._admin_ok(request)
+        try:
+            store = self.store.site(site)
+        except ReleaseError:
+            return False
+        return await self._verified(raw, f"site:{site}", lambda: store.verify_token(raw))
 
     async def acme_challenge(self, request: Request) -> Response:
         token = request.path_params["token"]
@@ -361,7 +453,7 @@ class HttpApp:
     async def server_config(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         if request.method == "GET":
             data = self.cfg.model_dump()
@@ -404,7 +496,7 @@ class HttpApp:
     async def server_certs(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         from constellation.server.tls import cert_dir, expiry, fingerprint
 
@@ -446,7 +538,7 @@ class HttpApp:
     async def regenerate_cert(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         platform, host = request.path_params["platform"], request.path_params["host"].lower()
         if platform != "gemini":
@@ -467,7 +559,7 @@ class HttpApp:
         if (g := self._api_guard(request)) is not None:
             return g
         site, report = request.path_params["site"], request.path_params["report"]
-        if not self._site_ok(request, site):
+        if not await self._site_ok(request, site):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         if self.analytics is None:
             return JSONResponse({"error": "analytics are disabled on this server"}, status_code=404)
@@ -494,7 +586,7 @@ class HttpApp:
     async def status(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         sites = []
         for sid in self.store.sites():
@@ -513,7 +605,7 @@ class HttpApp:
     async def sites(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         return JSONResponse({"sites": self.store.sites()})
 
@@ -521,7 +613,7 @@ class HttpApp:
         if (g := self._api_guard(request)) is not None:
             return g
         site = request.path_params["site"]
-        if not self._site_ok(request, site):
+        if not await self._site_ok(request, site):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         m = self.store.site(site).current_manifest() if self.store.site(site).exists() else None
         if m is None:
@@ -532,7 +624,7 @@ class HttpApp:
         if (g := self._api_guard(request)) is not None:
             return g
         site = request.path_params["site"]
-        if not self._site_ok(request, site):
+        if not await self._site_ok(request, site):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         store = self.store.site(site)
         if request.method == "GET":
@@ -542,17 +634,20 @@ class HttpApp:
                     "current": store.current(),
                 }
             )
-        body = await request.body()
-        if len(body) > MAX_MANIFEST:
+        body = await _read_capped(request, MAX_MANIFEST)
+        if body is None:
             return JSONResponse({"error": "manifest too large"}, status_code=413)
         try:
             import json
 
             manifest = json.loads(body)
-            if request.query_params.get("dry_run"):
-                from constellation.server.releases import release_id_for, validate_manifest
+            from constellation.server.releases import release_id_for, validate_manifest
 
-                validate_manifest(manifest, max_bytes=self.cfg.limits.max_release_bytes)
+            validate_manifest(manifest, max_bytes=self.cfg.limits.max_release_bytes)
+            clash = self._hostname_problem(site, manifest.get("site_config", {}))
+            if clash:
+                return JSONResponse({"error": clash}, status_code=409)
+            if request.query_params.get("dry_run"):
                 missing = sorted(
                     {
                         e["sha256"]
@@ -573,13 +668,13 @@ class HttpApp:
         if (g := self._api_guard(request)) is not None:
             return g
         site, sha = request.path_params["site"], request.path_params["sha"]
-        if not self._site_ok(request, site):
+        if not await self._site_ok(request, site):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         length = int(request.headers.get("content-length", "0") or 0)
         if length > MAX_BLOB:
             return JSONResponse({"error": "blob too large"}, status_code=413)
-        data = await request.body()
-        if len(data) > MAX_BLOB:
+        data = await _read_capped(request, MAX_BLOB)
+        if data is None:
             return JSONResponse({"error": "blob too large"}, status_code=413)
         if hashlib.sha256(data).hexdigest() != sha:
             return JSONResponse({"error": "hash mismatch"}, status_code=409)
@@ -590,10 +685,13 @@ class HttpApp:
         if (g := self._api_guard(request)) is not None:
             return g
         site, rid = request.path_params["site"], request.path_params["rid"]
-        if not self._site_ok(request, site):
+        if not await self._site_ok(request, site):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         store = self.store.site(site)
         try:
+            clash = self._hostname_problem(site, store.manifest(rid).get("site_config", {}))
+            if clash:
+                return JSONResponse({"error": clash}, status_code=409)
             store.commit(rid)
         except ReleaseError as e:
             return JSONResponse({"error": str(e)}, status_code=409)
@@ -607,10 +705,14 @@ class HttpApp:
         if (g := self._api_guard(request)) is not None:
             return g
         site, rid = request.path_params["site"], request.path_params["rid"]
-        if not self._site_ok(request, site):
+        if not await self._site_ok(request, site):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         try:
-            self.store.site(site).activate(rid)
+            store = self.store.site(site)
+            clash = self._hostname_problem(site, store.manifest(rid).get("site_config", {}))
+            if clash:
+                return JSONResponse({"error": clash}, status_code=409)
+            store.activate(rid)
         except ReleaseError as e:
             return JSONResponse({"error": str(e)}, status_code=409)
         self.reload()
@@ -621,7 +723,7 @@ class HttpApp:
     async def tokens(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         site = request.path_params["site"]
         try:
@@ -637,17 +739,19 @@ class HttpApp:
     async def revoke_token(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         ok = self.store.site(request.path_params["site"]).revoke_token(request.path_params["tid"])
+        self.forget_tokens()
         return JSONResponse({"ok": ok}, status_code=200 if ok else 404)
 
     async def retire_site(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:
             return g
-        if not self._admin_ok(request):
+        if not await self._admin_ok(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         self.store.site(request.path_params["site"]).retire()
+        self.forget_tokens()
         self.reload()
         if self.on_release:
             self.on_release(request.path_params["site"])

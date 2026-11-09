@@ -13,7 +13,7 @@
       <select id="m-status">{% for s in ['draft', 'published', 'hidden'] %}<option value="{{ s }}" {% if (item.meta.status or 'published') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
     </label>
     {% if item.kind == 'post' %}
-    <label>Date <input id="m-date" type="datetime-local" value="{{ (item.meta.date | string)[:16] if item.meta.date else '' }}"></label>
+    <label>Date <input id="m-date" type="datetime-local" value="{{ date_input }}"> <span class="muted small">{{ timezone }}</span></label>
     <label>Tags <input id="m-tags" value="{{ item.meta.tags | join(', ') if item.meta.tags else '' }}" placeholder="comma, separated"></label>
     <label>Categories <input id="m-categories" value="{{ item.meta.categories | join(', ') if item.meta.categories else '' }}"></label>
     <label>Series <input id="m-series" value="{{ item.meta.series or '' }}"></label>
@@ -24,7 +24,7 @@
     {% endif %}
     <label>Author <input id="m-author" list="authors" value="{{ item.meta.author or '' }}"><datalist id="authors">{% for a in authors %}<option value="{{ a }}">{% endfor %}</datalist></label>
     <label>Summary <textarea id="m-summary" rows="3">{{ item.meta.summary or '' }}</textarea></label>
-    <label>Featured image <select id="m-image"><option value="">none</option>{% for m in item.media %}<option value="{{ m }}" {% if item.meta.image == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+    <label>Featured image <select id="m-image"><option value="">none</option>{% if item.meta.image and item.meta.image not in item.media %}<option value="{{ item.meta.image }}" selected>{{ item.meta.image }}</option>{% endif %}{% for m in item.media %}<option value="{{ m }}" {% if item.meta.image == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
     <label>Image alt <input id="m-image_alt" value="{{ item.meta.image_alt or '' }}"></label>
     <details><summary>SEO</summary>
       <label>Meta title <input id="m-seo-title" value="{{ item.meta.seo.title if item.meta.seo else '' }}"></label>

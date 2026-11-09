@@ -5,17 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import posixpath
+import re
 import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
+from markupsafe import Markup
 from slugify import slugify
 
 from constellation.core import feeds
 from constellation.core.build.images import ImageSet, make_variants
-from constellation.core.markdown.document import Document, Ref, Warning
+from constellation.core.markdown.document import Document, Ref, Severity, Warning
 from constellation.core.markdown.parse import parse_markdown
 from constellation.core.models import Page, Post, Site, Term
 from constellation.core.render.gemtext import GemtextRenderer
@@ -32,7 +36,13 @@ from constellation.core.routes import (
     platform_path,
     url_for,
 )
-from constellation.core.themes import Theme, load_theme, make_environment, theme_chain
+from constellation.core.themes import (
+    Theme,
+    load_theme,
+    make_environment,
+    theme_chain,
+    workspace_theme_dirs,
+)
 
 MEDIA_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -96,6 +106,17 @@ class PlatformBuild:
         mt = media_type or media_type_for(path)
         if self.platform == "gemini" and mt == "text/gemini":
             mt = "text/gemini"
+        if path in self.files:
+            self.warnings.append(
+                Warning(
+                    "PATH-COLLISION",
+                    "error",
+                    self.platform,
+                    0,
+                    f"two things want to be written to {path!r}; "
+                    "rename the page or post that uses a reserved path",
+                )
+            )
         self.files[path] = BuiltFile(path, raw, mt, source)
 
     def manifest(self) -> dict[str, dict[str, Any]]:
@@ -164,6 +185,8 @@ def build_site(
         now = now.replace(tzinfo=UTC)
     cfg = site.config
     wanted = platforms or cfg.enabled_platforms()
+    if theme_search is None:
+        theme_search = workspace_theme_dirs(site.root)
     theme = load_theme(cfg.site.theme, search=theme_search)
     chain = theme_chain(theme, search=theme_search)
     overrides = site.root / "theme"
@@ -179,7 +202,7 @@ def build_site(
         cfg, post_slugs={p.slug for p in site.posts}, page_slugs={p.slug for p in site.pages}
     )
     docs = _parse_all(visible, pages, resolver)
-    link_problems = _check_links(site, docs, visible, pages)
+    link_problems = _check_links(site, docs, visible, pages, now)
 
     image_sets = _image_sets(visible, pages, site) if "web" in wanted else {}
 
@@ -215,7 +238,7 @@ def _image_sets(posts: list[Post], pages: list[Page], site: Site) -> dict[str, I
     sets: dict[str, ImageSet] = {}
     for item in [*posts, *pages]:
         for m in item.media:
-            url = media_path(item.slug if item.kind == "post" else None, m.name)
+            url = media_path(item.slug, item.media_name(m), item.kind)
             iset = make_variants(m, url)
             if iset is not None:
                 sets[url] = iset
@@ -242,64 +265,76 @@ def _parse_all(posts: list[Post], pages: list[Page], resolver: RefResolver) -> d
 
 
 def _check_links(
-    site: Site, docs: dict[str, Document], visible: list[Post], pages: list[Page]
+    site: Site,
+    docs: dict[str, Document],
+    visible: list[Post],
+    pages: list[Page],
+    now: datetime,
 ) -> list[Warning]:
-    """Links to drafts, future posts, missing pages or missing media are errors."""
+    """Links to drafts, future posts, missing pages or missing media are errors.
+
+    Problems inside drafts and scheduled posts are reported as warnings instead, so an
+    unfinished draft never blocks publishing the rest of the site.
+    """
+    published = {p.slug for p in site.visible_posts(now)}
     post_slugs = {p.slug for p in visible}
     page_slugs = {p.slug for p in pages}
+    site_media = site.root / "media"
     problems: list[Warning] = []
     for key, doc in docs.items():
         kind, _, slug = key.partition(":")
-        item = site.post_by_slug(slug) if kind == "post" else site.page_by_slug(slug)
-        media_names = {m.name for m in item.media} if item else set()
-        site_media = site.root / "media"
+        item: Post | Page | None = (
+            site.post_by_slug(slug) if kind == "post" else site.page_by_slug(slug)
+        )
+        if item is None:
+            continue
+        unfinished = item.meta.status == "draft" or (kind == "post" and slug not in published)
+        severity: Severity = "warn" if unfinished else "error"
+        note = " (in a draft)" if unfinished else ""
+        media_names = {item.media_name(m) for m in item.media}
+
+        def report(
+            code: str, message: str, key: str = key, severity: Severity = severity, note: str = note
+        ) -> None:
+            problems.append(Warning(code, severity, "all", 0, f"{key}: {message}{note}"))
+
+        def check_media(target: str, kind: str = kind, media_names: set[str] = media_names) -> None:
+            if target.startswith("/"):
+                if not (site_media / target.lstrip("/")).is_file():
+                    report("LINK-BROKEN-MEDIA", f"site media {target!r} not found")
+            elif posixpath.normpath(target) not in media_names:
+                report("LINK-BROKEN-MEDIA", f"media {target!r} not found next to the {kind}")
+
         for ref in doc.refs:
             if ref.kind == "post" and ref.target not in post_slugs:
-                code = (
-                    "LINK-UNPUBLISHED" if site.post_by_slug(ref.target) else "LINK-BROKEN-INTERNAL"
-                )
-                problems.append(
-                    Warning(
-                        code,
-                        "error",
-                        "all",
-                        0,
-                        f"{key}: link to post {ref.target!r} which {'is not published' if code == 'LINK-UNPUBLISHED' else 'does not exist'}",
+                if site.post_by_slug(ref.target):
+                    report(
+                        "LINK-UNPUBLISHED", f"link to post {ref.target!r} which is not published"
                     )
-                )
+                else:
+                    report(
+                        "LINK-BROKEN-INTERNAL", f"link to post {ref.target!r} which does not exist"
+                    )
             elif ref.kind == "page" and ref.target not in page_slugs:
-                problems.append(
-                    Warning(
-                        "LINK-BROKEN-INTERNAL",
-                        "error",
-                        "all",
-                        0,
-                        f"{key}: link to page {ref.target!r} which does not exist",
-                    )
-                )
+                report("LINK-BROKEN-INTERNAL", f"link to page {ref.target!r} which does not exist")
             elif ref.kind == "media":
-                if ref.target.startswith("/"):
-                    if not (site_media / ref.target.lstrip("/")).is_file():
-                        problems.append(
-                            Warning(
-                                "LINK-BROKEN-MEDIA",
-                                "error",
-                                "all",
-                                0,
-                                f"{key}: site media {ref.target!r} not found",
-                            )
-                        )
-                elif ref.target not in media_names:
-                    problems.append(
-                        Warning(
-                            "LINK-BROKEN-MEDIA",
-                            "error",
-                            "all",
-                            0,
-                            f"{key}: media {ref.target!r} not found next to the post",
-                        )
-                    )
+                check_media(ref.target)
+        image = item.meta.image
+        if image and not urlsplit(image).scheme:
+            check_media(image if not image.startswith("media:") else image[len("media:") :])
     return problems
+
+
+_CSS_UNSAFE = re.compile(r"[;{}<>\\]|url\s*\(|expression\s*\(|@import", re.IGNORECASE)
+
+
+def css_value(value: object) -> Markup:
+    """A theme setting made safe to place inside one CSS declaration."""
+    return Markup(_CSS_UNSAFE.sub("", str(value)).replace("\n", " ").strip())
+
+
+# Templates that render lists of posts and need context a page cannot provide.
+LIST_TEMPLATES = frozenset({"home", "list", "terms", "archive", "404", "base", "post"})
 
 
 class _Context:
@@ -327,6 +362,7 @@ class _Context:
         self.listed = listed
         self.docs = docs
         self.theme_settings: dict[str, Any] = {}
+        self.shown_terms: set[tuple[str, str]] = set()
         for t in reversed(chain):
             self.theme_settings.update(t.defaults())
         user_settings = site.config.theme.get("settings")
@@ -360,6 +396,11 @@ class _Context:
             return platform_path(cfg, platform, kind, slug)
 
         def asset(name: str) -> str:
+            # The first theme in the chain that ships the file, so a child theme that only
+            # overrides templates still links its parent's stylesheet.
+            for t in self.chain:
+                if (t.static_dir() / name).is_file():
+                    return f"/assets/{t.name}/{name}"
             return f"/assets/{self.chain[0].name}/{name}"
 
         self.env.globals.update(
@@ -396,14 +437,14 @@ class _Context:
             return Markup(text) if platform == "web" else text
 
         self.env.filters["numeral"] = numeral
+        self.env.filters["css_value"] = css_value
         self.env.filters["ddate"] = lambda d, fmt="%{%A, %B %d%}, %Y YOLD": _ddate(d, fmt, cfg)
 
     def _render_body(self, item: Post | Page) -> Rendered:
         doc = self.docs[f"{item.kind}:{item.slug}"]
-        slug = item.slug if item.kind == "post" else None
 
         def u(ref: Ref) -> str:
-            return url_for(ref, self.platform, self.cfg, item_slug=slug)
+            return url_for(ref, self.platform, self.cfg, item_slug=item.slug, item_kind=item.kind)
 
         if self.platform == "gemini":
             res = GemtextRenderer(self.cfg.render.gemini, u).render(doc)
@@ -418,7 +459,8 @@ class _Context:
             res = HtmlRenderer(u, image_srcset=srcsets).render(doc)
         summary = item.meta.summary or summary_text(doc)
         if item.kind == "post":
-            self.bodies[item.slug] = res.text
+            # Feeds carry readable text; on Gopher the body is a gophermap, so use the text file.
+            self.bodies[item.slug] = self._gopher_text if self.platform == "gopher" else res.text
             self.summaries[item.slug] = summary
         return Rendered(res.text, summary, res.warnings, doc)
 
@@ -453,7 +495,16 @@ class _Context:
             self.listed[idx + 1] if idx is not None and idx + 1 < len(self.listed) else None
         )
         ctx["next_post"] = self.listed[idx - 1] if idx is not None and idx > 0 else None
-        ctx["featured_image"] = media_path(post.slug, post.meta.image) if post.meta.image else ""
+        ctx["featured_image"] = (
+            url_for(
+                RefResolver(self.cfg).resolve(post.meta.image, is_image=True),
+                self.platform,
+                self.cfg,
+                item_slug=post.slug,
+            )
+            if post.meta.image
+            else ""
+        )
         ctx["featured_srcset"] = (
             self.image_sets[ctx["featured_image"]].srcset()
             if ctx["featured_image"] in self.image_sets
@@ -490,9 +541,30 @@ class _Context:
         ctx = self._common(page, rendered)
         name = page.meta.template or "page"
         ext = {"gemini": "gmi", "gopher": "map"}.get(self.platform, "html")
+        if name in LIST_TEMPLATES:
+            pb.warnings.append(
+                Warning(
+                    "TEMPLATE-NOT-FOR-PAGES",
+                    "warn",
+                    self.platform,
+                    0,
+                    f"{key}: template {name!r} lists posts and cannot render a page; using 'page'",
+                )
+            )
+            name = "page"
         try:
             template = self.env.get_template(f"{name}.{ext}")
         except Exception:
+            if page.meta.template:
+                pb.warnings.append(
+                    Warning(
+                        "TEMPLATE-MISSING",
+                        "warn",
+                        self.platform,
+                        0,
+                        f"{key}: theme has no {name}.{ext}; using the page template",
+                    )
+                )
             template = self.env.get_template(f"page.{ext}")
         text = template.render(**ctx)
         pb.add(output_file(self.cfg, self.platform, "page", page.slug), _tidy(text, self.platform))
@@ -531,9 +603,11 @@ class _Context:
                     posts = sorted(posts, key=lambda p: (p.date, p.slug), reverse=True)
                 if not posts and not term.body:
                     continue
-                shown.append(term)
+                # Count only what is listed, so drafts never show up in term counts.
+                shown.append(term.model_copy(update={"posts": posts}))
+                self.shown_terms.add((kind, term.slug))
                 term_body = ""
-                if term.body:
+                if term.body and self.platform in ("web", "gemini"):
                     doc = parse_markdown(term.body)
                     term_body = (
                         GemtextRenderer(
@@ -590,6 +664,17 @@ class _Context:
 
     def render_feeds(self, pb: PlatformBuild) -> None:
         pcfg = self.cfg.platform(self.platform)
+        if pcfg.feeds and not pcfg.base_url:
+            pb.warnings.append(
+                Warning(
+                    "FEED-NO-BASE-URL",
+                    "warn",
+                    self.platform,
+                    0,
+                    f"feeds need an absolute address; set platforms.{self.platform}.base_url "
+                    "so feed readers can follow the links",
+                )
+            )
         if "atom" in pcfg.feeds:
             pb.add(
                 "feed.xml",
@@ -625,7 +710,7 @@ class _Context:
                         (platform_path(self.cfg, "web", "post", p.slug), p.updated or p.date)
                     )
             for pg in self.site.pages:
-                if pg.meta.status == "published":
+                if pg.meta.status == "published" and not pg.meta.seo.noindex:
                     entries.append((platform_path(self.cfg, "web", "page", pg.slug), pg.updated))
             for kind, terms in (
                 ("tag", self.site.tags),
@@ -633,7 +718,8 @@ class _Context:
                 ("series", self.site.series),
             ):
                 for t in terms.values():
-                    entries.append((platform_path(self.cfg, "web", kind, t.slug), None))
+                    if (kind, t.slug) in self.shown_terms:
+                        entries.append((platform_path(self.cfg, "web", kind, t.slug), None))
             pb.add("sitemap.xml", feeds.sitemap(self.site, entries), "application/xml")
             pb.add("robots.txt", feeds.robots_web(self.site), "text/plain; charset=utf-8")
             for name in ("favicon.ico", "favicon.png", "favicon.svg"):
@@ -680,7 +766,7 @@ class _Context:
     def copy_media(self, posts: list[Post], pages: list[Page], pb: PlatformBuild) -> None:
         for item in [*posts, *pages]:
             for m in item.media:
-                target = media_path(item.slug if item.kind == "post" else None, m.name).lstrip("/")
+                target = media_path(item.slug, item.media_name(m), item.kind).lstrip("/")
                 pb.add(target, b"", media_type_for(m.name), source=m)
         site_media = self.site.root / "media"
         if site_media.is_dir():
@@ -750,6 +836,7 @@ def _tidy(text: str, platform: str) -> str:
 
 def write_build(build: Build, out_dir: Path, *, clean: bool = True) -> None:
     out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     for name, pb in build.platforms.items():
         target = out_dir / name
         if clean and target.exists():

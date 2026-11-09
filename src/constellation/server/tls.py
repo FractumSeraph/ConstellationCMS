@@ -104,6 +104,35 @@ def https_contexts(
     return default, contexts
 
 
+def external_contexts(
+    cert_root: Path, hostnames: list[str]
+) -> tuple[ssl.SSLContext, dict[str, ssl.SSLContext]]:
+    """Certificates the operator manages (``tls_mode = "external"``).
+
+    ``cert_root/fullchain.pem`` + ``privkey.pem`` is the default certificate, typically one
+    covering every name. A host can have its own in ``cert_root/<host>/``, which is the layout
+    certbot uses under ``/etc/letsencrypt/live``.
+    """
+    cert_root = Path(cert_root)
+    default_cert, default_key = cert_root / "fullchain.pem", cert_root / "privkey.pem"
+    contexts: dict[str, ssl.SSLContext] = {}
+    for host in hostnames:
+        d = cert_root / host.lower()
+        cert, key = d / "fullchain.pem", d / "privkey.pem"
+        if cert.is_file() and key.is_file():
+            contexts[host.lower()] = server_context(cert, key)
+    if default_cert.is_file() and default_key.is_file():
+        default = server_context(default_cert, default_key)
+    elif contexts:
+        default = next(iter(contexts.values()))
+    else:
+        raise FileNotFoundError(
+            f"no certificate in {cert_root}: expected fullchain.pem and privkey.pem there "
+            "or in a folder per hostname"
+        )
+    return default, contexts
+
+
 class SniTable:
     """hostname → SSLContext, swapped as a whole on reload; the default serves unknown names."""
 

@@ -45,6 +45,16 @@ class Theme:
         return {s.key: s.default for s in self.settings}
 
 
+def workspace_theme_dirs(site_root: Path) -> list[Path]:
+    """Where a site's installed themes live: ``<workspace>/themes`` for ``<workspace>/sites/<id>``,
+    plus a ``themes`` folder inside the site itself."""
+    site_root = Path(site_root)
+    dirs = [site_root / "themes"]
+    if site_root.parent.name == "sites":
+        dirs.insert(0, site_root.parent.parent / "themes")
+    return [d for d in dirs if d.is_dir()]
+
+
 def load_theme(name: str, *, search: list[Path] | None = None) -> Theme:
     """Find a theme by name in the search paths, then among the built-in themes."""
     candidates = [*(search or []), BUILTIN_DIR]

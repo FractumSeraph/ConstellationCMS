@@ -26,6 +26,28 @@ CONFLICT_PATTERNS = (
     re.compile(r"\(\d+\)\.md$"),  # generic copies
 )
 SAFE_MEDIA = re.compile(r"[^a-z0-9._-]+")
+# Uploads are published as-is; HTML, SVG and scripts could run on the site's origin.
+MEDIA_EXTENSIONS = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".avif",
+        ".pdf",
+        ".txt",
+        ".mp3",
+        ".ogg",
+        ".opus",
+        ".flac",
+        ".wav",
+        ".mp4",
+        ".webm",
+        ".zip",
+        ".epub",
+    }
+)
 RESERVED = {
     "con",
     "prn",
@@ -111,18 +133,20 @@ def load_item(
 ) -> Loaded:
     path = _safe(site_root, rel)
     raw = path.read_bytes()
-    doc = frontmatter.loads(raw.decode("utf-8"))
+    doc = _read_meta(raw, rel)
     bundle = path.parent if path.name == "index.md" else None
     media = (
         sorted(
-            f.name
-            for f in bundle.iterdir()
-            if f.is_file() and f.name != "index.md" and not f.name.startswith(".")
+            f.relative_to(bundle).as_posix()
+            for f in bundle.rglob("*")
+            if f.is_file()
+            and f.relative_to(bundle).as_posix() != "index.md"
+            and not any(part.startswith(".") for part in f.relative_to(bundle).parts)
         )
         if bundle
         else []
     )
-    kind = "post" if "/posts/" in path.as_posix() else "page"
+    kind = _kind_of(site_root, path)
     name = bundle.name if bundle else path.stem
     slug = str(doc.metadata.get("slug") or re.sub(r"^\d{4}-\d{2}-\d{2}-", "", name))
     loaded = Loaded(
@@ -200,15 +224,20 @@ def save_item(
 def create_item(
     site_root: Path, kind: str, title: str, *, date: datetime | None = None, status: str = "draft"
 ) -> str:
-    slug = slugify(title) or "untitled"
-    if slug in RESERVED:
-        slug = f"{slug}-page"
+    base = slugify(title) or "untitled"
+    if base in RESERVED:
+        base = f"{base}-page"
+    taken = existing_slugs(site_root, kind)
+    slug, n = base, 2
+    while slug in taken:
+        slug = f"{base}-{n}"
+        n += 1
     if kind == "post":
         date = date or datetime.now().astimezone()
         folder = site_root / "content" / "posts" / f"{date:%Y-%m-%d}-{slug}"
-        n = 2
         while folder.exists():
-            folder = site_root / "content" / "posts" / f"{date:%Y-%m-%d}-{slug}-{n}"
+            slug = f"{base}-{n}"
+            folder = site_root / "content" / "posts" / f"{date:%Y-%m-%d}-{slug}"
             n += 1
         folder.mkdir(parents=True)
         path = folder / "index.md"
@@ -252,10 +281,17 @@ def duplicate_item(site_root: Path, rel: str) -> str:
     meta["status"] = "draft"
     new_rel = create_item(site_root, loaded.kind, str(meta["title"]))
     new_path = _safe(site_root, new_rel)
+    if loaded.kind == "post":
+        # The copy is a new post dated today, matching the date in its folder name.
+        fresh = frontmatter.loads(new_path.read_text(encoding="utf-8")).metadata
+        meta["date"] = fresh.get("date", meta.get("date"))
+        meta.pop("updated", None)
     atomic_write(new_path, compose(meta, loaded.body))
     if loaded.bundle is not None and new_path.name == "index.md":
         for name in loaded.media:
-            shutil.copyfile(loaded.bundle / name, new_path.parent / name)
+            dest = new_path.parent / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(loaded.bundle / name, dest)
     return new_rel
 
 
@@ -281,6 +317,11 @@ def add_media(
     if path.name != "index.md":
         raise ValueError("this item is a single file; convert it to a bundle first")
     name = safe_media_name(filename)
+    if Path(name).suffix.lower() not in MEDIA_EXTENSIONS:
+        raise ValueError(
+            "that kind of file cannot be uploaded; allowed: "
+            + ", ".join(sorted(e.lstrip(".") for e in MEDIA_EXTENSIONS))
+        )
     dest = path.parent / name
     n = 2
     while dest.exists():
@@ -321,10 +362,58 @@ def find_conflict_files(site_root: Path) -> list[str]:
 
 
 def _safe(site_root: Path, rel: str) -> Path:
+    """Resolve ``rel`` to a Markdown post or page inside the site's content folders."""
     root = site_root.resolve()
-    path = (root / rel).resolve()
+    path = (root / rel.replace("\\", "/")).resolve()
     if root not in path.parents:
         raise ValueError("path escapes the site")
     if "_trash" in path.parts:
         raise ValueError("trashed items are read-only")
+    inner = path.relative_to(root).parts
+    if path.suffix != ".md" or inner[:2] not in (("content", "posts"), ("content", "pages")):
+        raise ValueError("not a post or page")
     return path
+
+
+def _kind_of(site_root: Path, path: Path) -> str:
+    return "post" if path.resolve().relative_to(site_root.resolve()).parts[1] == "posts" else "page"
+
+
+def _read_meta(raw: bytes, rel: str) -> frontmatter.Post:
+    try:
+        return frontmatter.loads(raw.decode("utf-8-sig"))
+    except UnicodeDecodeError:
+        raise ValueError(f"{rel} is not UTF-8 text; save it as UTF-8") from None
+    except yaml.YAMLError as e:
+        detail = " ".join(str(e).split())
+        raise ValueError(
+            f"{rel}: the front matter is not valid YAML ({detail}). "
+            "Fix it in a text editor, then reload."
+        ) from None
+
+
+DATED = re.compile(r"^\d{4}-\d{2}-\d{2}-")
+
+
+def existing_slugs(site_root: Path, kind: str) -> set[str]:
+    """Slugs already used by posts or pages, from names and ``slug:`` front matter."""
+    folder = site_root / "content" / ("posts" if kind == "post" else "pages")
+    slugs: set[str] = set()
+    if not folder.is_dir():
+        return slugs
+    for entry in folder.iterdir():
+        if entry.name.startswith((".", "_")):
+            continue
+        source = entry / "index.md" if entry.is_dir() else entry
+        if source.suffix != ".md" or not source.is_file():
+            continue
+        name = entry.name if entry.is_dir() else entry.stem
+        slugs.add(DATED.sub("", name) if kind == "post" else name)
+        try:
+            meta = frontmatter.loads(source.read_text(encoding="utf-8-sig")).metadata
+        except Exception:  # noqa: BLE001 - unreadable files still reserve their name
+            continue
+        slug = meta.get("slug")
+        if isinstance(slug, str):
+            slugs.add(slug)
+    return slugs

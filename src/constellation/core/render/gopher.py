@@ -223,10 +223,14 @@ class _State:
                 assert n.ref is not None
                 url = self.r.url_for(n.ref)
                 alt = n.text.strip() or "image"
-                parts.append(f"[image: {alt}]")
-                links.insert(0, _Link(url, alt, is_image=True))
+                links.append(_Link(url, alt, is_image=True))
+                if self.mode == "text":
+                    parts.append(f"[image: {alt}][{len(self.text_links) + len(links)}]")
+                else:
+                    parts.append(f"[image: {alt}]")
             elif k == "footnote_ref":
-                parts.append(f"[{n.text}]")
+                # Links are numbered [n] in the text file, so notes use [^n] there.
+                parts.append(f"[^{n.text}]" if self.mode == "text" else f"[{n.text}]")
             elif k == "html":
                 parts.append(strip_tags(n.text))
         return "".join(parts)
@@ -275,9 +279,8 @@ class _State:
         elif k == "quote":
             for child in b.children:
                 if child.kind == "paragraph":
-                    self.para(self.inline(child.inlines, links), indent="    ", first='    "')
-                    if self.lines:
-                        self.lines[-1] = self.lines[-1] + '"'
+                    quoted = self.inline(child.inlines, links).rstrip() + '"'
+                    self.para(quoted, indent="    ", first='    "')
                 else:
                     self.block(child)
             self.links(links)
@@ -380,7 +383,8 @@ class _State:
                 for c in self.doc.footnotes[key]
                 if c.kind == "paragraph"
             ]
-            self.para(f"[{key}] " + " ".join(t for t in texts if t), indent="    ")
+            mark = f"[^{key}]" if self.mode == "text" else f"[{key}]"
+            self.para(f"{mark} " + " ".join(t for t in texts if t), indent="    ")
             self.links(links)
         self.blank()
 

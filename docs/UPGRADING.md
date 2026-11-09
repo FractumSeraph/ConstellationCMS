@@ -39,4 +39,17 @@ it, or keep the token in your password manager.
 
 ## Breaking changes
 
-None yet. This file lists them per version from 0.2.0 on.
+### After 0.1.0
+
+- **Page media moved.** Files in a page bundle are now published under
+  `/media/pages/<slug>/` instead of `/media/`, so two pages can each have a `photo.jpg`. Links
+  written in Markdown are rewritten automatically; only hand-written absolute links to page
+  media need updating.
+- **rsync exports no longer delete by default.** rsync cannot tell which remote files an earlier
+  export wrote, so `--delete` removed everything else in the folder. Pass `--mirror` to the
+  `export` command to get that behaviour; the studio never mirrors.
+- **Proxy header.** Regenerate the snippet with `constellation server proxy-snippet`: it now
+  sets `X-Forwarded-For $remote_addr`. The server uses the right-most address either way.
+- **External certificates.** With `tls_mode = "external"`, put `fullchain.pem` and
+  `privkey.pem` in `https.cert_dir`, and optionally one folder per hostname with the same two
+  files (the certbot `live/` layout).
