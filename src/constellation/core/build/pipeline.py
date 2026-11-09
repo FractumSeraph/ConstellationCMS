@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from markupsafe import Markup
 from slugify import slugify
 
-from constellation.core import feeds
+from constellation.core import feeds, umami
 from constellation.core.build.images import ImageSet, make_variants
 from constellation.core.markdown.document import Document, Ref, Severity, Warning
 from constellation.core.markdown.parse import parse_markdown
@@ -230,8 +230,51 @@ def build_site(
             for iset in image_sets.values():
                 for v in iset.variants:
                     pb.add(v.path.lstrip("/"), v.data, v.media_type)
+            _add_umami(pb, cfg)
         build.platforms[platform] = pb
     return build
+
+
+def _add_umami(pb: PlatformBuild, cfg: Any) -> None:
+    """Put the Umami script on every built web page, whatever the theme."""
+    code = umami.from_config(cfg)
+    if code is None:
+        return
+    web = cfg.platforms.get("web")
+    domains = list(web.hostnames) if web is not None else []
+    tag = umami.script_tag(code, domains).encode("utf-8")
+    duplicated = False
+    for f in pb.files.values():
+        if f.source is not None or not f.media_type.startswith("text/html"):
+            continue
+        if code.website_id.encode("utf-8") in f.data:
+            duplicated = True  # a hand-pasted copy in Custom HTML; don't load it twice
+            continue
+        head_end = f.data.lower().find(b"</head>")
+        if head_end != -1:
+            f.data = f.data[:head_end] + tag + b"\n" + f.data[head_end:]
+    if duplicated:
+        pb.warnings.append(
+            Warning(
+                "UMAMI-DUPLICATE",
+                "warn",
+                "web",
+                0,
+                "Custom HTML already has an Umami script for this website. Remove it there; "
+                "the Umami setting adds the script to every page by itself.",
+            )
+        )
+    if not domains:
+        pb.warnings.append(
+            Warning(
+                "UMAMI-NO-DOMAINS",
+                "info",
+                "web",
+                0,
+                "The web platform has no hostnames, so Umami will also count visits to previews "
+                "and local copies. Add the site's hostname under Settings → Web.",
+            )
+        )
 
 
 def _image_sets(posts: list[Post], pages: list[Page], site: Site) -> dict[str, ImageSet]:

@@ -93,6 +93,9 @@ def main(argv: list[str] | None = None) -> int:
         "--tls-mode", choices=["behind-proxy", "external", "acme"], default="behind-proxy"
     )
     i.add_argument("--plain-port", type=int, default=8080, help="local port for behind-proxy mode")
+    i.add_argument(
+        "--gopher", action="store_true", help="also serve Gopher on port 70 (needs that port open)"
+    )
     i.add_argument("--no-unit", action="store_true", help="do not write the systemd unit")
     i.add_argument(
         "--with-studio",
@@ -107,9 +110,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     i.set_defaults(func=cmd_server_install)
     ps = svs.add_parser(
-        "proxy-snippet", help="print an nginx/openresty server block for behind-proxy mode"
+        "proxy-snippet",
+        help="print a proxy block (nginx, or Caddy with --caddy) for behind-proxy mode",
     )
     ps.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
+    ps.add_argument("--caddy", action="store_true", help="print a Caddyfile block instead of nginx")
     ps.add_argument("hostnames", nargs="*")
     ps.set_defaults(func=cmd_server_proxy)
     bk = svs.add_parser(
@@ -329,6 +334,7 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         studio_hostname=args.with_studio,
         studio_workspace=args.studio_workspace,
         create_user=not args.no_unit and hasattr(os, "geteuid") and os.geteuid() == 0,
+        gopher=args.gopher,
     )
     if args.with_studio:
         print(
@@ -341,7 +347,7 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         print(
             "enable the service with: systemctl daemon-reload && systemctl enable --now constellation"
         )
-    ports = ["1965 (gemini)"]
+    ports = ["1965 (gemini)"] + (["70 (gopher)"] if args.gopher else [])
     ports += (
         [f"{args.plain_port} (local, behind the proxy)"]
         if args.tls_mode == "behind-proxy"
@@ -353,10 +359,11 @@ def cmd_server_install(args: argparse.Namespace) -> int:
 
 def cmd_server_proxy(args: argparse.Namespace) -> int:
     from constellation.server.config import load_server_config
-    from constellation.server.install import proxy_snippet
+    from constellation.server.install import caddy_snippet, proxy_snippet
 
     cfg = load_server_config(args.config)
-    print(proxy_snippet(list(args.hostnames), cfg.https.plain_port, cfg.admin.hostname), end="")
+    make = caddy_snippet if args.caddy else proxy_snippet
+    print(make(list(args.hostnames), cfg.https.plain_port, cfg.admin.hostname), end="")
     return 0
 
 

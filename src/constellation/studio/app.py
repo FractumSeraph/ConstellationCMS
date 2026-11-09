@@ -21,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from constellation import __version__
+from constellation.core import umami
 from constellation.core.build.pipeline import media_type_for
 from constellation.core.content import ContentError, load_site
 from constellation.core.markdown.parse import parse_markdown
@@ -803,6 +804,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         site_id: str,
         sess: dict[str, Any] = Depends(require_session),
         saved: str = "",
+        moved: str = "",
     ) -> Response:
         root = studio.site_root(site_id)
         doc = read_site_toml(root)
@@ -813,6 +815,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             doc=doc,
             toml_text=tomlkit.dumps(doc),
             saved=saved,
+            umami_moved=moved,
             read_only=studio.read_only_reason(site_id),
             error="",
         )
@@ -866,6 +869,66 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             write_site_toml(root, doc)
         studio.state.audit("settings", site_id, client_host(request))
         return RedirectResponse(f"/sites/{site_id}/settings?saved=1", 303)
+
+    @app.post("/sites/{site_id}/umami")
+    async def umami_save(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        action: str = Form("save"),
+        code: str = Form(""),
+        forward: str = Form(""),
+    ) -> Response:
+        """Read a pasted Umami tracking code and store what the site needs from it."""
+        root = studio.site_root(site_id)
+        _check_writable(studio, site_id)
+        doc = read_site_toml(root)
+        if action == "remove":
+            if "analytics" in doc and "umami" in doc["analytics"]:
+                del doc["analytics"]["umami"]
+            write_site_toml(root, doc)
+            studio.state.audit("umami_removed", site_id, client_host(request))
+            return RedirectResponse(f"/sites/{site_id}/settings?saved=1#umami", 303)
+        if action == "forward":
+            set_path(doc, "analytics.umami.forward_other_platforms", forward == "on")
+            write_site_toml(root, doc)
+            return RedirectResponse(f"/sites/{site_id}/settings?saved=1#umami", 303)
+        try:
+            parsed = umami.parse_tracking_code(code)
+        except umami.UmamiCodeError as e:
+            return render(
+                request,
+                "settings.html",
+                site_id=site_id,
+                doc=doc,
+                toml_text=tomlkit.dumps(doc),
+                saved="",
+                read_only="",
+                error="",
+                umami_error=str(e),
+                umami_code=code,
+            )
+        table = tomlkit.table()
+        table["script_url"] = parsed.script_url
+        table["website_id"] = parsed.website_id
+        if parsed.host_url:
+            table["host_url"] = parsed.host_url
+        table["forward_other_platforms"] = True
+        if "analytics" not in doc:
+            doc["analytics"] = tomlkit.table()
+        doc["analytics"]["umami"] = table
+        moved = False
+        head = str(doc.get("custom_html", {}).get("head", ""))
+        if head:
+            new_head, moved = umami.strip_matching_snippet(head, parsed.website_id)
+            if moved:
+                set_path(doc, "custom_html.head", new_head)
+        _validate_site_doc(doc)
+        write_site_toml(root, doc)
+        studio.state.audit("umami_set", site_id, client_host(request))
+        return RedirectResponse(
+            f"/sites/{site_id}/settings?saved=1{'&moved=1' if moved else ''}#umami", 303
+        )
 
     # ---- theme ------------------------------------------------------------------------------
     @app.get("/sites/{site_id}/theme", response_class=HTMLResponse)
@@ -1100,7 +1163,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                     303,
                 )
             ws.servers = [s for s in ws.servers if s.id != sid]
-            ws.servers.append(ServerEntry(sid, name.strip() or sid, admin_url.strip().rstrip("/")))
+            ws.servers.append(ServerEntry(sid, name.strip() or sid, _admin_url(admin_url)))
         save_workspace(ws)
         studio.state.audit("servers_changed", delete or id, client_host(request))
         return RedirectResponse("/servers?ok=1", 303)
@@ -1219,8 +1282,24 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             if server
             else {"error": "This site is not assigned to a server."}
         )
+        try:
+            um = read_site_toml(studio.site_root(site_id)).get("analytics", {}).get("umami", {})
+            code = umami.UmamiCode(
+                str(um.get("script_url", "")),
+                str(um.get("website_id", "")),
+                str(um.get("host_url", "")),
+            )
+            umami_link = code.api_base if code.website_id and code.script_url else ""
+        except Exception:  # noqa: BLE001 - a broken site.toml is reported elsewhere
+            umami_link = ""
         return render(
-            request, "analytics.html", site_id=site_id, server=server, data=data, days=days
+            request,
+            "analytics.html",
+            site_id=site_id,
+            server=server,
+            data=data,
+            days=days,
+            umami_link=umami_link,
         )
 
     # ---- server administration (admin token per action) ---------------------------------------
@@ -1490,6 +1569,37 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         resp.delete_cookie(SESSION_COOKIE)
         return resp
 
+    @app.get("/guide", response_class=HTMLResponse)
+    async def guide(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_session),
+        host: str = "",
+        ip: str = "",
+        site: str = "",
+        proxy: str = "caddy",
+        port: int = 8180,
+        gopher: str = "",
+    ) -> Response:
+        """Step-by-step server setup and adding a site, with the user's names filled in."""
+
+        def clean(value: str) -> str:
+            # Hostnames and addresses only, so a pasted URL still yields a usable name.
+            value = value.strip().lower().removeprefix("https://").removeprefix("http://")
+            return re.sub(r"[^a-z0-9.:\-]", "", value.split("/")[0])[:253]
+
+        g = {
+            "host": clean(host),
+            "ip": clean(ip),
+            "site": clean(site),
+            "proxy": proxy if proxy in ("caddy", "nginx", "none") else "caddy",
+            "port": port if 1024 <= port <= 65535 else 8180,
+            "gopher": gopher == "on" or not request.query_params,
+        }
+        g["host_or"] = g["host"] or "cms.example.org"
+        g["ip_or"] = g["ip"] or "your server's IP address"
+        g["site_or"] = g["site"] or "example.org"
+        return render(request, "guide.html", g=g)
+
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
@@ -1498,6 +1608,14 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
 
 
 # ---- helpers ------------------------------------------------------------------------------------
+def _admin_url(value: str) -> str:
+    """A server's admin address; a bare https://host gets the server's API path added."""
+    from urllib.parse import urlsplit
+
+    url = value.strip().rstrip("/")
+    return url + "/_constellation" if url and not urlsplit(url).path else url
+
+
 def _local_csrf(studio: Studio) -> str:
     token = studio.state.kv_get("local_csrf")
     if not token:

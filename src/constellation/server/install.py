@@ -71,6 +71,7 @@ def install(
     studio_workspace: Path | None = None,
     studio_port: int = 8787,
     create_user: bool = False,
+    gopher: bool = False,
 ) -> tuple[Path, str]:
     """Create the data directory and server.toml, mint the admin token, write the unit file.
 
@@ -87,6 +88,7 @@ def install(
     cfg.admin.token_hash = hash_admin_token(token)
     cfg.https.tls_mode = tls_mode  # type: ignore[assignment]
     cfg.https.plain_port = plain_port
+    cfg.gopher.enabled = gopher
     if studio_hostname:
         cfg.studio.enabled = True
         cfg.studio.hostname = studio_hostname.lower()
@@ -185,6 +187,21 @@ def give_to_user(user: str, data_dir: Path) -> None:
     for path in [data_dir, *data_dir.rglob("*")]:
         with contextlib.suppress(OSError):
             os.chown(path, entry.pw_uid, entry.pw_gid, follow_symlinks=False)
+
+
+def caddy_snippet(hostnames: list[str], plain_port: int, admin_hostname: str) -> str:
+    """A Caddyfile site block for behind-proxy mode. Caddy gets the certificates itself."""
+    names = ", ".join(sorted(set(hostnames + [admin_hostname])))
+    return f"""# ConstellationCMS: sites and the admin API, served by the constellation service.
+{names} {{
+	request_body {{
+		max_size 300MB
+	}}
+	# Caddy sets Host, X-Forwarded-Proto and a fresh X-Forwarded-For (it does not append to
+	# whatever the visitor sent), which is what the server trusts for client addresses.
+	reverse_proxy 127.0.0.1:{plain_port}
+}}
+"""
 
 
 def proxy_snippet(hostnames: list[str], plain_port: int, admin_hostname: str) -> str:

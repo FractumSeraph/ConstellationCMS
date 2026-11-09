@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Server guide{% endblock %}
+{% block content %}
+<h1>Put your sites on your own server</h1>
+<p class="muted">Part 1 is done once per server. Part 2 is repeated for every site you add. Fill in your names and the commands below fill themselves in.</p>
+
+<form method="get" action="/guide" class="card guide-form">
+  <h2>Your names</h2>
+  <div class="grid">
+    <label>Server's own address (for publishing) <input name="host" value="{{ g.host }}" placeholder="cms.example.org"></label>
+    <label>Server's IP address <input name="ip" value="{{ g.ip }}" placeholder="203.0.113.10"></label>
+    <label>Site's domain <input name="site" value="{{ g.site }}" placeholder="example.org"></label>
+    <label>Web server already on the VPS
+      <select name="proxy">
+        {% for v, label in [('caddy', 'Caddy'), ('nginx', 'nginx or OpenResty'), ('none', 'None (ports 80 and 443 are free)')] %}
+        <option value="{{ v }}" {% if g.proxy == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+    <label>Local port for the proxy to use <input name="port" type="number" min="1024" max="65535" value="{{ g.port }}"></label>
+    <label class="check"><input type="checkbox" name="gopher" {% if g.gopher %}checked{% endif %}> Serve Gopher too (port 70)</label>
+  </div>
+  <button class="primary">Fill in the commands</button>
+</form>
+
+<section class="card guide">
+  <h2>Part 1 · Set up the server (once)</h2>
+  <ol class="steps">
+    <li>
+      <h3>Get a VPS</h3>
+      <p>Any small Linux server works (Ubuntu or Debian, 1 GB of memory is plenty). You need to be able to log in with SSH as root or with <code>sudo</code>.</p>
+    </li>
+    <li>
+      <h3>Point the server's address at it</h3>
+      <p>At your DNS provider, add an <strong>A record</strong> for <code>{{ g.host_or }}</code> pointing to <code>{{ g.ip_or }}</code>. If you use Cloudflare, set it to <em>DNS only</em> (grey cloud) so Gemini and Gopher can reach the server.</p>
+    </li>
+    <li>
+      <h3>Install ConstellationCMS</h3>
+      <p>On the server:</p>
+      {% set cmd %}curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv /opt/constellation --python 3.12
+uv pip install --python /opt/constellation constellationcms{% endset %}
+      {% include "partials/guide_cmd.html" %}
+      <p class="muted small">If the package isn't on PyPI yet, build it on your computer with <code>uv build</code>, copy the <code>.whl</code> file from <code>dist/</code> to the server, and install that file instead of <code>constellationcms</code>.</p>
+    </li>
+    <li>
+      <h3>Create the server's settings</h3>
+      {% set cmd %}sudo /opt/constellation/bin/constellation server install --admin-hostname {{ g.host_or }} --tls-mode {{ 'acme' if g.proxy == 'none' else 'behind-proxy' }}{% if g.proxy != 'none' %} --plain-port {{ g.port }}{% endif %}{% if g.gopher %} --gopher{% endif %}{% endset %}
+      {% include "partials/guide_cmd.html" %}
+      <p>It prints an <strong>admin token</strong> once. Copy it somewhere safe, such as a password manager. You'll paste it into this studio to connect each site, and the studio never stores it.</p>
+    </li>
+    {% if g.proxy != 'none' %}
+    <li>
+      <h3>Send web traffic from {{ 'Caddy' if g.proxy == 'caddy' else 'nginx' }} to ConstellationCMS</h3>
+      <p>This prints the block{% if g.proxy == 'caddy' %} for <code>/etc/caddy/Caddyfile</code>{% else %} for nginx{% endif %}, with every site domain you list after the command (add <code>www.{{ g.site_or }}</code> too if you use it). Run it first to look at it:</p>
+      {% set cmd %}sudo /opt/constellation/bin/constellation server proxy-snippet{% if g.proxy == 'caddy' %} --caddy{% endif %} {{ g.site_or }}{% endset %}
+      {% include "partials/guide_cmd.html" %}
+      {% if g.proxy == 'caddy' %}
+      <p>Then back up the Caddyfile, add the block to the end, check it and reload. Caddy gets the HTTPS certificates by itself:</p>
+      {% set cmd %}sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
+sudo /opt/constellation/bin/constellation server proxy-snippet --caddy {{ g.site_or }} | sudo tee -a /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy{% endset %}
+      {% else %}
+      <p>Save it as a new site, enable it, add certificates (for example with <code>certbot --nginx</code>), then check and reload:</p>
+      {% set cmd %}sudo /opt/constellation/bin/constellation server proxy-snippet {{ g.site_or }} | sudo tee /etc/nginx/sites-available/constellation
+sudo ln -s /etc/nginx/sites-available/constellation /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx{% endset %}
+      {% endif %}
+      {% include "partials/guide_cmd.html" %}
+    </li>
+    {% endif %}
+    <li>
+      <h3>Open the firewall</h3>
+      <p>Gemini uses port 1965{% if g.gopher %} and Gopher port 70{% endif %}{% if g.proxy == 'none' %}; the web needs 80 and 443{% endif %}. With <code>ufw</code>:</p>
+      {% set cmd %}sudo ufw allow 1965/tcp{% if g.gopher %}
+sudo ufw allow 70/tcp{% endif %}{% if g.proxy == 'none' %}
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp{% endif %}{% endset %}
+      {% include "partials/guide_cmd.html" %}
+      <p class="muted small">Also open the same ports in your VPS provider's firewall, if it has one.</p>
+    </li>
+    <li>
+      <h3>Start it</h3>
+      {% set cmd %}sudo systemctl daemon-reload
+sudo systemctl enable --now constellation{% endset %}
+      {% include "partials/guide_cmd.html" %}
+      <p>Check it from your computer. It should answer <code>ok</code>:</p>
+      {% set cmd %}curl https://{{ g.host_or }}/_constellation/healthz{% endset %}
+      {% include "partials/guide_cmd.html" %}
+    </li>
+    <li>
+      <h3>Add the server to this studio</h3>
+      <p>On the <a href="/servers">Servers</a> page, under "Add a server", give it a short id and enter <code>https://{{ g.host_or }}</code> as its address.</p>
+    </li>
+  </ol>
+</section>
+
+<section class="card guide">
+  <h2>Part 2 · Add a site</h2>
+  <ol class="steps">
+    <li>
+      <h3>Create the site here</h3>
+      <p>On the <a href="/">Sites</a> page, fill in "New site" with <code>https://{{ g.site_or }}</code> as the web address and <code>gemini://{{ g.site_or }}</code> for Gemini. Gopher can be turned on later in the site's Settings, with <code>gopher://{{ g.site_or }}</code>.</p>
+    </li>
+    <li>
+      <h3>Point the domain at the server</h3>
+      <p>Add an <strong>A record</strong> for <code>{{ g.site_or }}</code> (and <code>www.{{ g.site_or }}</code> if you use it) pointing to <code>{{ g.ip_or }}</code>. With Cloudflare, use <em>DNS only</em>. If the site is live somewhere else, you can do this last: publish first, check it, then switch DNS.</p>
+    </li>
+    {% if g.proxy != 'none' %}
+    <li>
+      <h3>Tell {{ 'Caddy' if g.proxy == 'caddy' else 'nginx' }} about the domain</h3>
+      <p>Open {% if g.proxy == 'caddy' %}<code>/etc/caddy/Caddyfile</code>{% else %}<code>/etc/nginx/sites-available/constellation</code>{% endif %}, add <code>{{ g.site_or }}</code> (and <code>www.{{ g.site_or }}</code>) to the names at the top of the ConstellationCMS block, then check and reload as in Part 1.</p>
+    </li>
+    {% endif %}
+    <li>
+      <h3>Connect the site to the server</h3>
+      <p>On the <a href="/servers">Servers</a> page, find the site in the server's table, open <strong>connect</strong>, and paste the admin token. The studio keeps a publish key for this site only and forgets the admin token.</p>
+    </li>
+    <li>
+      <h3>Publish</h3>
+      <p>Open the site's <strong>Publish</strong> page. "Preview diff" shows what will be uploaded; "Publish" sends it and makes it live.</p>
+    </li>
+    <li>
+      <h3>Check it</h3>
+      <p>Visit <code>https://{{ g.site_or }}</code>, open <code>gemini://{{ g.site_or }}</code> in a Gemini browser{% if g.gopher %}, and <code>gopher://{{ g.site_or }}</code> in a Gopher client{% endif %}. Visits show up on the site's Analytics page.</p>
+    </li>
+    <li>
+      <h3>Optional: Umami</h3>
+      <p>To also use an Umami dashboard, paste its tracking code into the site's Settings, under <strong>Umami analytics</strong>. The studio does the rest.</p>
+    </li>
+  </ol>
+</section>
+{% endblock %}

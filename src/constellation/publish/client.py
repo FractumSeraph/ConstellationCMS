@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import httpx
 
+from constellation.core import umami
 from constellation.core.build.pipeline import Build
 from constellation.core.models import Site
 
@@ -44,7 +45,7 @@ def site_config_for_release(site: Site) -> dict[str, Any]:
         "language": cfg.site.language,
         "redirects": [{"from": r.from_path, "to": r.to, "status": r.status} for r in cfg.redirects],
         "headers": {"web": {"Strict-Transport-Security": "max-age=31536000", **cfg.headers}},
-        "analytics": {"forward_to_umami": cfg.analytics.forward_to_umami.model_dump()},
+        "analytics": {"forward_to_umami": umami.forward_settings(cfg)},
     }
 
 

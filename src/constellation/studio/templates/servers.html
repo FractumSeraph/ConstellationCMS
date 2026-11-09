@@ -2,7 +2,7 @@
 {% block title %}Servers{% endblock %}
 {% block content %}
 <h1>Servers</h1>
-<p class="muted">Each VPS running <code>constellation server</code>. Addresses are shared through the workspace; publish tokens stay on this machine.</p>
+<p class="muted">Each VPS running <code>constellation server</code>. Addresses are shared through the workspace; publish tokens stay on this machine. New to this? Follow the <a href="/guide">server setup guide</a>.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if ok %}<p class="ok">Saved.</p>{% endif %}
 {% for s in servers %}
@@ -36,14 +36,14 @@
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ s.id }}"><input type="hidden" name="admin_url" value="https://-"><input type="hidden" name="delete" value="{{ s.id }}"><button class="link danger">remove server</button>
   </form>
 </section>
-{% else %}<p class="empty">No servers yet. Add one below.</p>{% endfor %}
+{% else %}<p class="empty">No servers yet. The <a href="/guide">setup guide</a> walks through preparing a VPS, then add it below.</p>{% endfor %}
 <section class="card">
   <h2>Add a server</h2>
   <form method="post" action="/servers" class="grid">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label>Id <input name="id" required placeholder="vps-1"></label>
     <label>Name <input name="name" placeholder="First VPS"></label>
-    <label>Admin URL <input name="admin_url" required placeholder="https://vps1.example.org/_constellation"></label>
+    <label>Admin address <input name="admin_url" required placeholder="https://vps1.example.org"></label>
     <button class="primary">Add</button>
   </form>
 </section>

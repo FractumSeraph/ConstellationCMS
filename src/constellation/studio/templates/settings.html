@@ -63,13 +63,46 @@
   </section>
   {% set ch = doc.get('custom_html', {}) %}
   <section class="card"><h2>Custom HTML (web only)</h2>
-    <p class="muted">Tracking snippets and anything else that belongs in the page. Injected verbatim.</p>
+    <p class="muted">Anything else that belongs in the page, injected as written. For Umami, use the Umami box below instead.</p>
     <label>In &lt;head&gt; <textarea name="f.custom_html.head" rows="5">{{ ch.get('head', '') }}</textarea></label>
     <label>After &lt;body&gt; opens <textarea name="f.custom_html.body_start" rows="3">{{ ch.get('body_start', '') }}</textarea></label>
     <label>Before &lt;/body&gt; <textarea name="f.custom_html.body_end" rows="3">{{ ch.get('body_end', '') }}</textarea></label>
   </section>
   <button class="primary" {% if read_only %}disabled{% endif %}>Save settings</button>
 </form>
+{% set um = doc.get('analytics', {}).get('umami', {}) %}
+<section class="card" id="umami"><h2>Umami analytics</h2>
+  <p class="muted">The server already counts every visit on its own, on web, Gemini and Gopher, with no script (see Analytics). Add Umami if you also want its dashboard.</p>
+  {% if umami_moved %}<p class="ok">Saved. The same Umami script was in Custom HTML, so it was taken out there to avoid counting visits twice.</p>{% endif %}
+  {% if um.get('website_id') %}
+  <ul class="plain">
+    <li><span class="ok">Connected</span> to <a href="{{ um.get('host_url') or um.get('script_url', '').split('/')[:3] | join('/') }}" target="_blank" rel="noopener">{{ (um.get('host_url') or um.get('script_url', '')).split('/')[2] }}</a>, website <code>{{ um.get('website_id') }}</code></li>
+    <li>Web: the script is added to every page and only counts visits on {% if web.get('hostnames') %}<code>{{ web.get('hostnames') | join(', ') }}</code>{% else %}<span class="warn">any address (add the site's hostname under Web above)</span>{% endif %}, so previews never count.</li>
+    <li>Gemini and Gopher: {% if um.get('forward_other_platforms', True) %}the server sends each page view to Umami, marked with its platform.{% else %}not sent to Umami (they're still in the built-in Analytics).{% endif %}</li>
+  </ul>
+  <form method="post" action="/sites/{{ site_id }}/umami" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="forward">
+    <label class="check"><input type="checkbox" name="forward" {% if um.get('forward_other_platforms', True) %}checked{% endif %}> Also send Gemini and Gopher page views to Umami</label>
+    <button {% if read_only %}disabled{% endif %}>Save</button>
+  </form>
+  <p class="muted small">Changes reach your site the next time you publish.</p>
+  <details><summary>Replace or remove</summary>
+  {% endif %}
+  <form method="post" action="/sites/{{ site_id }}/umami">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="save">
+    <label>Tracking code <span class="small">(in Umami: Settings → Websites → Edit → Tracking code)</span>
+      <textarea name="code" rows="3" class="mono" placeholder='&lt;script defer src="https://cloud.umami.is/script.js" data-website-id="…"&gt;&lt;/script&gt;'>{{ umami_code or '' }}</textarea></label>
+    {% if umami_error %}<p class="error">{{ umami_error }}</p>{% endif %}
+    <button class="primary" {% if read_only %}disabled{% endif %}>Connect Umami</button>
+  </form>
+  {% if um.get('website_id') %}
+  <form method="post" action="/sites/{{ site_id }}/umami" class="top-gap" data-confirm="Stop sending visits to Umami? The built-in analytics keep working.">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="remove">
+    <button class="danger" {% if read_only %}disabled{% endif %}>Remove Umami</button>
+  </form>
+  </details>
+  {% endif %}
+</section>
 <details class="card"><summary>Edit site.toml directly</summary>
   <form method="post" action="/sites/{{ site_id }}/settings">
     <input type="hidden" name="csrf" value="{{ csrf }}">

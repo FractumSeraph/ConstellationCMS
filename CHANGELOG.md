@@ -12,6 +12,17 @@
   under Account. Site cards get their own small constellation, server publishes light up a
   constellation as files upload, empty lists have friendlier messages, the current page is
   marked in the menu, and the logo lives in one replaceable file. See `docs/studio-looks.md`.
+- Analytics: paste an Umami tracking code into a site's Settings and the rest is automatic. The
+  script goes on every web page in any theme, limited to the site's own hostnames so previews
+  never count, and the server forwards Gemini and Gopher page views to the same Umami website. A
+  copy already pasted into Custom HTML is moved out so nothing counts twice. See
+  `docs/analytics.md`.
+- Studio: a Guide page (linked from the top bar, Servers, Sites and Publish) walks through setting
+  up a VPS and adding a site, with the user's own hostnames, IP, proxy and port filled into every
+  command, each with a Copy button.
+- Server: `server install --gopher` turns on the Gopher listener (and lists port 70 among the
+  ports to open); `server proxy-snippet --caddy` prints a Caddyfile block as well as the nginx one.
+- Studio: a server address entered as `https://host` gets the API path `/_constellation` added.
 - Studio: fixed a crash ("bad parameter or other API misuse", HTTP 500) when two requests used
   the studio's database at the same time; the connection is now shared under a lock.
 - Studio: the editor's web preview loads theme fonts. Quoted `url("/...")` references are

@@ -132,7 +132,18 @@ class UmamiForward(Strict):
     website_id: str = ""
 
 
+class UmamiSite(Strict):
+    """Set from the tracking code pasted in the studio; see ``constellation.core.umami``."""
+
+    script_url: str = ""
+    website_id: str = ""
+    host_url: str = ""
+    # Also send Gemini and Gopher page views (which can't run scripts) from the server.
+    forward_other_platforms: bool = True
+
+
 class AnalyticsConfig(Strict):
+    umami: UmamiSite = Field(default_factory=UmamiSite)
     forward_to_umami: UmamiForward = Field(default_factory=UmamiForward)
 
 

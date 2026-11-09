@@ -31,12 +31,17 @@ it from several machines).
 ```
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv /opt/constellation && uv pip install --python /opt/constellation constellationcms
-/opt/constellation/bin/constellation server install --admin-hostname vps1.example.org --tls-mode behind-proxy
+/opt/constellation/bin/constellation server install --admin-hostname vps1.example.org --tls-mode behind-proxy --gopher
 systemctl daemon-reload && systemctl enable --now constellation
 ```
 
-Paste the printed admin token into the studio's Servers page, connect a site, and publish.
-Switch `--tls-mode acme` once DNS points at the server and nothing else holds ports 80 and 443.
+Paste the printed admin token into the studio's Servers page, connect a site, and publish. Behind
+an existing web server, `constellation server proxy-snippet --caddy example.org` (or without
+`--caddy` for nginx) prints the block to add. Use `--tls-mode acme` instead when nothing else
+holds ports 80 and 443.
+
+The studio's **Guide** page walks through all of this step by step, including DNS, the firewall
+and adding each new site, with your own names filled into every command.
 
 ## Command line
 
@@ -47,7 +52,7 @@ Switch `--tls-mode acme` once DNS points at the server and nothing else holds po
 | `constellation check SITE` | load a site and list rendering warnings |
 | `constellation export SITE --platform web --target sftp://user@host/path` | static export with a diff |
 | `constellation new post SITE "Title"` | create a post bundle |
-| `constellation server install|run|backup|restore|prune|proxy-snippet` | the VPS program |
+| `constellation server install|run|backup|restore|prune|proxy-snippet [--caddy]` | the VPS program |
 | `constellation doctor` | self-checks |
 
 ## Documentation
@@ -55,6 +60,7 @@ Switch `--tls-mode acme` once DNS points at the server and nothing else holds po
 - [`docs/plan/`](docs/plan/README.md): the design, decision record and roadmap.
 - [`docs/themes.md`](docs/themes.md): writing and installing themes.
 - [`docs/studio-looks.md`](docs/studio-looks.md): the studio's looks, day/night, and your logo.
+- [`docs/analytics.md`](docs/analytics.md): built-in analytics and connecting Umami.
 - [`docs/UPGRADING.md`](docs/UPGRADING.md): upgrades and backups.
 - [`CHANGELOG.md`](CHANGELOG.md).
 

@@ -38,3 +38,23 @@ function markSky(root) {
   }
 }
 document.addEventListener("htmx:afterSettle", () => markSky(document));
+
+// Copy buttons next to commands (the server guide).
+document.addEventListener("click", async (e) => {
+  const btn = e.target instanceof Element ? e.target.closest("[data-copy]") : null;
+  if (!btn) return;
+  const code = btn.parentElement?.querySelector("code");
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code.textContent || "");
+    btn.textContent = "Copied";
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    btn.textContent = "Selected";
+  }
+  setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+});
