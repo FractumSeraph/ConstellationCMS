@@ -701,9 +701,9 @@ class _Context:
 
 
 def _date_filter(cfg: Any) -> Any:
-    from zoneinfo import ZoneInfo
+    from constellation.core.content import site_tz
 
-    tz = ZoneInfo(cfg.site.timezone)
+    tz = site_tz(cfg.site.timezone)
 
     def date(d: datetime, style: str = "long", calendar: str = "gregorian") -> str:
         d = d.astimezone(tz)
@@ -723,11 +723,10 @@ def _date_filter(cfg: Any) -> Any:
 
 
 def _ddate(d: datetime, fmt: str, cfg: Any) -> str:
-    from zoneinfo import ZoneInfo
-
     from constellation.core.calendars import ddate
+    from constellation.core.content import site_tz
 
-    return ddate(d.astimezone(ZoneInfo(cfg.site.timezone)), fmt)
+    return ddate(d.astimezone(site_tz(cfg.site.timezone)), fmt)
 
 
 def _tidy(text: str, platform: str) -> str:

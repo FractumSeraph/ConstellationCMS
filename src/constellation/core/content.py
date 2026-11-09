@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import tomllib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -48,15 +48,25 @@ def load_config(root: Path) -> SiteConfig:
         raise ContentError([f"{path}: {_fmt_validation(e)}"]) from e
 
 
+def site_tz(name: str, problems: list[str] | None = None) -> tzinfo:
+    """Resolve a site's IANA timezone name.
+
+    Falls back to UTC (recording a problem when ``problems`` is given) if the
+    name is unknown or no time zone database is available on this machine.
+    """
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        if problems is not None:
+            problems.append(f"site.toml: unknown timezone {name!r}")
+        return UTC
+
+
 def load_site(root: Path, *, site_id: str | None = None) -> Site:
     root = Path(root)
     cfg = load_config(root)
     problems: list[str] = []
-    try:
-        tz = ZoneInfo(cfg.site.timezone)
-    except Exception:
-        problems.append(f"site.toml: unknown timezone {cfg.site.timezone!r}")
-        tz = ZoneInfo("UTC")
+    tz = site_tz(cfg.site.timezone, problems)
 
     posts = _load_posts(root / "content" / "posts", tz, problems)
     pages = _load_pages(root / "content" / "pages", tz, problems)
@@ -79,7 +89,7 @@ def load_site(root: Path, *, site_id: str | None = None) -> Site:
     return site
 
 
-def _load_posts(folder: Path, tz: ZoneInfo, problems: list[str]) -> list[Post]:
+def _load_posts(folder: Path, tz: tzinfo, problems: list[str]) -> list[Post]:
     posts: list[Post] = []
     if not folder.is_dir():
         return posts
@@ -109,7 +119,7 @@ def _load_posts(folder: Path, tz: ZoneInfo, problems: list[str]) -> list[Post]:
     return posts
 
 
-def _load_post(source: Path, bundle: Path | None, name: str, tz: ZoneInfo) -> Post:
+def _load_post(source: Path, bundle: Path | None, name: str, tz: tzinfo) -> Post:
     doc = frontmatter.loads(source.read_text(encoding="utf-8"))
     meta = PostMeta.model_validate(doc.metadata)
     m = DATED_NAME.match(name)
@@ -139,7 +149,7 @@ def _load_post(source: Path, bundle: Path | None, name: str, tz: ZoneInfo) -> Po
     )
 
 
-def _load_pages(folder: Path, tz: ZoneInfo, problems: list[str]) -> list[Page]:
+def _load_pages(folder: Path, tz: tzinfo, problems: list[str]) -> list[Page]:
     pages: list[Page] = []
     if not folder.is_dir():
         return pages
@@ -242,7 +252,7 @@ def _collect_terms(
     return dict(sorted(terms.items()))
 
 
-def _localize(d: datetime, tz: ZoneInfo) -> datetime:
+def _localize(d: datetime, tz: tzinfo) -> datetime:
     if d.tzinfo is None:
         return d.replace(tzinfo=tz)
     return d
