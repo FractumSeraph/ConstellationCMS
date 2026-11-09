@@ -154,13 +154,17 @@ def test_fractum_web_has_its_look_with_default_settings(tmp_path: Path) -> None:
     assert "/assets/fractum/fonts/jetbrainsmono.woff2" in home
     assert "assets/fractum/fonts/jetbrainsmono.woff2" in web
     assert "assets/fractum/fonts/OFL.txt" in web
-    assert 'class="entry__title"' in home and 'class="entry__author">Seraph' in home
+    assert (
+        'class="entry__title"' in home
+        and 'class="entry__author"><a href="/authors/seraph/">Seraph</a>' in home
+    )
     assert 'class="read-more"' in home and "Read more →" in home
     assert "#foundations" in web["posts/the-call/index.html"].data.decode()
     assert "framed welcome" not in home, "no welcome box unless the setting has text"
     # Lists use the same entry markup.
     tag = web["tags/foundations/index.html"].data.decode()
-    assert 'class="term__title"' in tag and 'class="entry__title"' in tag
+    assert 'class="term-header__title">#Foundations <sup>(' in tag
+    assert 'class="entry__title"' in tag
 
 
 def test_fractum_menu_groups_become_drop_downs(tmp_path: Path) -> None:

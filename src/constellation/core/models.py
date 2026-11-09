@@ -21,6 +21,8 @@ class Author(Strict):
     name: str
     bio: str = ""
     url: str = ""
+    # A picture for the author page: a file in the site's media folder ("/me.png") or a URL.
+    avatar: str = ""
 
 
 class SiteInfo(Strict):
@@ -52,6 +54,7 @@ class UrlPatterns(Strict):
     tag: str = "/tags/{slug}/"
     category: str = "/categories/{slug}/"
     series: str = "/series/{slug}/"
+    author: str = "/authors/{slug}/"
     archive: str = "/archive/{year}/"
 
 
@@ -116,6 +119,9 @@ class RenderGopher(Strict):
 
 
 class RenderConfig(Strict):
+    # Summaries in post lists and feeds: 0 = the first paragraph (up to 240 characters);
+    # a number = that many words, read across paragraphs (as Publii and many blogs do).
+    summary_words: int = Field(default=0, ge=0, le=500)
     gemini: RenderGemini = Field(default_factory=RenderGemini)
     gopher: RenderGopher = Field(default_factory=RenderGopher)
 
@@ -292,7 +298,7 @@ class TermMeta(BaseModel):
 class Term(BaseModel):
     """A tag, category or series, with the posts that carry it."""
 
-    kind: Literal["tag", "category", "series"]
+    kind: Literal["tag", "category", "series", "author"]
     slug: str
     meta: TermMeta
     name: str = ""

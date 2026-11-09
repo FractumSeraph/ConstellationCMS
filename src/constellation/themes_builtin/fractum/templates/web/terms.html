@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · {{ site.config.site.title }}{% endblock %}
+{% block body_class %}terms terms-{{ kind }}{% endblock %}
+{% block content %}
+<section class="terms">
+  {% set n = terms | length %}
+  <h1 class="term-header__title">{{ heading }} <sup>({{ n }})</sup></h1>
+  <ul class="term-list">
+  {% for term in terms %}
+    {% set c = term.posts | length %}
+    <li><a href="{{ url_for(kind, term.slug) }}">{{ term.title }}</a> <sup>({{ c }} {{ 'Post' if c == 1 else 'Posts' }})</sup></li>
+  {% else %}
+    <li class="term-list__empty">Nothing here yet.</li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

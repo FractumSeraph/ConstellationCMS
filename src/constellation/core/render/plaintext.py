@@ -24,8 +24,30 @@ def plain_text(doc: Document, *, width: int | None = None, max_chars: int | None
     return text
 
 
-def summary_text(doc: Document, max_chars: int = 240) -> str:
-    """The first paragraph of prose, for lists, feeds and meta descriptions."""
+def summary_text(doc: Document, max_chars: int = 240, words: int = 0) -> str:
+    """The first paragraph of prose, for lists, feeds and meta descriptions.
+
+    With ``words``, the first that many words instead, read across paragraphs and ending in "…"
+    when the text goes on.
+    """
+    if words > 0:
+        taken: list[str] = []
+        more = False
+        for b in doc.blocks:
+            if b.kind != "paragraph":
+                continue
+            text = _inline(b.inlines).strip()
+            if not text or text.startswith("[image"):
+                continue
+            for word in text.split():
+                if len(taken) == words:
+                    more = True
+                    break
+                taken.append(word)
+            if more:
+                break
+        out = " ".join(taken)
+        return out.rstrip(",;:") + "…" if more else out
     for b in doc.blocks:
         if b.kind == "paragraph":
             text = _inline(b.inlines).strip()

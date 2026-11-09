@@ -5,8 +5,25 @@
 {% block body_class %}list list-{{ term.kind }}{% endblock %}
 {% block content %}
 <section class="term">
-  <h1 class="term__title">{% if term.kind == 'tag' %}#{% endif %}{{ term.title }}</h1>
+  {% set count = posts | length %}
+  {% if term.kind == 'author' %}
+  <header class="term-header term-header--author">
+    <div class="term-header__top">
+      {% if avatar %}<img class="term-header__avatar" src="{{ avatar }}" alt="" width="48" height="48">{% endif %}
+      <h1 class="term-header__title">{{ term.title }} <sup>({{ count }} {{ 'Post' if count == 1 else 'Posts' }})</sup></h1>
+    </div>
+    {% if term.meta.description %}<p class="term-description">{{ term.meta.description }}</p>{% endif %}
+    {% if author and author.url %}<p class="term-website"><a href="{{ author.url }}" rel="me">{{ author.url }}</a></p>{% endif %}
+  </header>
+  {% elif term.kind == 'series' %}
+  <h1 class="term__title">{{ term.title }}</h1>
   {% if term.meta.description %}<p class="term-description">{{ term.meta.description }}</p>{% endif %}
+  {% else %}
+  <header class="term-header">
+    <h1 class="term-header__title">{% if term.kind == 'tag' %}#{% endif %}{{ term.title }} <sup>({{ count }} {{ 'Post' if count == 1 else 'Posts' }})</sup></h1>
+    {% if term.meta.description %}<p class="term-description">{{ term.meta.description }}</p>{% endif %}
+  </header>
+  {% endif %}
   {% if term_body %}<div class="term-body">{{ term_body | safe }}</div>{% endif %}
   <div class="entries{% if term.kind == 'series' %} entries--series{% endif %}">
   {% for post in posts %}

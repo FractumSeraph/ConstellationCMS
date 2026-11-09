@@ -61,6 +61,7 @@ and adding each new site, with your own names filled into every command.
 - [`docs/themes.md`](docs/themes.md): writing and installing themes.
 - [`docs/studio-looks.md`](docs/studio-looks.md): the studio's looks, day/night, and your logo.
 - [`docs/analytics.md`](docs/analytics.md): built-in analytics and connecting Umami.
+- [`docs/migrating-from-publii.md`](docs/migrating-from-publii.md): moving a Publii site over.
 - [`docs/UPGRADING.md`](docs/UPGRADING.md): upgrades and backups.
 - [`CHANGELOG.md`](CHANGELOG.md).
 

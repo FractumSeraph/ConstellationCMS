@@ -7,6 +7,7 @@
 {% block meta %}<meta name="description" content="{{ site.config.seo.default_description }}">{% endblock %}
 <meta name="generator" content="ConstellationCMS">
 <link rel="stylesheet" href="{{ asset('style.css') }}">
+{% if favicon %}<link rel="icon" href="{{ favicon }}">{% endif %}
 <style>:root { --accent: {{ theme.accent | css_value }}; --font: {{ theme.font | css_value }}; }</style>
 {% if "atom" in site.config.platform("web").feeds %}<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="{{ site.config.site.title }}">{% endif %}
 {% include 'head_extra.html' ignore missing %}

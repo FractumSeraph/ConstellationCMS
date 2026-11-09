@@ -50,8 +50,8 @@ default = true
 [[settings]]
 key = "page_width"
 type = "string"
-label = "Page width (CSS length)"
-default = "64rem"
+label = "Page width (CSS length, e.g. 95% or 64rem)"
+default = "95%"
 
 [[settings]]
 key = "welcome"
@@ -76,3 +76,9 @@ key = "read_more"
 type = "string"
 label = "Link text under each summary in post lists (empty: no link)"
 default = "Read more →"
+
+[[settings]]
+key = "show_updated"
+type = "bool"
+label = "Show \"This article was updated on …\" under posts that have an updated date"
+default = true

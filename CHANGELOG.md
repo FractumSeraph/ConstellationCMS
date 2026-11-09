@@ -12,6 +12,18 @@
   under Account. Site cards get their own small constellation, server publishes light up a
   constellation as files upload, empty lists have friendlier messages, the current page is
   marked in the menu, and the logo lives in one replaceable file. See `docs/studio-looks.md`.
+- Sites moved from Publii look and behave the same (checked against fractum.faith page by page):
+  - Author pages at `/authors/{id}/` on web, Gemini and Gopher, with the author's `avatar` and
+    `bio`, a post count, and links to them from every post. The pattern is `urls.author`.
+  - Posts and pages can share `/{slug}/` (Publii's layout): links resolve to whichever has the
+    slug instead of reporting broken links.
+  - `render.summary_words`: list and feed summaries as the first N words across paragraphs.
+  - A `media/favicon.png` (or `.svg`, `.ico`) is linked from every page in `base` and `fractum`.
+  - fractum: "This article was updated on …" (`show_updated`), a "Read other posts" divider with
+    buttons, centred pagination buttons and footer, tag and author headings with post counts,
+    a tag index with counts, the original 404 page, centred images, a 95% page width, and a
+    "Menu" button on phone-sized screens (which also fixes long submenu items running off the
+    screen). See `docs/migrating-from-publii.md`.
 - Analytics: paste an Umami tracking code into a site's Settings and the rest is automatic. The
   script goes on every web page in any theme, limited to the site's own hostnames so previews
   never count, and the server forwards Gemini and Gopher page views to the same Umami website. A

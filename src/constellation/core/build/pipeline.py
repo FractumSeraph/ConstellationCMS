@@ -21,7 +21,7 @@ from constellation.core import feeds, umami
 from constellation.core.build.images import ImageSet, make_variants
 from constellation.core.markdown.document import Document, Ref, Severity, Warning
 from constellation.core.markdown.parse import parse_markdown
-from constellation.core.models import Page, Post, Site, Term
+from constellation.core.models import Page, Post, Site, Term, TermMeta
 from constellation.core.render.gemtext import GemtextRenderer, prefix_headings
 from constellation.core.render.gopher import GopherRenderer, GopherTarget, info_line, item_for_url
 from constellation.core.render.html import HtmlRenderer
@@ -455,6 +455,14 @@ class _Context:
                 "absolute_url": lambda path: absolute_url(cfg, platform, path),
                 "asset": asset,
                 "theme": self.theme_settings,
+                "favicon": next(
+                    (
+                        f"/{name}"
+                        for name in ("favicon.svg", "favicon.png", "favicon.ico")
+                        if (self.site.root / "media" / name).is_file()
+                    ),
+                    "",
+                ),
                 "now": self.build.now,
                 "hr": cfg.render.gemini.hr,
                 "gopher_item": self._gopher_item,
@@ -501,7 +509,7 @@ class _Context:
                 path: iset.srcset() for path, iset in self.image_sets.items() if iset.srcset()
             }
             res = HtmlRenderer(u, image_srcset=srcsets).render(doc)
-        summary = item.meta.summary or summary_text(doc)
+        summary = item.meta.summary or summary_text(doc, words=self.cfg.render.summary_words)
         if item.kind == "post":
             # Feeds carry readable text; on Gopher the body is a gophermap, so use the text file.
             self.bodies[item.slug] = self._gopher_text if self.platform == "gopher" else res.text
@@ -615,7 +623,10 @@ class _Context:
 
     def _summaries(self) -> dict[str, str]:
         return {
-            p.slug: (p.meta.summary or summary_text(self.docs[f"post:{p.slug}"]))
+            p.slug: (
+                p.meta.summary
+                or summary_text(self.docs[f"post:{p.slug}"], words=self.cfg.render.summary_words)
+            )
             for p in self.listed
         }
 
@@ -638,6 +649,7 @@ class _Context:
             ("tag", self.site.tags, "Tags"),
             ("category", self.site.categories, "Categories"),
             ("series", self.site.series, "Series"),
+            ("author", self._author_terms(), "Authors"),
         ]
         for kind, terms, heading in groups:
             shown: list[Term] = []
@@ -662,18 +674,21 @@ class _Context:
                         if self.platform == "gemini"
                         else HtmlRenderer(lambda r: url_for(r, "web", self.cfg)).render(doc).text
                     )
+                author = self.cfg.author_by_id(term.slug) if kind == "author" else None
                 text = self._tpl("list").render(
                     term=term,
                     posts=posts,
                     summaries=summaries,
                     term_body=term_body,
+                    author=author,
+                    avatar=self._avatar_url(author),
                     gemini_path=platform_path(self.cfg, "gemini", kind, term.slug),
                 )
                 pb.add(
                     output_file(self.cfg, self.platform, kind, term.slug),
                     _tidy(text, self.platform),
                 )
-            if shown or kind != "series":
+            if shown or kind not in ("series", "author"):
                 text = self._tpl("terms").render(
                     kind=kind,
                     terms=shown,
@@ -681,6 +696,27 @@ class _Context:
                     gemini_path=index_path(self.cfg, "gemini", kind),
                 )
                 pb.add(index_output_file(self.cfg, self.platform, kind), _tidy(text, self.platform))
+
+    def _author_terms(self) -> dict[str, Term]:
+        """One page per author in site.toml, listing the posts they wrote."""
+        default = self.cfg.site.author
+        out: dict[str, Term] = {}
+        for a in self.cfg.authors:
+            posts = [p for p in self.site.posts if (p.meta.author or default) == a.id]
+            out[a.id] = Term(
+                kind="author",
+                slug=a.id,
+                meta=TermMeta(title=a.name, description=a.bio),
+                name=a.name,
+                posts=posts,
+            )
+        return out
+
+    def _avatar_url(self, author: Any) -> str:
+        avatar = str(getattr(author, "avatar", "") or "")
+        if not avatar or urlsplit(avatar).scheme:
+            return avatar
+        return media_path(None, avatar)
 
     def render_archives(self, pb: PlatformBuild) -> None:
         by_year: dict[int, list[Post]] = {}
@@ -760,6 +796,7 @@ class _Context:
                 ("tag", self.site.tags),
                 ("category", self.site.categories),
                 ("series", self.site.series),
+                ("author", self._author_terms()),
             ):
                 for t in terms.values():
                     if (kind, t.slug) in self.shown_terms:

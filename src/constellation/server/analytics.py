@@ -45,6 +45,7 @@ CONTENT_KINDS = (
     "tag",
     "category",
     "series",
+    "author",
     "archive",
     "feed",
     "media",
@@ -67,17 +68,18 @@ def classify(path: str) -> tuple[str, str | None]:
     first = parts[0]
     if first in ("media", "assets"):
         return "media", None
-    if first in ("posts", "tags", "categories", "series", "archive") and len(parts) >= 2:
+    if first in ("posts", "tags", "categories", "series", "authors", "archive") and len(parts) >= 2:
         kind = {
             "posts": "post",
             "tags": "tag",
             "categories": "category",
             "series": "series",
+            "authors": "author",
             "archive": "archive",
         }[first]
         slug = parts[1].rsplit(".", 1)[0] if "." in parts[1] else parts[1]
         return kind, slug or None
-    if first in ("tags", "categories", "series", "archive", "page"):
+    if first in ("tags", "categories", "series", "authors", "archive", "page"):
         return "other", None
     slug = first.rsplit(".", 1)[0] if "." in first else first
     return "page", slug or None
@@ -198,7 +200,7 @@ class Analytics:
             self.forwarder is not None
             and not is_bot
             and platform != "web"
-            and kind in ("post", "page", "home", "tag", "category", "series", "archive")
+            and kind in ("post", "page", "home", "tag", "category", "series", "author", "archive")
             and int(event.get("status", 0)) in (20, 200)
         ):
             cfg = self.site_configs(site) if self.site_configs else {}

@@ -7,6 +7,8 @@
 {% block meta %}<meta name="description" content="{{ site.config.seo.default_description }}">{% endblock %}
 <meta name="generator" content="ConstellationCMS">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.add("js")</script>
+{% if favicon %}<link rel="icon" href="{{ favicon }}">{% endif %}
 {% if theme.bundled_font %}<link rel="preload" href="{{ asset('fonts/jetbrainsmono.woff2') }}" as="font" type="font/woff2" crossorigin>
 <style>
 @font-face { font-family: "JetBrains Mono"; src: url("{{ asset('fonts/jetbrainsmono.woff2') }}") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
@@ -25,10 +27,11 @@
 <header class="site-header">
   <div class="site-brand{% if theme.title_label %} site-brand--label{% endif %}">
     <a class="site-title" href="/">{{ site.config.site.title }}</a>
+    {% if site.config.menu.items %}<button class="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false">Menu</button>{% endif %}
   </div>
   {% if site.config.site.tagline %}<p class="site-tagline">{{ site.config.site.tagline }}</p>{% endif %}
   {% if site.config.menu.items %}
-  <nav class="site-nav" aria-label="Main">
+  <nav class="site-nav" id="site-nav" aria-label="Main">
     <ul class="menu">
     {% for item in site.config.menu.items %}
       {% if item.children %}
@@ -52,6 +55,21 @@
   {% if site.config.platform("gemini").enabled and site.config.platform("gemini").base_url %}<p class="also-on">Also on Gemini: <a href="{{ site.config.platform("gemini").base_url }}{{ gemini_path }}">{{ site.config.platform("gemini").base_url }}{{ gemini_path }}</a></p>{% endif %}
 </footer>
 </div>
+<script>
+// On small screens the menu sits behind a "Menu" button; without JavaScript it is simply shown.
+(function () {
+  var b = document.querySelector(".menu-toggle"), n = document.getElementById("site-nav");
+  if (!b || !n) return;
+  b.addEventListener("click", function () {
+    var open = b.getAttribute("aria-expanded") !== "true";
+    b.setAttribute("aria-expanded", String(open));
+    n.classList.toggle("is-open", open);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && n.classList.contains("is-open")) { b.click(); b.focus(); }
+  });
+})();
+</script>
 {{ site.config.custom_html.body_end | safe }}
 </body>
 </html>

@@ -164,7 +164,7 @@ class RefResolver:
         if not target and fragment:
             return Ref("fragment", "", frag, raw)
         prefix, sep, rest = target.partition(":")
-        if sep and prefix in ("post", "page", "tag", "category", "series"):
+        if sep and prefix in ("post", "page", "tag", "category", "series", "author"):
             return Ref(prefix, rest.strip("/"), frag, raw)  # type: ignore[arg-type]
         if sep and prefix == "media":
             return Ref("media", rest, frag, raw)
@@ -196,7 +196,10 @@ class RefResolver:
             return Ref("post", slug, frag, raw)
         if is_image or "." in posixpath.basename(target):
             return Ref("media", posixpath.normpath(target), frag, raw)
-        return Ref("post", _strip_date(target.strip("/")), frag, raw)
+        slug = _strip_date(target.strip("/"))
+        if self._belongs_elsewhere("post", slug):
+            return Ref("page", slug, frag, raw)
+        return Ref("post", slug, frag, raw)
 
     def _site_path(self, path: str) -> Ref | None:
         if self.cfg is None:
@@ -218,7 +221,7 @@ class RefResolver:
                 index = index_path(self.cfg, platform, index_kind)
                 if path in (index, index.rstrip("/")):
                     return Ref("index", index_kind, None, path)
-        for kind in ("post", "page", "tag", "category", "series"):
+        for kind in ("post", "page", "tag", "category", "series", "author"):
             pattern = getattr(self.cfg.urls, kind)
             rx = "^" + re.escape(pattern).replace(r"\{slug\}", r"(?P<slug>[^/]+)") + "$"
             candidates = [path if path.endswith("/") else path + "/"]
@@ -228,8 +231,19 @@ class RefResolver:
             for candidate in candidates:
                 m = re.match(rx, candidate)
                 if m:
-                    return Ref(kind, m.group("slug"), None, path)
+                    slug = m.group("slug")
+                    if self._belongs_elsewhere(kind, slug):
+                        break  # e.g. posts and pages both at /{slug}/: this slug is a page
+                    return Ref(kind, slug, None, path)
         return None
+
+    def _belongs_elsewhere(self, kind: str, slug: str) -> bool:
+        """When posts and pages share a URL pattern, a known slug decides which one is meant."""
+        if kind == "post":
+            return slug not in self.post_slugs and slug in self.page_slugs
+        if kind == "page":
+            return slug not in self.page_slugs and slug in self.post_slugs
+        return False
 
 
 _DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}-")

@@ -18,7 +18,7 @@
     <h1 class="entry__title">{{ item.meta.title }}</h1>
     <p class="entry__meta">
       <time datetime="{{ item.date | isoformat }}">{{ item.date | date('long') }}</time>
-      {%- if author %}<span class="post-author">{{ author.name }}</span>{% endif %}
+      {%- if author %}<span class="post-author"><a href="{{ url_for('author', author.id) }}">{{ author.name }}</a></span>{% endif %}
       {%- if theme.show_discordian_date %}<span class="post-date-alt">{{ item.date | date('long', calendar='discordian') }}</span>{% endif %}
       {%- if theme.show_year_numeral and site.config.calendar.numerals != 'arabic' %}<span class="post-year-numeral" title="{{ item.date.year }}">{{ item.date.year | numeral }}</span>{% endif %}
     </p>
@@ -30,10 +30,16 @@
 {{ body | safe }}
   </div>
   <footer class="post-footer">
-    <nav class="post-nav" aria-label="Neighbouring posts">
-      {% if prev_post %}<a rel="prev" href="{{ url_for('post', prev_post.slug) }}">← {{ prev_post.meta.title }}</a>{% endif %}
-      {% if next_post %}<a rel="next" href="{{ url_for('post', next_post.slug) }}">{{ next_post.meta.title }} →</a>{% endif %}
+    {% if theme.show_updated and item.updated and item.updated.date() != item.date.date() %}<p class="post-updated">This article was updated on <time datetime="{{ item.updated | isoformat }}">{{ item.updated | date('long') }}</time></p>{% endif %}
+    {% if prev_post or next_post %}
+    <nav class="post-nav" aria-labelledby="post-nav-title">
+      <p class="divider-title" id="post-nav-title"><span>Read other posts</span></p>
+      <div class="buttons">
+      {% if prev_post %}<a class="btn" rel="prev" href="{{ url_for('post', prev_post.slug) }}"><span class="btn__icon">←</span> <span class="btn__text">{{ prev_post.meta.title }}</span></a>{% endif %}
+      {% if next_post %}<a class="btn" rel="next" href="{{ url_for('post', next_post.slug) }}"><span class="btn__text">{{ next_post.meta.title }}</span> <span class="btn__icon">→</span></a>{% endif %}
+      </div>
     </nav>
+    {% endif %}
   </footer>
 </article>
 {% endblock %}

@@ -15,6 +15,7 @@ RefKind = Literal[
     "tag",
     "category",
     "series",
+    "author",
     "media",
     "external",
     "fragment",

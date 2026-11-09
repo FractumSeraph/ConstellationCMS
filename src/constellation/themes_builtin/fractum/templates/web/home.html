@@ -10,10 +10,11 @@
 {% endfor %}
 </section>
 {% if pagination.pages > 1 %}
-<nav class="pagination" aria-label="Pages">
-  {% if pagination.prev %}<a class="pagination__newer" rel="prev" href="{{ pagination.prev }}">← Newer</a>{% endif %}
-  <span>Page {{ pagination.current }} of {{ pagination.pages }}</span>
-  {% if pagination.next %}<a class="pagination__older" rel="next" href="{{ pagination.next }}">Older →</a>{% endif %}
+<nav class="pagination" aria-label="Page {{ pagination.current }} of {{ pagination.pages }}">
+  <div class="buttons">
+  {% if pagination.prev %}<a class="btn pagination__newer" rel="prev" href="{{ pagination.prev }}"><span class="btn__icon">←</span> <span class="btn__text">Newer</span></a>{% endif %}
+  {% if pagination.next %}<a class="btn pagination__older" rel="next" href="{{ pagination.next }}"><span class="btn__text">Older</span> <span class="btn__icon">→</span></a>{% endif %}
+  </div>
 </nav>
 {% endif %}
 {% endblock %}

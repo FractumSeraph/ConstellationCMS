@@ -81,7 +81,12 @@ JavaScript before installing it.
 bundled, under the SIL Open Font License in `static/fonts/OFL.txt`), the site title as a filled
 label followed by a barcode rule, titles over a double dotted rule, `date :: author` lines,
 `#tags`, "Read more" links, a framed welcome box, and menu groups that open as drop-downs on
-hover or keyboard focus without JavaScript (on narrow screens they show as indented lists).
+hover or keyboard focus without JavaScript. On phone-sized screens the menu opens from a "Menu"
+button (without JavaScript it's simply shown). Single posts end with "This article was updated
+on …" when they have an `updated` date, and a "Read other posts" divider with buttons for the
+neighbouring posts. Tag and author pages show a post count; author pages show the author's
+`avatar` and `bio` from `site.toml`. It's modelled closely on the original fractum.faith, so a
+site moved from there looks and behaves the same (see `docs/migrating-from-publii.md`).
 
 Section headings carry a prefix, `// ` by default: on the web through CSS on the headings in
 post and page bodies, on Gemini as `## // Posts` (the `prefix_headings` filter adds it to the
@@ -96,11 +101,12 @@ body's level-2 and level-3 headings and leaves preformatted text alone), and on 
 | `bundled_font` | `true` | Load the bundled web font |
 | `title_label` | `true` | Title as a filled label with the barcode rule |
 | `page_frame` | `true` | Faint lines down both sides of the page |
-| `page_width` | `64rem` | Maximum page width |
+| `page_width` | `95%` | Maximum page width (any CSS length, such as `64rem`) |
 | `welcome` | empty | Text in a framed box on the first home page (and at the top of the Gemini and Gopher home) |
 | `heading_prefix` | `// ` | Prefix for section headings on every platform |
 | `list_tags` | `true` | Author and tags in post lists |
 | `read_more` | `Read more →` | Link under each summary; empty for none |
+| `show_updated` | `true` | "This article was updated on …" under posts with an `updated` date |
 
 Two looks from the same theme:
 
