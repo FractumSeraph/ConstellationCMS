@@ -11,13 +11,31 @@ import os
 import secrets
 import sqlite3
 import sys
+import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import tomlkit
+
+
+def _locked[**P, R](method: Callable[P, R]) -> Callable[P, R]:
+    """Run a database method under the state's lock.
+
+    The studio serves requests from several threads but shares one SQLite connection; without
+    the lock, two requests at once can fail with "bad parameter or other API misuse".
+    """
+
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        with args[0]._lock:  # type: ignore[attr-defined]
+            return method(*args, **kwargs)
+
+    wrapper.__name__ = method.__name__
+    wrapper.__doc__ = method.__doc__
+    return wrapper
 
 
 def default_state_dir() -> Path:
@@ -54,6 +72,8 @@ class StudioSettings:
     secret_key: str = ""
     machine_id: str = ""
     totp_secret: str = ""
+    look: str = ""  # empty until chosen; drawn as the default look
+    mode: str = "night"
     extra: dict[str, Any] = field(default_factory=dict)
 
     def effective_auto_login(self) -> bool:
@@ -69,6 +89,7 @@ class State:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.settings_path = self.dir / "studio.toml"
         self.settings = self._load_settings()
+        self._lock = threading.RLock()
         self.db = sqlite3.connect(self.dir / "studio.sqlite", check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self._migrate()
@@ -108,6 +129,7 @@ class State:
         self._save_settings(self.settings)
 
     # ---- database ---------------------------------------------------------------------------
+    @_locked
     def _migrate(self) -> None:
         self.db.executescript(
             """
@@ -134,6 +156,7 @@ class State:
     SESSION_IDLE = 12 * 3600
     SESSION_MAX = 30 * 24 * 3600
 
+    @_locked
     def create_session(self, user_agent: str, remote: str) -> tuple[str, str]:
         sid = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(24)
@@ -145,6 +168,7 @@ class State:
         self.db.commit()
         return sid, csrf
 
+    @_locked
     def touch_session(self, sid: str) -> dict[str, Any] | None:
         row = self.db.execute(
             "SELECT id, created, last_seen, csrf FROM sessions WHERE id=?", (sid,)
@@ -160,10 +184,12 @@ class State:
         self.db.commit()
         return {"id": row[0], "created": row[1], "csrf": row[3]}
 
+    @_locked
     def delete_session(self, sid: str) -> None:
         self.db.execute("DELETE FROM sessions WHERE id=?", (sid,))
         self.db.commit()
 
+    @_locked
     def delete_all_sessions(self) -> None:
         self.db.execute("DELETE FROM sessions")
         self.db.commit()
@@ -172,6 +198,7 @@ class State:
     LOCK_AFTER = 5
     LOCK_SECONDS = 15 * 60
 
+    @_locked
     def login_locked(self, key: str) -> float:
         row = self.db.execute(
             "SELECT locked_until FROM login_failures WHERE key=?", (key,)
@@ -180,6 +207,7 @@ class State:
             return float(row[0] - time.time())
         return 0.0
 
+    @_locked
     def login_failed(self, key: str) -> None:
         row = self.db.execute("SELECT count FROM login_failures WHERE key=?", (key,)).fetchone()
         count = (row[0] if row else 0) + 1
@@ -190,17 +218,20 @@ class State:
         )
         self.db.commit()
 
+    @_locked
     def login_succeeded(self, key: str) -> None:
         self.db.execute("DELETE FROM login_failures WHERE key=?", (key,))
         self.db.commit()
 
     # ---- audit ------------------------------------------------------------------------------
+    @_locked
     def audit(self, event: str, detail: str = "", remote: str = "") -> None:
         self.db.execute(
             "INSERT INTO audit VALUES (?,?,?,?)", (time.time(), event, detail[:500], remote)
         )
         self.db.commit()
 
+    @_locked
     def audit_tail(self, n: int = 50) -> list[tuple[float, str, str, str]]:
         return list(
             self.db.execute(
@@ -209,30 +240,36 @@ class State:
         )
 
     # ---- file index (change detection) ------------------------------------------------------
+    @_locked
     def index_get(self, site: str, path: str) -> tuple[str, float] | None:
         row = self.db.execute(
             "SELECT sha256, mtime FROM file_index WHERE site=? AND path=?", (site, path)
         ).fetchone()
         return (row[0], row[1]) if row else None
 
+    @_locked
     def index_set(self, site: str, path: str, sha256: str, mtime: float) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO file_index VALUES (?,?,?,?)", (site, path, sha256, mtime)
         )
         self.db.commit()
 
+    @_locked
     def index_delete(self, site: str, path: str) -> None:
         self.db.execute("DELETE FROM file_index WHERE site=? AND path=?", (site, path))
         self.db.commit()
 
     # ---- kv ---------------------------------------------------------------------------------
+    @_locked
     def kv_get(self, key: str, default: Any = None) -> Any:
         row = self.db.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
         return json.loads(row[0]) if row else default
 
+    @_locked
     def kv_set(self, key: str, value: Any) -> None:
         self.db.execute("INSERT OR REPLACE INTO kv VALUES (?,?)", (key, json.dumps(value)))
         self.db.commit()
 
+    @_locked
     def close(self) -> None:
         self.db.close()

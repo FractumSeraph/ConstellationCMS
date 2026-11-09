@@ -7,7 +7,7 @@
 <div class="columns">
   <section class="card">
     <h2>Recent posts</h2>
-    <ul class="plain">{% for p in posts %}<li><a href="/sites/{{ site_id }}/edit?rel={{ p.rel | urlencode }}">{{ p.title }}</a> <span class="muted">{{ p.status }} · {{ p.date or '' }}</span></li>{% else %}<li class="muted">No posts yet.</li>{% endfor %}</ul>
+    <ul class="plain stars">{% for p in posts %}<li><a href="/sites/{{ site_id }}/edit?rel={{ p.rel | urlencode }}">{{ p.title }}</a> <span class="muted">{{ p.status }} · {{ p.date or '' }}</span></li>{% else %}<li class="empty">No posts yet. Write the first one below.</li>{% endfor %}</ul>
     <form method="post" action="/sites/{{ site_id }}/new" class="row">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="kind" value="post">
       <input name="title" placeholder="New post title" required><button class="primary">Write</button>
@@ -15,7 +15,7 @@
   </section>
   <section class="card">
     <h2>Status</h2>
-    <p>Drafts: {{ drafts | length }}</p>
+    <p>Drafts: {{ drafts | length }}{% if not drafts %} <span class="muted">· clear skies</span>{% endif %}</p>
     <p>Warnings in the preview build: {% for k, v in warnings.items() %}<span class="pill {{ k }}">{{ v }} {{ k }}</span> {% else %}none{% endfor %}</p>
     {% if releases %}<p>Last export: {{ releases[0].time[:16] }} ({{ releases[0].platform }} → {{ releases[0].target }})</p>{% endif %}
     {% if jobs %}<h3>Recent jobs</h3><ul class="plain">{% for j in jobs %}<li>{{ j.kind }} · {{ j.status }}</li>{% endfor %}</ul>{% endif %}

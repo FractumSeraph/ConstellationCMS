@@ -6,9 +6,9 @@
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <ul class="site-list">
 {% for s in workspace.sites if not s.archived %}
-  <li><a class="site-card" href="/sites/{{ s.id }}"><strong>{{ s.name }}</strong><span class="muted">{{ s.id }}{% if s.server %} · {{ s.server }}{% endif %}</span></a></li>
+  <li><a class="site-card" href="/sites/{{ s.id }}"><strong>{{ s.name }}</strong><span class="muted">{{ s.id }}{% if s.server %} · {{ s.server }}{% endif %}</span>{{ site_stars(s.id) }}</a></li>
 {% else %}
-  <li class="muted">No sites yet. Create one below.</li>
+  <li class="empty">No sites yet. Create one below to place your first star.</li>
 {% endfor %}
 </ul>
 <section class="card">

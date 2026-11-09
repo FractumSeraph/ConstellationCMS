@@ -29,7 +29,7 @@ from constellation.core.render.gemtext import GemtextRenderer
 from constellation.core.render.html import HtmlRenderer
 from constellation.core.routes import RefResolver, url_for
 from constellation.core.themes import BUILTIN_DIR, load_theme, theme_chain
-from constellation.studio import content_ops, locks
+from constellation.studio import content_ops, locks, looks
 from constellation.studio.auth import (
     hash_password,
     host_is_loopback,
@@ -128,7 +128,15 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     app.state.studio = studio
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
     templates = Jinja2Templates(directory=str(HERE / "templates"))
-    templates.env.globals.update({"version": __version__})
+    templates.env.globals.update(
+        {
+            "version": __version__,
+            "looks": looks.LOOKS,
+            "modes": looks.MODES,
+            "site_stars": looks.site_stars,
+            "publish_sky": looks.publish_sky,
+        }
+    )
     templates.env.filters["tojson_attr"] = lambda v: json.dumps(v)
 
     # ---- auth plumbing --------------------------------------------------------------------
@@ -224,6 +232,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         ctx.setdefault("csrf", sess["csrf"] if sess else "")
         ctx.setdefault("workspace", studio.workspace)
         ctx.setdefault("settings", studio.state.settings)
+        ctx.setdefault("look", looks.effective_look(str(studio.state.settings.look)))
+        ctx.setdefault("mode", looks.effective_mode(str(studio.state.settings.mode)))
         return cast(HTMLResponse, templates.TemplateResponse(request, name, ctx))
 
     # ---- setup, login, logout -------------------------------------------------------------
@@ -231,21 +241,28 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     async def setup_form(request: Request) -> Response:
         if not studio.needs_setup():
             return RedirectResponse("/", 303)
-        return render(request, "setup.html", error="")
+        return render(request, "setup.html", error="", chosen=looks.DEFAULT_LOOK)
 
     @app.post("/setup")
     async def setup_submit(
-        request: Request, password: str = Form(...), confirm: str = Form(...)
+        request: Request,
+        password: str = Form(...),
+        confirm: str = Form(...),
+        look: str = Form(looks.DEFAULT_LOOK),
+        mode: str = Form(looks.DEFAULT_MODE),
     ) -> Response:
         if not studio.needs_setup():
             return RedirectResponse("/", 303)
         if not same_origin(request):
             raise HTTPException(403, "cross-origin request refused")
+        chosen = looks.effective_look(look)
         if len(password) < 10:
-            return render(request, "setup.html", error="Use at least 10 characters.")
+            return render(request, "setup.html", error="Use at least 10 characters.", chosen=chosen)
         if password != confirm:
-            return render(request, "setup.html", error="The two passwords differ.")
+            return render(request, "setup.html", error="The two passwords differ.", chosen=chosen)
         studio.state.settings.password_hash = hash_password(password)
+        studio.state.settings.look = chosen
+        studio.state.settings.mode = looks.effective_mode(mode)
         studio.state.save_settings()
         studio.state.audit("setup", remote=client_host(request))
         return _login_response(studio, request, "/")
@@ -704,14 +721,20 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 text,
             )
             text = text.replace('srcset="/', f'srcset="{prefix}/')
-            text = re.sub(r"(url\()/(?!/)", lambda m: m.group(1) + prefix + "/", text)
+            text = re.sub(r"(url\(['\"]?)/(?!/)", lambda m: m.group(1) + prefix + "/", text)
             return HTMLResponse(text)
         if f.media_type.startswith("text/css"):
             text = re.sub(
                 r"(url\(['\"]?)/(?!/)", lambda m: m.group(1) + prefix + "/", data.decode("utf-8")
             )
             return Response(text, media_type=f.media_type)
-        return Response(data, media_type=f.media_type or media_type_for(key))
+        media = f.media_type or media_type_for(key)
+        headers = {}
+        if media.startswith("font/") or key.endswith((".woff2", ".woff", ".ttf", ".otf")):
+            # The editor's preview runs in a sandboxed frame (origin "null"), and browsers only
+            # load fonts across origins when the response allows it.
+            headers["Access-Control-Allow-Origin"] = "*"
+        return Response(data, media_type=media, headers=headers)
 
     # ---- taxonomies ---------------------------------------------------------------------------
     @app.get("/sites/{site_id}/taxonomies", response_class=HTMLResponse)
@@ -1443,6 +1466,20 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         studio.state.settings.auto_login_local = auto_login_local == "on"
         studio.state.save_settings()
         return RedirectResponse("/account?saved=1", 303)
+
+    @app.post("/account/look")
+    async def account_look(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        look: str = Form(...),
+        mode: str = Form(looks.DEFAULT_MODE),
+    ) -> Response:
+        if look not in looks.LOOK_IDS or mode not in looks.MODE_IDS:
+            raise HTTPException(400, "unknown look or mode")
+        studio.state.settings.look = look
+        studio.state.settings.mode = mode
+        studio.state.save_settings()
+        return RedirectResponse("/account?saved=1#look", 303)
 
     @app.post("/account/signout-everywhere")
     async def signout_everywhere(

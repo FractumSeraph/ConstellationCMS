@@ -1,5 +1,6 @@
-<div class="job {{ job.status }}" {% if job.status == 'running' %}hx-get="/jobs/{{ job.id }}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+<div class="job {{ job.status }}" data-job="{{ job.id }}" {% if job.status == 'running' %}hx-get="/jobs/{{ job.id }}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
   <p><strong>{{ job.kind }}</strong> · {{ job.status }}{% if job.error %} · <span class="error">{{ job.error }}</span>{% endif %}</p>
+  {{ publish_sky(job) }}
   <pre class="log">{% for line in job.log %}{{ line }}
 {% endfor %}</pre>
 </div>

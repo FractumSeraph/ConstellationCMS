@@ -54,6 +54,7 @@ Switch `--tls-mode acme` once DNS points at the server and nothing else holds po
 
 - [`docs/plan/`](docs/plan/README.md): the design, decision record and roadmap.
 - [`docs/themes.md`](docs/themes.md): writing and installing themes.
+- [`docs/studio-looks.md`](docs/studio-looks.md): the studio's looks, day/night, and your logo.
 - [`docs/UPGRADING.md`](docs/UPGRADING.md): upgrades and backups.
 - [`CHANGELOG.md`](CHANGELOG.md).
 

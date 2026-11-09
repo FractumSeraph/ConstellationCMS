@@ -1,0 +1,22 @@
+{# Look and day/night choice, shared by first-run setup and the Account page. Needs `chosen` and `chosen_mode`. #}
+<fieldset class="look-choices">
+  <legend>Look</legend>
+  {% for l in looks %}
+  <label class="look-choice">
+    <input type="radio" name="look" value="{{ l.id }}" {% if l.id == chosen %}checked{% endif %}>
+    <div class="lp" data-look="{{ l.id }}" aria-hidden="true">
+      <div class="lp-top">{% include "partials/brand.html" %}<span>Constellation</span></div>
+      <div class="lp-card"><span class="lp-label">Recent posts</span><span class="lp-line"></span><span class="lp-line short"></span></div>
+      <span class="lp-btn">Publish</span>
+    </div>
+    <span class="look-name">{{ l.name }}{% if loop.first %} <span class="muted small">(default)</span>{% endif %}</span>
+    <span class="look-blurb">{{ l.blurb }}</span>
+  </label>
+  {% endfor %}
+</fieldset>
+<fieldset class="mode-choices">
+  <legend>Day or night</legend>
+  {% for m, label in modes %}
+  <label><input type="radio" name="mode" value="{{ m }}" {% if m == chosen_mode %}checked{% endif %}> {{ label }}</label>
+  {% endfor %}
+</fieldset>

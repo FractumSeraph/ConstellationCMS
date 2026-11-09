@@ -1,28 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-look="{{ look }}" data-mode="{{ mode }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Studio{% endblock %} · ConstellationCMS</title>
 <link rel="stylesheet" href="/static/studio.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <meta name="csrf" content="{{ csrf }}">
 <script src="/static/vendor/htmx.min.js" defer></script>
 <script src="/static/studio.js" defer></script>
 </head>
 <body class="{% block body_class %}{% endblock %}" hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
 <header class="topbar">
-  <a class="brand" href="/">✦ Constellation</a>
+  <a class="brand" href="/">{% include "partials/brand.html" %}<span>Constellation</span></a>
   {% if site_id is defined %}
+  {% set here = request.url.path %}
   <nav class="site-nav">
     <span class="site-name">{{ site_id }}</span>
-    <a href="/sites/{{ site_id }}">Dashboard</a>
-    <a href="/sites/{{ site_id }}/posts">Posts</a>
-    <a href="/sites/{{ site_id }}/pages">Pages</a>
-    <a href="/sites/{{ site_id }}/taxonomies">Taxonomies</a>
-    <a href="/sites/{{ site_id }}/settings">Settings</a>
-    <a href="/sites/{{ site_id }}/theme">Theme</a>
-    <a href="/sites/{{ site_id }}/publish">Publish</a>
-    <a href="/sites/{{ site_id }}/analytics">Analytics</a>
+    {% for path, label in [('', 'Dashboard'), ('/posts', 'Posts'), ('/pages', 'Pages'), ('/taxonomies', 'Taxonomies'), ('/settings', 'Settings'), ('/theme', 'Theme'), ('/publish', 'Publish'), ('/analytics', 'Analytics')] %}
+    {% set href = '/sites/' ~ site_id ~ path %}
+    <a href="{{ href }}"{% if here == href %} class="current" aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
     <a href="/sites/{{ site_id }}/preview/web/" target="_blank" rel="noopener">Preview ↗</a>
   </nav>
   {% endif %}

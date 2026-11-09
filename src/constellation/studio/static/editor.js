@@ -43,11 +43,15 @@ let dirty = false;
 let saveTimer = null;
 let previewTimer = null;
 
+// The editor follows the studio's day/night setting.
+const studioMode = document.documentElement.dataset.mode || "night";
+const dayMode = studioMode === "day" || (studioMode === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+
 const view = new EditorView({
   state: EditorState.create({
     doc: body,
     extensions: [
-      basicSetup, markdown({ base: markdownLanguage }), oneDark, lintGutter(), keymap.of([indentWithTab]),
+      basicSetup, markdown({ base: markdownLanguage }), ...(dayMode ? [] : [oneDark]), lintGutter(), keymap.of([indentWithTab]),
       EditorView.lineWrapping, EditorState.readOnly.of(readOnly),
       EditorView.updateListener.of((u) => { if (u.docChanged) { markDirty(); schedulePreview(); } }),
       keymap.of([{ key: "Mod-s", run: () => { save(); return true; } }]),

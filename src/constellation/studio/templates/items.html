@@ -20,7 +20,7 @@
       <form method="post" action="/sites/{{ site_id }}/trash" class="inline" data-confirm="Move to trash?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="rel" value="{{ i.rel }}"><input type="hidden" name="kind" value="{{ kind }}"><button class="link danger">trash</button></form>
     </td>
   </tr>
-  {% else %}<tr><td colspan="5" class="muted">Nothing here yet.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="5" class="empty">{% if request.query_params.get("status") %}No {{ request.query_params.get("status") }} {{ kind }}s. Clear skies.{% else %}No {{ kind }}s yet. Create one above.{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>
 {% endblock %}

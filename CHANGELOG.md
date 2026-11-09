@@ -7,6 +7,15 @@
   JetBrains Mono). A `prefix_headings` template filter for gemtext.
 - Gemini: a paragraph that is only a link now renders as just the `=>` line, as the rendering
   plan specifies, instead of the text followed by the same link.
+- Studio: three looks (Star chart, the default; Observatory; Night terminal) with night, day or
+  follow-the-computer modes, chosen with a live preview on the first-run screen and changeable
+  under Account. Site cards get their own small constellation, server publishes light up a
+  constellation as files upload, empty lists have friendlier messages, the current page is
+  marked in the menu, and the logo lives in one replaceable file. See `docs/studio-looks.md`.
+- Studio: fixed a crash ("bad parameter or other API misuse", HTTP 500) when two requests used
+  the studio's database at the same time; the connection is now shared under a lock.
+- Studio: the editor's web preview loads theme fonts. Quoted `url("/...")` references are
+  rewritten to the preview path, and font files are served so the sandboxed frame may use them.
 
 Fixes from a full review before first deployment.
 

@@ -48,6 +48,14 @@
     <button class="primary">Apply</button>
   </form>
 </section>
+<section class="card" id="look"><h2>Look</h2>
+  <form method="post" action="/account/look">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% set chosen = look %}{% set chosen_mode = mode %}
+    {% include "partials/look_picker.html" %}
+    <button class="primary">Use this look</button>
+  </form>
+</section>
 <section class="card"><h2>Options</h2>
   <form method="post" action="/account/options">
     <input type="hidden" name="csrf" value="{{ csrf }}">
