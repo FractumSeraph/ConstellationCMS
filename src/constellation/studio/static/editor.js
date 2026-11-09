@@ -11,14 +11,16 @@ const csrf = document.querySelector('meta[name="csrf"]').content;
 const saveState = document.getElementById("save-state");
 
 function metaFromForm() {
-  const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+  // Fields missing from this form (pages have no date, posts no menu order) are left out, so
+  // the server keeps whatever the file already says for them.
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : undefined; };
   const meta = {
     title: v("m-title"), slug: v("m-slug"), status: v("m-status"), date: v("m-date"), tags: v("m-tags"),
     categories: v("m-categories"), series: v("m-series"), series_part: v("m-series_part"), author: v("m-author"),
     summary: v("m-summary"), image: v("m-image"), image_alt: v("m-image_alt"), menu_order: v("m-menu_order"),
     template: v("m-template"),
     seo: { title: v("m-seo-title"), description: v("m-seo-description"), canonical: v("m-seo-canonical"),
-           noindex: document.getElementById("m-seo-noindex")?.checked || false },
+           noindex: document.getElementById("m-seo-noindex") ? document.getElementById("m-seo-noindex").checked : undefined },
   };
   if (meta.date && meta.date.length === 16) meta.date += ":00";
   return meta;
@@ -112,7 +114,7 @@ function refreshFrame() { if (platform === "web") frame.src = previewPath() + "?
 function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 400); }
 
 async function renderPreview() {
-  const { data } = await post(`/sites/${site}/render`, { platform, body: view.state.doc.toString(), meta: metaFromForm(), slug });
+  const { data } = await post(`/sites/${site}/render`, { platform, rel, body: view.state.doc.toString(), meta: metaFromForm(), slug });
   if (platform === "gemini") geminiBody.innerHTML = data.html || "";
   if (platform === "gopher") gopherBody.textContent = data.text || "";
   showWarnings(data.warnings || []);

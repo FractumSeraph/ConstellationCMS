@@ -1,4 +1,4 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>{{ path }}</title><link rel="stylesheet" href="/static/studio.css"></head>
-<body class="gemini-page"><p class="muted small">Gemini preview of <code>{{ path }}</code> (rendered by the studio's plain viewer, not a real client)</p>
+<body class="gemini-page"><p class="muted small">{{ label or "Gemini" }} preview of <code>{{ path }}</code> (rendered by the studio's plain viewer, not a real client)</p>
 <div class="gemtext">{{ body | safe }}</div></body></html>

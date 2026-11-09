@@ -158,7 +158,10 @@ class SiteConfig(Strict):
     redirects: list[Redirect] = Field(default_factory=list)
     headers: dict[str, str] = Field(default_factory=dict)
     authors: list[Author] = Field(default_factory=list)
-    platforms: dict[str, PlatformConfig] = Field(default_factory=dict)
+    # With no [platforms] table at all, a site is a plain web site.
+    platforms: dict[str, PlatformConfig] = Field(
+        default_factory=lambda: {"web": PlatformConfig(enabled=True)}
+    )
     urls: UrlPatterns = Field(default_factory=UrlPatterns)
     menu: Menu = Field(default_factory=Menu)
     footer: Footer = Field(default_factory=Footer)
@@ -238,6 +241,12 @@ class ContentItem(BaseModel):
     @property
     def is_published(self) -> bool:
         return self.meta.status == "published"
+
+    def media_name(self, path: Path) -> str:
+        """A media file's name relative to its bundle, with forward slashes."""
+        if self.bundle is None:
+            return path.name
+        return path.relative_to(self.bundle).as_posix()
 
     @property
     def meta(self) -> ItemMeta:  # pragma: no cover - overridden

@@ -87,7 +87,7 @@ def test_taxonomy_and_archive_pages_on_both_platforms() -> None:
     ):
         assert path in gem, path
     tags = gem["tags.gmi"].data.decode()
-    assert "=> /tags/foundations.gmi #Foundations (3)" in tags  # descriptor title wins
+    assert "=> /tags/foundations.gmi #Foundations (2)" in tags  # title wins; drafts not counted
     assert "=> /tags/projects.gmi #projects (1)" in tags  # otherwise the author casing is kept
     series = gem["series/the-rites.gmi"].data.decode()
     assert series.index("The Veiled Ascent") < series.index("The Rites of Ascension")

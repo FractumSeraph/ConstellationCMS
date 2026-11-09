@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote, urlsplit
 
 import tomlkit
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, UploadFile
@@ -29,9 +30,15 @@ from constellation.core.render.html import HtmlRenderer
 from constellation.core.routes import RefResolver, url_for
 from constellation.core.themes import BUILTIN_DIR, load_theme, theme_chain
 from constellation.studio import content_ops, locks
-from constellation.studio.auth import hash_password, is_loopback, verify_password
+from constellation.studio.auth import (
+    hash_password,
+    host_is_loopback,
+    is_loopback,
+    safe_next,
+    verify_password,
+)
 from constellation.studio.jobs import Jobs
-from constellation.studio.preview import PreviewBuilder, gemtext_to_html
+from constellation.studio.preview import PreviewBuilder, gemtext_to_html, gophermap_to_html
 from constellation.studio.state import State
 from constellation.studio.workspace import (
     ServerEntry,
@@ -130,8 +137,19 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if s.trust_proxy:
             fwd = request.headers.get("x-forwarded-for")
             if fwd:
-                return fwd.split(",")[0].strip()
+                # The proxy appends the address it saw; anything to the left is client-supplied.
+                return fwd.split(",")[-1].strip()
         return request.client.host if request.client else ""
+
+    def same_origin(request: Request) -> bool:
+        """Browsers send Origin on every POST; it must name this studio."""
+        origin = request.headers.get("origin")
+        if not origin or origin == "null":
+            return origin is None
+        host = request.headers.get("host", "")
+        if studio.state.settings.trust_proxy:
+            host = request.headers.get("x-forwarded-host", host).split(",")[-1].strip()
+        return urlsplit(origin).netloc.lower() == host.lower()
 
     def session_of(request: Request) -> dict[str, Any] | None:
         sid = request.cookies.get(SESSION_COOKIE)
@@ -143,6 +161,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if (
             s.effective_auto_login()
             and is_loopback(request.client.host if request.client else None)
+            and host_is_loopback(request.headers.get("host"))
             and not s.trust_proxy
         ):
             return {"id": "local", "csrf": _local_csrf(studio), "auto": True}
@@ -155,8 +174,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if sess is None:
             if request.headers.get("hx-request"):
                 raise HTTPException(401, "signed out", headers={"HX-Redirect": "/login"})
+            here = request.url.path + (f"?{request.url.query}" if request.url.query else "")
             raise HTTPException(
-                status_code=307, headers={"Location": f"/login?next={request.url.path}"}
+                status_code=307, headers={"Location": f"/login?next={quote(here, safe='')}"}
             )
         request.state.session = sess
         return sess
@@ -165,6 +185,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         request: Request, sess: dict[str, Any] = Depends(require_session)
     ) -> dict[str, Any]:
         """Mutating requests carry the session's CSRF token in a header (htmx, fetch) or a form field."""
+        if not same_origin(request):
+            raise HTTPException(403, "cross-origin request refused")
         token = request.headers.get("x-csrf-token")
         if token is None and request.headers.get("content-type", "").startswith(
             ("application/x-www-form-urlencoded", "multipart/form-data")
@@ -182,7 +204,12 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             response.headers.setdefault("Referrer-Policy", "same-origin")
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             if request.url.path.startswith("/sites/") and "/preview/" in request.url.path:
-                response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
+                # Built pages may contain raw HTML and scripts from content or themes. The
+                # sandbox gives them an opaque origin, so they cannot use the studio session.
+                response.headers.setdefault(
+                    "Content-Security-Policy",
+                    "sandbox allow-scripts allow-popups allow-forms; frame-ancestors 'self'",
+                )
             else:
                 response.headers.setdefault(
                     "Content-Security-Policy",
@@ -212,6 +239,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     ) -> Response:
         if not studio.needs_setup():
             return RedirectResponse("/", 303)
+        if not same_origin(request):
+            raise HTTPException(403, "cross-origin request refused")
         if len(password) < 10:
             return render(request, "setup.html", error="Use at least 10 characters.")
         if password != confirm:
@@ -226,7 +255,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if studio.needs_setup():
             return RedirectResponse("/setup", 303)
         if session_of(request):
-            return RedirectResponse(next if next.startswith("/") else "/", 303)
+            return RedirectResponse(safe_next(next), 303)
         return render(
             request, "login.html", error="", next=next, totp=bool(studio.state.settings.totp_secret)
         )
@@ -235,6 +264,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     async def login_submit(
         request: Request, password: str = Form(...), next: str = Form("/"), code: str = Form("")
     ) -> Response:
+        if not same_origin(request):
+            raise HTTPException(403, "cross-origin request refused")
         host = client_host(request)
         locked = studio.state.login_locked(host)
         if locked:
@@ -259,7 +290,14 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if studio.state.settings.totp_secret:
             from constellation.studio import totp as _totp
 
-            if not _totp.verify(studio.state.settings.totp_secret, code):
+            secret = studio.state.settings.totp_secret
+            last = studio.state.kv_get("totp_last_counter")
+            counter = _totp.match(secret, code)
+            if counter is not None and last is not None and counter <= int(last):
+                counter = None  # already used: refuse replays
+            if counter is not None:
+                studio.state.kv_set("totp_last_counter", counter)
+            if counter is None:
                 studio.state.login_failed(host)
                 studio.state.audit("login_failed_totp", remote=host)
                 return render(
@@ -271,7 +309,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 )
         studio.state.login_succeeded(host)
         studio.state.audit("login", remote=host)
-        return _login_response(studio, request, next if next.startswith("/") else "/")
+        return _login_response(studio, request, safe_next(next))
 
     @app.post("/logout")
     async def logout(request: Request, sess: dict[str, Any] = Depends(require_csrf)) -> Response:
@@ -399,9 +437,11 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     ) -> Response:
         root = studio.site_root(site_id)
         _check_writable(studio, site_id)
+        if kind not in ("post", "page"):
+            raise HTTPException(400, "kind must be post or page")
         rel = content_ops.create_item(root, kind, title.strip() or "Untitled")
         studio.state.audit("created", rel, client_host(request))
-        return RedirectResponse(f"/sites/{site_id}/edit?rel={rel}", 303)
+        return RedirectResponse(f"/sites/{site_id}/edit?rel={quote(rel)}", 303)
 
     @app.get("/sites/{site_id}/edit", response_class=HTMLResponse)
     async def editor(
@@ -411,10 +451,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         studio.touch_lock(site_id)
         try:
             item = content_ops.load_item(root, rel, state=studio.state, site_id=site_id)
-        except (FileNotFoundError, ValueError) as e:
-            raise HTTPException(404, str(e)) from e
+        except FileNotFoundError as e:
+            raise HTTPException(404, "no such post or page") from e
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
         site = _try_load_site(root, site_id)
         authors = [a.id for a in site.config.authors] if site else []
+        tz = _site_timezone(root)
         return render(
             request,
             "editor.html",
@@ -422,7 +465,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             item=item,
             rel=rel,
             authors=authors,
-            meta_json=json.dumps(_meta_for_form(item.meta)),
+            date_input=_date_for_input(item.meta.get("date"), tz),
+            timezone=str(tz),
+            meta_json=json.dumps(_meta_for_form(item.meta), default=str),
             read_only=studio.read_only_reason(site_id),
             gemini_enabled=bool(site and site.config.platform("gemini").enabled),
             gopher_enabled=bool(site and site.config.platform("gopher").enabled),
@@ -435,8 +480,10 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         root = studio.site_root(site_id)
         try:
             item = content_ops.load_item(root, rel)
-        except (FileNotFoundError, ValueError) as e:
-            raise HTTPException(404, str(e)) from e
+        except FileNotFoundError as e:
+            raise HTTPException(404, "no such post or page") from e
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
         return Response(item.body, media_type="text/plain; charset=utf-8")
 
     @app.post("/sites/{site_id}/save")
@@ -447,7 +494,16 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         _check_writable(studio, site_id)
         payload = await request.json()
         rel = str(payload["rel"])
-        meta = _meta_from_form(payload.get("meta", {}))
+        try:
+            original = content_ops.load_item(root, rel).meta
+        except (FileNotFoundError, ValueError):
+            original = {}
+        except Exception:  # noqa: BLE001 - unreadable front matter: start from the form
+            original = {}
+        meta = _merge_meta(original, payload.get("meta", {}), _site_timezone(root))
+        problem = _validate_meta(rel, meta)
+        if problem:
+            return JSONResponse({"error": problem}, status_code=400)
         try:
             item = content_ops.save_item(
                 root,
@@ -476,6 +532,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         body = str(payload.get("body", ""))
         meta = _meta_from_form(payload.get("meta", {}))
         slug = str(meta.get("slug") or payload.get("slug") or "preview")
+        rel_path = str(payload.get("rel", "")).replace("\\", "/")
+        item_kind = "page" if "content/pages/" in rel_path else "post"
         site = _try_load_site(root, site_id)
         cfg = site.config if site else None
         resolver = RefResolver(
@@ -484,6 +542,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             page_slugs={p.slug for p in site.pages} if site else set(),
         )
         doc = parse_markdown(body, resolve=lambda h, i: resolver.resolve(h, is_image=i))
+        media_warnings = _missing_media_warnings(root, str(payload.get("rel", "")), doc, platform)
         from constellation.core.models import SiteConfig, SiteInfo
 
         cfg = cfg or SiteConfig(site=SiteInfo(title="Preview"))
@@ -495,7 +554,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 pcfg.hostnames[0] if pcfg.hostnames else "localhost", pcfg.port or 70
             )
             renderer = GopherRenderer(
-                cfg.render.gopher, lambda r: url_for(r, "gopher", cfg, item_slug=slug), target
+                cfg.render.gopher,
+                lambda r: url_for(r, "gopher", cfg, item_slug=slug, item_kind=item_kind),
+                target,
             )
             res = renderer.render_text(doc)
             map_res = renderer.render(doc)
@@ -504,28 +565,30 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                     "html": "",
                     "text": res.text + "\n\n--- gophermap ---\n" + map_res.text,
                     "media_base": "",
-                    "warnings": [w.as_dict() for w in map_res.warnings],
+                    "warnings": media_warnings + [w.as_dict() for w in map_res.warnings],
                 }
             )
         if platform == "gemini":
             res = GemtextRenderer(
                 cfg.render.gemini if cfg else RenderGemini(),
-                lambda r: url_for(r, "gemini", cfg, item_slug=slug),
+                lambda r: url_for(r, "gemini", cfg, item_slug=slug, item_kind=item_kind),
             ).render(doc)
             title = str(meta.get("title", ""))
             html_out = gemtext_to_html((f"# {title}\n\n" if title else "") + res.text)
             text = res.text
         else:
-            res = HtmlRenderer(lambda r: url_for(r, "web", cfg, item_slug=slug)).render(doc)
+            res = HtmlRenderer(
+                lambda r: url_for(r, "web", cfg, item_slug=slug, item_kind=item_kind)
+            ).render(doc)
             html_out = res.text
             text = ""
-        media_base = f"/sites/{site_id}/preview/web/media/posts/{slug}/"
+        media_base = f"/sites/{site_id}/preview/web/media/{item_kind}s/{slug}/"
         return JSONResponse(
             {
                 "html": html_out,
                 "text": text,
                 "media_base": media_base,
-                "warnings": [w.as_dict() for w in res.warnings],
+                "warnings": media_warnings + [w.as_dict() for w in res.warnings],
             }
         )
 
@@ -544,7 +607,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             if not rel.endswith("index.md"):
                 rel = content_ops.convert_to_bundle(root, rel)
             name = content_ops.add_media(root, rel, file.filename or "upload", data)
-        except ValueError as e:
+        except (ValueError, OSError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         return JSONResponse({"ok": True, "name": name, "rel": rel, "markdown": f"![]({name})"})
 
@@ -558,9 +621,12 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     ) -> Response:
         root = studio.site_root(site_id)
         _check_writable(studio, site_id)
-        content_ops.trash_item(root, rel, state=studio.state, site_id=site_id)
+        try:
+            content_ops.trash_item(root, rel, state=studio.state, site_id=site_id)
+        except (ValueError, OSError) as e:
+            raise HTTPException(400, str(e)) from e
         studio.state.audit("trashed", rel, client_host(request))
-        return RedirectResponse(f"/sites/{site_id}/{kind}s", 303)
+        return RedirectResponse(f"/sites/{site_id}/{'page' if kind == 'page' else 'post'}s", 303)
 
     @app.post("/sites/{site_id}/duplicate")
     async def duplicate(
@@ -571,8 +637,11 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     ) -> Response:
         root = studio.site_root(site_id)
         _check_writable(studio, site_id)
-        new_rel = content_ops.duplicate_item(root, rel)
-        return RedirectResponse(f"/sites/{site_id}/edit?rel={new_rel}", 303)
+        try:
+            new_rel = content_ops.duplicate_item(root, rel)
+        except (ValueError, OSError) as e:
+            raise HTTPException(400, str(e)) from e
+        return RedirectResponse(f"/sites/{site_id}/edit?rel={quote(new_rel)}", 303)
 
     # ---- preview of the built site -----------------------------------------------------------
     @app.get("/sites/{site_id}/preview/{platform}/{path:path}")
@@ -590,24 +659,36 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if platform not in build.platforms:
             raise HTTPException(404)
         files = build.platforms[platform].files
-        key = path or ("index.html" if platform == "web" else "index.gmi")
-        if key.endswith("/"):
-            key += "index.html"
-        if key not in files and platform == "web" and f"{key}/index.html" in files:
-            key = f"{key}/index.html"
-        if key not in files:
+        index = {"web": "index.html", "gemini": "index.gmi", "gopher": "gophermap"}[platform]
+        key = path.lstrip("/")
+        candidates = [key] if key and not key.endswith("/") else []
+        candidates += [f"{key.rstrip('/')}/{index}".lstrip("/")]
+        if platform == "gemini" and key:
+            candidates.append(key.rstrip("/") + ".gmi")
+        key = next((c for c in candidates if c in files), "")
+        if not key:
             raise HTTPException(404)
         f = files[key]
         data = f.bytes()
+        prefix = f"/sites/{site_id}/preview/{platform}"
         if platform == "gemini" and f.media_type.startswith("text/gemini"):
             return render(
                 request,
                 "gemini_preview.html",
                 site_id=site_id,
-                body=gemtext_to_html(data.decode("utf-8")),
+                body=gemtext_to_html(data.decode("utf-8"), prefix=prefix),
                 path=key,
             )
-        prefix = f"/sites/{site_id}/preview/{platform}"
+        if platform == "gopher" and key.endswith("gophermap"):
+            hosts = {h.lower() for h in build_hosts(root, "gopher")}
+            return render(
+                request,
+                "gemini_preview.html",
+                site_id=site_id,
+                body=gophermap_to_html(data.decode("utf-8"), prefix, hosts),
+                path=key,
+                label="Gopher",
+            )
         if f.media_type.startswith("text/html"):
             text = re.sub(
                 r'((?:href|src|content)=")/(?!/)',
@@ -727,6 +808,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 from constellation.core.models import SiteConfig
 
                 SiteConfig.model_validate(json.loads(json.dumps(new_doc.unwrap(), default=str)))
+                _validate_site_doc(new_doc)
             except Exception as e:  # noqa: BLE001
                 return render(
                     request,
@@ -740,11 +822,24 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 )
             write_site_toml(root, new_doc)
         else:
-            for key, value in form.multi_items():
-                if key in ("csrf",) or not key.startswith("f."):
-                    continue
-                dotted = key[2:]
-                set_path(doc, dotted, _coerce(dotted, str(value)))
+            try:
+                for key, value in form.multi_items():
+                    if key in ("csrf",) or not key.startswith("f."):
+                        continue
+                    dotted = key[2:]
+                    set_path(doc, dotted, _coerce(dotted, str(value)))
+                _validate_site_doc(doc)
+            except ValueError as e:
+                return render(
+                    request,
+                    "settings.html",
+                    site_id=site_id,
+                    doc=read_site_toml(root),
+                    toml_text=tomlkit.dumps(read_site_toml(root)),
+                    saved="",
+                    read_only="",
+                    error=f"Not saved: {e}",
+                )
             write_site_toml(root, doc)
         studio.state.audit("settings", site_id, client_host(request))
         return RedirectResponse(f"/sites/{site_id}/settings?saved=1", 303)
@@ -795,10 +890,15 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         _check_writable(studio, site_id)
         form = await request.form()
         doc = read_site_toml(root)
-        set_path(doc, "site.theme", str(form.get("theme", "base")))
-        theme = load_theme(
-            str(form.get("theme", "base")), search=[studio.workspace_root / "themes"]
-        )
+        current = str(doc.get("site", {}).get("theme", "base"))
+        chosen = str(form.get("theme", current))
+        theme = load_theme(chosen, search=[studio.workspace_root / "themes"])
+        set_path(doc, "site.theme", chosen)
+        if chosen != current:
+            # The form showed the old theme's settings; switching only changes the theme, and
+            # the new theme's settings start from its own defaults.
+            write_site_toml(root, doc)
+            return RedirectResponse(f"/sites/{site_id}/theme", 303)
         for t in theme_chain(theme, search=[studio.workspace_root / "themes"]):
             for s in t.settings:
                 raw = form.get(f"s.{s.key}")
@@ -818,12 +918,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         doc = read_site_toml(root)
         exports = [dict(e) for e in doc.get("exports", [])]
         build, problems = studio.previews.try_get(site_id, root)
-        errors = [
-            w
-            for pb in (build.platforms.values() if build else [])
-            for w in pb.warnings
-            if w.severity == "error"
-        ]
+        errors = []
+        seen: set[tuple[str, str]] = set()
+        for pb in build.platforms.values() if build else []:
+            for w in pb.warnings:
+                if w.severity == "error" and (w.code, w.message) not in seen:
+                    seen.add((w.code, w.message))
+                    errors.append(w)
         from constellation.studio import servers as srv
 
         ws = studio.workspace
@@ -870,6 +971,15 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 new.append(e)
             doc["exports"] = new
         else:
+            problem = _export_problem(
+                name.strip(),
+                platform,
+                target.strip(),
+                layout,
+                [str(e.get("name")) for e in exports],
+            )
+            if problem:
+                raise HTTPException(400, problem)
             t = tomlkit.table()
             t["name"], t["platform"], t["target"], t["layout"] = (
                 name.strip(),
@@ -890,6 +1000,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         mode: str = Form("plan"),
     ) -> Response:
         root = studio.site_root(site_id)
+        if mode == "apply":
+            _check_writable(studio, site_id)
         doc = read_site_toml(root)
         spec = next((dict(e) for e in doc.get("exports", []) if e.get("name") == name), None)
         if spec is None:
@@ -1022,6 +1134,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         from constellation.studio import servers as srv
 
         root = studio.site_root(site_id)
+        if mode == "apply":
+            _check_writable(studio, site_id)
         ws = studio.workspace
         entry = ws.site(site_id)
         server = ws.server(entry.server) if entry and entry.server else None
@@ -1049,6 +1163,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     ) -> Response:
         from constellation.studio import servers as srv
 
+        _check_writable(studio, site_id)
         ws = studio.workspace
         entry = ws.site(site_id)
         server = ws.server(entry.server) if entry and entry.server else None
@@ -1364,7 +1479,14 @@ def _login_response(studio: Studio, request: Request, next_url: str) -> Response
         sid,
         httponly=True,
         samesite="strict",
-        secure=studio.state.settings.remote_mode or request.url.scheme == "https",
+        # Secure whenever the browser reached us over HTTPS. Remote mode over a private
+        # network such as Tailscale or WireGuard is plain HTTP, where a Secure cookie would
+        # never be sent back.
+        secure=request.url.scheme == "https"
+        or (
+            studio.state.settings.trust_proxy
+            and request.headers.get("x-forwarded-proto", "").split(",")[-1].strip() == "https"
+        ),
         max_age=State.SESSION_MAX,
     )
     return resp
@@ -1410,6 +1532,179 @@ def _meta_for_form(meta: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _missing_media_warnings(root: Path, rel: str, doc: Any, platform: str) -> list[dict[str, Any]]:
+    """The editor's view of the build's LINK-BROKEN-MEDIA check, for unsaved text."""
+    import posixpath
+
+    from constellation.core.markdown.document import Warning as DocWarning
+
+    if not rel:
+        return []
+    try:
+        source = content_ops._safe(root, rel)
+    except ValueError:
+        return []
+    bundle = source.parent if source.name == "index.md" else None
+    out: list[dict[str, Any]] = []
+    for ref in doc.refs:
+        if ref.kind != "media":
+            continue
+        if ref.target.startswith("/"):
+            found = (root / "media" / ref.target.lstrip("/")).is_file()
+        else:
+            found = bundle is not None and (bundle / posixpath.normpath(ref.target)).is_file()
+        if not found:
+            out.append(
+                DocWarning(
+                    "LINK-BROKEN-MEDIA",
+                    "error",
+                    platform,
+                    0,
+                    f"media {ref.target!r} not found; upload it or fix the name",
+                ).as_dict()
+            )
+    return out
+
+
+EXPORT_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
+
+
+def _export_problem(name: str, platform: str, target: str, layout: str, taken: list[str]) -> str:
+    if not EXPORT_NAME.match(name):
+        return "the name must be lowercase letters, digits, - or _ (for example vps-web)"
+    if name in taken:
+        return f"there is already a target called {name!r}"
+    if platform not in ("web", "gemini", "gopher"):
+        return "unknown platform"
+    if layout not in ("plain", "agate"):
+        return "unknown layout"
+    if target.startswith("folder:"):
+        folder = target[len("folder:") :].strip()
+        if not Path(folder).expanduser().is_absolute():
+            return "a folder target needs a full path, such as folder:C:\\sites\\out or folder:/srv/out"
+        return ""
+    if target.startswith("sftp://") or target.startswith("rsync:"):
+        if any(c in target for c in " \t\n\"'`;|&$"):
+            return "the target must not contain spaces or shell characters"
+        return ""
+    return "the target must start with folder:, sftp:// or rsync:"
+
+
+def build_hosts(root: Path, platform: str) -> list[str]:
+    from constellation.core.content import load_config
+
+    try:
+        pcfg = load_config(root).platform(platform)
+    except ContentError:
+        return []
+    hosts = list(pcfg.hostnames)
+    if pcfg.base_url:
+        host = urlsplit(pcfg.base_url).hostname
+        if host:
+            hosts.append(host)
+    return hosts
+
+
+def _site_timezone(root: Path) -> Any:
+    from constellation.core.content import load_config, site_tz
+
+    try:
+        return site_tz(load_config(root).site.timezone)
+    except ContentError:
+        return UTC
+
+
+def _date_for_input(value: Any, tz: Any) -> str:
+    """A front-matter date as a ``datetime-local`` value, in the site's time zone."""
+    from datetime import date as date_type
+
+    if value in (None, ""):
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.strip())
+        except ValueError:
+            return str(value)[:16]
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(tz)
+        return str(value.strftime("%Y-%m-%dT%H:%M"))
+    if isinstance(value, date_type):
+        return f"{value:%Y-%m-%d}T00:00"
+    return str(value)[:16]
+
+
+def _merge_meta(original: dict[str, Any], form: dict[str, Any], tz: Any) -> dict[str, Any]:
+    """Apply the editor form to the file's front matter.
+
+    Keys the form does not send are kept as they are, so fields the editor does not show
+    (``updated``, ``lang``, per-platform overrides, theme keys) survive every save. A field
+    the form shows unchanged keeps its original value and type.
+    """
+    out = dict(original)
+    for k, v in form.items():
+        if v is None:
+            continue
+        if k == "seo" and isinstance(v, dict):
+            seo = dict(out.get("seo") or {})
+            for kk, vv in v.items():
+                if vv is None:
+                    continue
+                if vv in ("", False):
+                    seo.pop(kk, None)
+                else:
+                    seo[kk] = vv
+            if seo:
+                out["seo"] = seo
+            else:
+                out.pop("seo", None)
+        elif k in META_LIST_KEYS:
+            before = original.get(k)
+            if isinstance(before, list) and str(v).strip() == ", ".join(str(x) for x in before):
+                continue
+            values = [x.strip() for x in str(v).split(",") if x.strip()]
+            if values:
+                out[k] = values
+            else:
+                out.pop(k, None)
+        elif k == "date":
+            if v == _date_for_input(original.get("date"), tz):
+                continue
+            if v:
+                out[k] = v
+            else:
+                out.pop(k, None)
+        elif k in ("series_part", "menu_order"):
+            if v == "":
+                out.pop(k, None)
+                continue
+            try:
+                out[k] = int(v)
+            except (TypeError, ValueError):
+                continue
+        elif v == "":
+            out.pop(k, None)
+        else:
+            out[k] = v
+    return out
+
+
+def _validate_meta(rel: str, meta: dict[str, Any]) -> str:
+    """Refuse to write front matter the site loader would reject."""
+    from pydantic import ValidationError
+
+    from constellation.core.models import PageMeta, PostMeta
+
+    model = PostMeta if "/posts/" in "/" + rel.replace("\\", "/") else PageMeta
+    try:
+        model.model_validate(meta)
+    except ValidationError as e:
+        first = e.errors()[0]
+        where = ".".join(str(x) for x in first.get("loc", ())) or "front matter"
+        return f"not saved: {where}: {first.get('msg', 'invalid')}"
+    return ""
+
+
 def _meta_from_form(form: dict[str, Any]) -> dict[str, Any]:
     meta: dict[str, Any] = {}
     for k, v in form.items():
@@ -1444,17 +1739,45 @@ def _coerce(dotted: str, value: str) -> Any:
         "width_text",
     ):
         try:
-            return int(value)
+            number = int(value)
         except ValueError:
-            return 0
+            raise ValueError(f"{dotted} must be a whole number, not {value!r}") from None
+        if number < 1:
+            raise ValueError(f"{dotted} must be at least 1")
+        return number
     if key in ("hostnames", "feeds", "display"):
         return [x.strip() for x in value.split(",") if x.strip()]
     if key in ("items", "redirects"):
+        if not value.strip():
+            return []
         try:
             return json.loads(value)
-        except json.JSONDecodeError:
-            return []
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{dotted} is not valid JSON ({e.msg} at line {e.lineno})") from None
     return value
+
+
+def _validate_site_doc(doc: Any) -> None:
+    """Refuse a site.toml the site loader would reject."""
+    from zoneinfo import ZoneInfo
+
+    from pydantic import ValidationError
+
+    from constellation.core.models import SiteConfig
+
+    data = json.loads(json.dumps(doc.unwrap() if hasattr(doc, "unwrap") else doc, default=str))
+    try:
+        cfg = SiteConfig.model_validate(data)
+    except ValidationError as e:
+        first = e.errors()[0]
+        where = ".".join(str(x) for x in first.get("loc", ()))
+        raise ValueError(f"{where}: {first.get('msg', 'invalid')}") from None
+    try:
+        ZoneInfo(cfg.site.timezone)
+    except Exception:  # noqa: BLE001
+        raise ValueError(
+            f"unknown timezone {cfg.site.timezone!r}; use a name like America/Chicago"
+        ) from None
 
 
 def _coerce_type(type_name: str, value: str) -> Any:

@@ -41,12 +41,15 @@ def make_variants(source: Path, url_path: str) -> ImageSet | None:
     if source.suffix.lower() not in RASTER:
         return None
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
     except ImportError:  # pragma: no cover
         return None
     try:
-        with Image.open(source) as im:
-            im.load()
+        with Image.open(source) as opened:
+            opened.load()
+            # Phones store rotation as an EXIF tag. Browsers honour it on the original, and the
+            # resized copies drop EXIF, so bake the rotation in before resizing.
+            im = ImageOps.exif_transpose(opened) or opened
             width, height = im.size
             iset = ImageSet(url_path, width, height)
             stem, ext = url_path.rsplit(".", 1)

@@ -57,7 +57,7 @@ class WarningSink:
 
 
 _TAG_RX = re.compile(r"<[^>]+>")
-_WS_RX = re.compile(r"[ \t ]+")
+_WS_RX = re.compile(r"[ \t\r\n\u00a0]+")
 
 
 def strip_tags(html: str) -> str:

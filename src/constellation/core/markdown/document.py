@@ -10,7 +10,16 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 RefKind = Literal[
-    "post", "page", "tag", "category", "series", "media", "external", "fragment", "home"
+    "post",
+    "page",
+    "tag",
+    "category",
+    "series",
+    "media",
+    "external",
+    "fragment",
+    "home",
+    "index",
 ]
 Severity = Literal["info", "warn", "error"]
 

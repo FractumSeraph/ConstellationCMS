@@ -15,21 +15,21 @@
     <label>Default author id <input name="f.site.author" value="{{ site.get('author', '') }}"></label>
   </div></section>
   <section class="card"><h2>Web</h2><div class="grid">
-    <label class="check"><input type="checkbox" name="f.platforms.web.enabled" {% if web.get('enabled', True) %}checked{% endif %}> enabled</label>
+    <input type="hidden" name="f.platforms.web.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.web.enabled" {% if web.get('enabled', True) %}checked{% endif %}> enabled</label>
     <label>Base URL <input name="f.platforms.web.base_url" value="{{ web.get('base_url', '') }}"></label>
     <label>Hostnames (comma separated; first is canonical) <input name="f.platforms.web.hostnames" value="{{ web.get('hostnames', []) | join(', ') }}"></label>
     <label>Posts per page <input type="number" name="f.platforms.web.pagination" value="{{ web.get('pagination', 10) }}"></label>
     <label>Feeds <input name="f.platforms.web.feeds" value="{{ web.get('feeds', ['atom', 'json']) | join(', ') }}"></label>
   </div></section>
   <section class="card"><h2>Gemini</h2><div class="grid">
-    <label class="check"><input type="checkbox" name="f.platforms.gemini.enabled" {% if gem.get('enabled', False) %}checked{% endif %}> enabled</label>
+    <input type="hidden" name="f.platforms.gemini.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.gemini.enabled" {% if gem.get('enabled', False) %}checked{% endif %}> enabled</label>
     <label>Base URL <input name="f.platforms.gemini.base_url" value="{{ gem.get('base_url', '') }}"></label>
     <label>Hostnames <input name="f.platforms.gemini.hostnames" value="{{ gem.get('hostnames', []) | join(', ') }}"></label>
     <label>Feeds <input name="f.platforms.gemini.feeds" value="{{ gem.get('feeds', ['atom', 'gemsub']) | join(', ') }}"></label>
   </div></section>
   {% set gop = doc.get('platforms', {}).get('gopher', {}) %}
   <section class="card"><h2>Gopher</h2><div class="grid">
-    <label class="check"><input type="checkbox" name="f.platforms.gopher.enabled" {% if gop.get('enabled', False) %}checked{% endif %}> enabled</label>
+    <input type="hidden" name="f.platforms.gopher.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.gopher.enabled" {% if gop.get('enabled', False) %}checked{% endif %}> enabled</label>
     <label>Base URL <input name="f.platforms.gopher.base_url" value="{{ gop.get('base_url', '') }}" placeholder="gopher://example.org"></label>
     <label>Hostname <input name="f.platforms.gopher.hostnames" value="{{ gop.get('hostnames', []) | join(', ') }}"></label>
     <label>Port <input type="number" name="f.platforms.gopher.port" value="{{ gop.get('port', 70) }}"></label>

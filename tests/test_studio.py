@@ -178,7 +178,9 @@ def test_preview_build_serves_pages_and_drafts(studio) -> None:
     _setup(client)
     r = client.get("/sites/demo/preview/web/posts/the-call/")
     assert r.status_code == 200 and "The Call" in r.text
-    assert r.headers["content-security-policy"] == "frame-ancestors 'self'"
+    csp = r.headers["content-security-policy"]
+    assert "frame-ancestors 'self'" in csp and csp.startswith("sandbox ")
+    assert "allow-same-origin" not in csp
     r = client.get("/sites/demo/preview/web/posts/a-draft/")
     assert r.status_code == 200, "drafts are visible in previews"
     r = client.get("/sites/demo/preview/gemini/posts/the-call.gmi")

@@ -141,13 +141,23 @@ def main(argv: list[str] | None = None) -> int:
 
 def _load(path: Path) -> Site:
     from constellation.core.content import ContentError, load_site
+    from constellation.core.themes import ThemeError, load_theme, workspace_theme_dirs
 
     try:
-        return load_site(path)
+        site = load_site(path)
     except ContentError as e:
         for p in e.problems:
             print(f"error: {p}", file=sys.stderr)
         raise SystemExit(2) from e
+    except OSError as e:
+        print(f"error: cannot read the site: {e}", file=sys.stderr)
+        raise SystemExit(2) from e
+    try:
+        load_theme(site.config.site.theme, search=workspace_theme_dirs(site.root))
+    except ThemeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        raise SystemExit(2) from e
+    return site
 
 
 def cmd_build(args: argparse.Namespace) -> int:
