@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Import: `constellation import publii SOURCE DEST` turns the folder Publii publishes into a
+  ConstellationCMS site: posts and pages as Markdown with dates, tags, authors, summaries, SEO
+  descriptions and images; tag descriptions; author photos and bios; the menu; the address
+  pattern and redirects; posts per page and summary length; the favicon; the welcome box and
+  colours for `fractum`; Umami into its setting and other custom code into Custom HTML. Built on
+  a reusable HTML-to-Markdown converter (`constellation.importers.html_to_md`).
 - Themes: a new built-in `fractum` theme (terminal style, configurable colours, a framed
   welcome box, drop-down menus, `//` section headings on web, Gemini and Gopher, bundled
   JetBrains Mono). A `prefix_headings` template filter for gemtext.

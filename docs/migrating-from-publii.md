@@ -1,9 +1,38 @@
 # Moving a site from Publii
 
-Publii sites such as the original fractum.faith move over with the `fractum` theme and a few
-settings. This page lists what each Publii feature becomes. Everything here was checked by
-building fractum.faith's real content and comparing it with the live site, page by page, at
-desktop and phone widths.
+Publii sites such as the original fractum.faith move over with one command and the `fractum`
+theme. Everything here was checked by importing fractum.faith's real content and comparing the
+result with the live site, page by page, at desktop and phone widths.
+
+## Import
+
+Point the importer at the folder Publii publishes: the one with `index.html`, `assets/` and
+`media/` (for a GitHub Pages site, a clone of that repository). Publii itself isn't needed.
+
+```bash
+constellation import publii path/to/published-site path/to/new-site --timezone America/Chicago
+```
+
+The new folder must be new or empty. Put it under your workspace's `sites/` folder and add it to
+the studio, or run `constellation check` and `constellation build` on it directly.
+
+What comes across:
+
+- **Posts and pages**, converted to Markdown, with their titles, dates, "last updated" dates,
+  tags (in the order they were shown), authors, SEO descriptions, hand-written summaries, and
+  images (originals only; Publii's resized copies are made again on build). Video, iframes and
+  forms are kept as HTML and noted in the output.
+- **Addresses**: the post address pattern, so old links keep working, plus redirects for the
+  author and tag pages Publii split into several pages.
+- **Tags and authors**: tag descriptions, author names, photos and bios.
+- **The site**: title, language, description, footer text, the menu with its drop-downs, posts
+  per page, the automatic summary length, the favicon, and for the `fractum` theme the welcome
+  box and the colours.
+- **Your custom code**: Umami goes into the Umami setting; everything else you added in Publii
+  (Google Analytics, pixels, buttons) goes into Custom HTML. Publii's own scripts are left out.
+
+The rest of this page describes what each Publii feature becomes, for checking or for setting a
+site up by hand.
 
 ## Addresses stay the same
 

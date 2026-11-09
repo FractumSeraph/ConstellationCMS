@@ -145,6 +145,25 @@ def main(argv: list[str] | None = None) -> int:
     n.add_argument("--draft", action="store_true")
     n.set_defaults(func=cmd_new)
 
+    im = sub.add_parser("import", help="bring a site in from another tool")
+    ims = im.add_subparsers(dest="source_kind", required=True)
+    ip = ims.add_parser(
+        "publii",
+        help="import a site built by Publii (the folder Publii publishes)",
+        description="Read the folder Publii publishes (index.html, assets/, media/) and write a "
+        "new ConstellationCMS site with the same posts, pages, tags, authors, menu, addresses "
+        "and custom code.",
+    )
+    ip.add_argument("source", type=Path, help="the built Publii site")
+    ip.add_argument("dest", type=Path, help="the new site folder (must be new or empty)")
+    ip.add_argument("--theme", default="fractum", help="theme for the new site (default: fractum)")
+    ip.add_argument(
+        "--timezone",
+        default="UTC",
+        help="the site's time zone, e.g. America/Chicago (default: UTC)",
+    )
+    ip.set_defaults(func=cmd_import_publii)
+
     args = parser.parse_args(argv)
     result = args.func(args)
     return int(result or 0)
@@ -435,3 +454,21 @@ def _yaml_str(s: str) -> str:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def cmd_import_publii(args: argparse.Namespace) -> int:
+    from constellation.importers.publii import PubliiImportError, import_publii
+
+    try:
+        report = import_publii(args.source, args.dest, theme=args.theme, timezone=args.timezone)
+    except PubliiImportError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(
+        f"imported into {report.site_dir}: {report.posts} posts, {report.pages} pages, "
+        f"{report.tags} tags, {report.authors} authors, {report.media} media files"
+    )
+    for w in report.warnings:
+        print(f"note: {w}")
+    print(f"next: constellation check {report.site_dir}")
+    return 0

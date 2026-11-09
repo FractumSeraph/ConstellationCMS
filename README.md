@@ -52,6 +52,7 @@ and adding each new site, with your own names filled into every command.
 | `constellation check SITE` | load a site and list rendering warnings |
 | `constellation export SITE --platform web --target sftp://user@host/path` | static export with a diff |
 | `constellation new post SITE "Title"` | create a post bundle |
+| `constellation import publii PUBLISHED_SITE NEW_SITE` | bring a Publii site over |
 | `constellation server install|run|backup|restore|prune|proxy-snippet [--caddy]` | the VPS program |
 | `constellation doctor` | self-checks |
 
