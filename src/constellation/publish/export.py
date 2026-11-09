@@ -303,14 +303,21 @@ def apply_export(files: ExportFiles, target: Target, plan: Plan, *, delete: bool
     target.write_manifest(manifest)
 
 
-def export_rsync(files: ExportFiles, spec: str, *, dry_run: bool, delete: bool = True) -> str:
-    """Materialise the files in a temporary folder and hand them to rsync (needs the rsync binary)."""
+def export_rsync(files: ExportFiles, spec: str, *, dry_run: bool, delete: bool = False) -> str:
+    """Materialise the files in a temporary folder and hand them to rsync (needs the rsync binary).
+
+    rsync cannot tell which remote files an earlier export wrote, so ``delete`` (rsync's
+    ``--delete``) removes *everything* in the destination that is not in this export. It is
+    off unless asked for explicitly.
+    """
     import tempfile
 
     rsync = shutil.which("rsync")
     if rsync is None:
         raise RuntimeError("rsync is not installed on this machine; use an sftp:// target instead")
     dest = spec[len("rsync:") :]
+    if not dest or dest.startswith("-") or any(c in dest for c in " \t\n'\"`;|&$"):
+        raise ValueError(f"bad rsync destination {dest!r}; use rsync:user@host:/path")
     with tempfile.TemporaryDirectory(prefix="constellation-export-") as tmp:
         folder = FolderTarget(Path(tmp))
         for path, (data, source) in files.files.items():

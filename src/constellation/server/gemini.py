@@ -15,6 +15,7 @@ from pathlib import Path
 
 from constellation.server.tls import SniTable
 
+WRITE_TIMEOUT = 30.0
 log = logging.getLogger("constellation.server.gemini")
 MAX_REQUEST = 1024
 EventSink = Callable[[dict[str, object]], Awaitable[None] | None]
@@ -141,6 +142,10 @@ class GeminiServer:
         host = (parts.hostname or "").lower()
         if not host:
             return 59, "Bad request", None, ""
+        try:
+            port = parts.port
+        except ValueError:
+            return 59, "Bad request", None, ""
         route = self.router(host)
         if route is None:
             return 53, "Proxy request refused", None, ""
@@ -160,7 +165,7 @@ class GeminiServer:
             if not path.endswith("/"):
                 return (
                     31,
-                    f"gemini://{host}{'' if parts.port in (None, 1965) else ':' + str(parts.port)}{parts.path}/",
+                    f"gemini://{host}{'' if port in (None, 1965) else ':' + str(port)}{parts.path}/",
                     None,
                     route.site,
                 )
@@ -184,11 +189,12 @@ class GeminiServer:
                     while chunk := fh.read(65536):
                         writer.write(chunk)
                         sent += len(chunk)
-                        await writer.drain()
+                        # A client that stops reading is dropped instead of holding a slot.
+                        await asyncio.wait_for(writer.drain(), timeout=WRITE_TIMEOUT)
             else:
                 writer.write(body)
                 sent = len(body)
-        await writer.drain()
+        await asyncio.wait_for(writer.drain(), timeout=WRITE_TIMEOUT)
         return sent
 
 

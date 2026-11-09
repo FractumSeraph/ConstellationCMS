@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -39,6 +41,7 @@ class GeminiConfig(Strict):
 
 class GopherConfig(Strict):
     enabled: bool = False
+    bind: list[str] = Field(default_factory=list)  # empty: the same addresses as Gemini
     port: int = 70
     site: str = ""  # the one site this listener serves (Gopher has no virtual hosting); empty = the first with a gopher tree
 
@@ -97,6 +100,16 @@ def save_server_config(path: Path, cfg: ServerConfig) -> None:
     doc = tomlkit.document()
     for key, value in cfg.model_dump().items():
         doc[key] = value
-    tmp = Path(path).with_suffix(".tmp")
-    tmp.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    path = Path(path)
+    tmp = path.with_suffix(".tmp")
+    # server.toml holds the admin token hash: keep it readable by its owner only, and keep
+    # the owner the service user set at install time.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(tomlkit.dumps(doc))
+    os.chmod(tmp, 0o600)
+    if hasattr(os, "chown") and path.exists():
+        st = path.stat()
+        with contextlib.suppress(OSError):
+            os.chown(tmp, st.st_uid, st.st_gid)
     tmp.replace(path)

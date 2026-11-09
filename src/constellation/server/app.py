@@ -20,7 +20,13 @@ from constellation.server.gemini import GeminiRoute, GeminiServer
 from constellation.server.gopher import GopherServer
 from constellation.server.http import HttpApp
 from constellation.server.releases import Store
-from constellation.server.tls import SniTable, ensure_self_signed, https_contexts, server_context
+from constellation.server.tls import (
+    SniTable,
+    ensure_self_signed,
+    external_contexts,
+    https_contexts,
+    server_context,
+)
 
 log = logging.getLogger("constellation.server")
 EventSink = Callable[[dict[str, object]], Awaitable[None] | None]
@@ -106,11 +112,8 @@ class Server:
     def reload_https(self) -> None:
         if self.https_sni is None:
             return
-        _default, contexts = https_contexts(
-            self.cfg.data,
-            self.web_hostnames(),
-            fallback_host=self.cfg.admin.hostname or "localhost",
-        )
+        # The listening socket keeps its default context; new names arrive through SNI.
+        _default, contexts = self._https_contexts()
         self.https_sni.set(contexts)
 
     def on_release(self, site: str) -> None:
@@ -190,7 +193,9 @@ class Server:
                 read_timeout=self.cfg.limits.request_timeout_s,
                 on_event=self.on_event,
             )
-            await self.gopher.start(self.cfg.gemini.bind, self.cfg.gopher.port)
+            await self.gopher.start(
+                self.cfg.gopher.bind or self.cfg.gemini.bind, self.cfg.gopher.port
+            )
 
         if self.cfg.https.tls_mode == "behind-proxy":
             http_cfg = uvicorn.Config(
@@ -204,35 +209,33 @@ class Server:
             tasks.append(asyncio.create_task(uvicorn.Server(http_cfg).serve()))
         else:
             if self.cfg.http.enabled:
-                plain = uvicorn.Config(
-                    self.http.app,
-                    host=self.cfg.http.bind[0],
-                    port=self.cfg.http.port,
-                    log_level="warning",
-                    server_header=False,
-                )
-                tasks.append(asyncio.create_task(uvicorn.Server(plain).serve()))
+                for host in self.cfg.http.bind:
+                    plain = uvicorn.Config(
+                        self.http.app,
+                        host=host,
+                        port=self.cfg.http.port,
+                        log_level="warning",
+                        server_header=False,
+                    )
+                    tasks.append(asyncio.create_task(uvicorn.Server(plain).serve()))
             if self.cfg.https.enabled:
                 key, cert = self._https_cert()
-                tls = uvicorn.Config(
-                    self.http.app,
-                    host=self.cfg.http.bind[0],
-                    port=self.cfg.https.port,
-                    log_level="warning",
-                    ssl_keyfile=str(key),
-                    ssl_certfile=str(cert),
-                    server_header=False,
-                )
-                tls.load()
-                default, contexts = https_contexts(
-                    self.cfg.data,
-                    self.web_hostnames(),
-                    fallback_host=self.cfg.admin.hostname or "localhost",
-                )
+                default, contexts = self._https_contexts()
                 self.https_sni = SniTable(default)
                 self.https_sni.set(contexts)
-                tls.ssl = default
-                tasks.append(asyncio.create_task(uvicorn.Server(tls).serve()))
+                for host in self.cfg.http.bind:
+                    tls = uvicorn.Config(
+                        self.http.app,
+                        host=host,
+                        port=self.cfg.https.port,
+                        log_level="warning",
+                        ssl_keyfile=str(key),
+                        ssl_certfile=str(cert),
+                        server_header=False,
+                    )
+                    tls.load()
+                    tls.ssl = default
+                    tasks.append(asyncio.create_task(uvicorn.Server(tls).serve()))
                 if self.acme is not None:
                     tasks.append(asyncio.create_task(self.renewal_loop()))
 
@@ -252,6 +255,17 @@ class Server:
             await self.gopher.stop()
         for t in tasks:
             t.cancel()
+
+    def _https_contexts(self) -> tuple[ssl.SSLContext, dict[str, ssl.SSLContext]]:
+        if self.cfg.https.tls_mode == "external":
+            if not self.cfg.https.cert_dir:
+                raise RuntimeError('tls_mode = "external" needs https.cert_dir in server.toml')
+            return external_contexts(Path(self.cfg.https.cert_dir), self.web_hostnames())
+        return https_contexts(
+            self.cfg.data,
+            self.web_hostnames(),
+            fallback_host=self.cfg.admin.hostname or "localhost",
+        )
 
     def _https_cert(self) -> tuple[Path, Path]:
         """External mode reads files; ACME arrives in milestone 6; until then a self-signed fallback."""
