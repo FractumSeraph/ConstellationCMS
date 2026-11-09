@@ -13,6 +13,7 @@ from constellation.core.content import load_site
 from constellation.publish.export import (
     apply_export,
     export_rsync,
+    is_git_target,
     layout_files,
     open_target,
     plan_export,
@@ -37,7 +38,7 @@ def run_export(
         for w in errors:
             job.say(f"error {w.code}: {w.message}")
         raise RuntimeError(f"{len(errors)} error-level warnings; fix them before exporting")
-    files = layout_files(build, platform, layout, site)
+    files = layout_files(build, platform, layout, site, pages=is_git_target(target_spec))
     if target_spec.startswith("rsync:"):
         out = export_rsync(files, target_spec, dry_run=not apply)
         for line in out.splitlines():

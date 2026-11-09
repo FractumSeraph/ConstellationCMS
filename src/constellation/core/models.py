@@ -166,6 +166,8 @@ class ExportSpec(Strict):
     platform: Platform = "web"
     target: str
     layout: Literal["plain", "agate"] = "plain"
+    # Also update this target whenever the site is published to its server.
+    with_publish: bool = False
 
 
 class SiteConfig(Strict):

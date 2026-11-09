@@ -88,6 +88,12 @@ Posts that had a hand-written excerpt in Publii keep it as `summary:` in their f
   `<head>`), as in Publii. They work unchanged.
 - The server's built-in analytics count every visit with no script at all.
 
+## Staying on GitHub Pages
+
+If the Publii site was published to GitHub Pages, ConstellationCMS can keep publishing the web
+version there, to the same repository, while your server serves Gemini and Gopher under a name
+of their own. See [`github-pages.md`](github-pages.md).
+
 ## Known differences
 
 - Author pages list every post on one page instead of six at a time.

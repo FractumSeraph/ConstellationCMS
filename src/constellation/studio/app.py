@@ -30,6 +30,7 @@ from constellation.core.render.gemtext import GemtextRenderer
 from constellation.core.render.html import HtmlRenderer
 from constellation.core.routes import RefResolver, url_for
 from constellation.core.themes import BUILTIN_DIR, load_theme, theme_chain
+from constellation.publish.export import is_git_target, parse_git_spec
 from constellation.studio import content_ops, locks, looks
 from constellation.studio.auth import (
     hash_password,
@@ -1042,6 +1043,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         target: str = Form(...),
         layout: str = Form("plain"),
         delete: str = Form(""),
+        with_publish: str = Form(""),
     ) -> Response:
         root = studio.site_root(site_id)
         _check_writable(studio, site_id)
@@ -1073,6 +1075,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 target.strip(),
                 layout,
             )
+            if with_publish:
+                t["with_publish"] = True
             exports.append(t)
         write_site_toml(root, doc)
         return RedirectResponse(f"/sites/{site_id}/publish", 303)
@@ -1742,7 +1746,15 @@ def _export_problem(name: str, platform: str, target: str, layout: str, taken: l
         if any(c in target for c in " \t\n\"'`;|&$"):
             return "the target must not contain spaces or shell characters"
         return ""
-    return "the target must start with folder:, sftp:// or rsync:"
+    if is_git_target(target):
+        if platform != "web":
+            return "GitHub Pages and git targets publish the web platform only"
+        try:
+            parse_git_spec(target)
+        except ValueError as e:
+            return str(e)
+        return ""
+    return "the target must start with folder:, sftp://, rsync:, github: or git:"
 
 
 def build_hosts(root: Path, platform: str) -> list[str]:

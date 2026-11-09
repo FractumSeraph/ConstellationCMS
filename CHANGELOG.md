@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Publishing: GitHub Pages (or any git repository) as an export target, `github:owner/repo`
+  or `git:URL`, with an optional `#branch`. Each publish commits the web build and pushes it
+  with git's own sign-in, adds `CNAME` and `.nojekyll`, and keeps the repository's README,
+  licence and `.github/`. A first publish replaces another tool's files (they stay in the
+  history). An export marked `with_publish = true` (the studio's "Also update this target when
+  I publish to the server") runs with the server's Publish button. See `docs/github-pages.md`
+  and the new section of the studio's Guide.
+- Static web exports get a forwarding page for each redirect, since plain hosts cannot redirect.
 - Import: `constellation import publii SOURCE DEST` turns the folder Publii publishes into a
   ConstellationCMS site: posts and pages as Markdown with dates, tags, authors, summaries, SEO
   descriptions and images; tag descriptions; author photos and bios; the menu; the address

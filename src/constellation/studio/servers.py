@@ -84,27 +84,58 @@ def run_publish(
         for p in diff["removed"]:
             job.say(f"- {p}")
         if not apply:
-            return {"planned": True, **{k: len(v) for k, v in diff.items()}}
+            planned: dict[str, Any] = {"planned": True, **{k: len(v) for k, v in diff.items()}}
+            _run_linked_exports(job, root, site_id, site, apply=False)
+            return planned
         report = client.publish(site_id, manifest, blob_reader(build), progress=job.say)
     finally:
         client.close()
-    _record_release(
-        root,
-        {
-            "time": now.isoformat(),
-            "kind": "publish",
-            "name": server.name,
-            "platform": ",".join(build.platforms),
-            "release": report.release_id,
-            "target": server.admin_url,
-        },
-    )
+    try:
+        _run_linked_exports(job, root, site_id, site, apply=True)
+    finally:
+        _record_release(
+            root,
+            {
+                "time": now.isoformat(),
+                "kind": "publish",
+                "name": server.name,
+                "platform": ",".join(build.platforms),
+                "release": report.release_id,
+                "target": server.admin_url,
+            },
+        )
     return {
         "release": report.release_id,
         "uploaded": report.uploaded,
         "skipped": report.skipped,
         "activated": report.activated,
     }
+
+
+def _run_linked_exports(job: Job, root: Path, site_id: str, site: Any, *, apply: bool) -> None:
+    """Run the export targets marked ``with_publish`` (such as GitHub Pages) after the server.
+
+    Every target is attempted; if any fails, the job fails afterwards with all their errors,
+    so a GitHub problem is never hidden behind a successful server publish.
+    """
+    from constellation.studio.publish_ops import run_export
+
+    failures: list[str] = []
+    for spec in site.config.exports:
+        if not spec.with_publish:
+            continue
+        job.say(f"export {spec.name}: {spec.target}")
+        try:
+            run_export(job, root, site_id, spec.model_dump(), apply=apply)
+        except Exception as e:  # noqa: BLE001 - reported to the user below
+            job.say(f"export {spec.name} failed: {e}")
+            failures.append(f"{spec.name}: {e}")
+    if failures:
+        raise RuntimeError(
+            ("published to the server, but " if apply else "")
+            + "these export targets failed: "
+            + "; ".join(failures)
+        )
 
 
 def rollback(state: State, site_id: str, server: ServerEntry, release_id: str) -> dict[str, Any]:

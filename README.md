@@ -10,8 +10,8 @@ one Publish button. A static site manager for the small web and the big one.
   builds every platform, shows the diff, and pushes an immutable release to your own server.
 - **Your server, every protocol.** One program on a VPS serves HTTP/HTTPS (with built-in
   Let's Encrypt), Gemini and Gopher from the same release, logs analytics for all of them, and
-  rolls back in one call. A plain static export covers ordinary web hosts and third-party Gemini
-  or Gopher servers.
+  rolls back in one call. A plain static export covers ordinary web hosts, GitHub Pages and
+  third-party Gemini or Gopher servers.
 - **Many sites, many servers, many themes.** Sites live in one workspace, each assigned to a
   server; themes are swappable packages covering every platform.
 
@@ -51,6 +51,7 @@ and adding each new site, with your own names filled into every command.
 | `constellation build SITE --out DIR` | build every enabled platform |
 | `constellation check SITE` | load a site and list rendering warnings |
 | `constellation export SITE --platform web --target sftp://user@host/path` | static export with a diff |
+| `constellation export SITE --platform web --target github:owner/repo` | publish the web version to GitHub Pages |
 | `constellation new post SITE "Title"` | create a post bundle |
 | `constellation import publii PUBLISHED_SITE NEW_SITE` | bring a Publii site over |
 | `constellation server install|run|backup|restore|prune|proxy-snippet [--caddy]` | the VPS program |
@@ -63,6 +64,7 @@ and adding each new site, with your own names filled into every command.
 - [`docs/studio-looks.md`](docs/studio-looks.md): the studio's looks, day/night, and your logo.
 - [`docs/analytics.md`](docs/analytics.md): built-in analytics and connecting Umami.
 - [`docs/migrating-from-publii.md`](docs/migrating-from-publii.md): moving a Publii site over.
+- [`docs/github-pages.md`](docs/github-pages.md): serving the web version from GitHub Pages.
 - [`docs/UPGRADING.md`](docs/UPGRADING.md): upgrades and backups.
 - [`CHANGELOG.md`](CHANGELOG.md).
 

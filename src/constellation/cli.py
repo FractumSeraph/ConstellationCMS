@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument(
         "--target",
         required=True,
-        help="folder:/path | sftp://user@host[:port]/path | rsync:user@host:/path",
+        help="folder:/path | sftp://user@host[:port]/path | rsync:user@host:/path | github:owner/repo[#branch] | git:URL[#branch]",
     )
     e.add_argument(
         "--layout",
@@ -241,6 +241,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     from constellation.publish.export import (
         apply_export,
         export_rsync,
+        is_git_target,
         layout_files,
         open_target,
         plan_export,
@@ -258,7 +259,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    files = layout_files(build, args.platform, args.layout, site)
+    files = layout_files(build, args.platform, args.layout, site, pages=is_git_target(args.target))
     if args.target.startswith("rsync:"):
         # Show what rsync would do, then ask, as the other targets do.
         print(export_rsync(files, args.target, dry_run=True, delete=args.mirror), end="")

@@ -1,16 +1,22 @@
-"""Static export of one platform's build to a folder, over SFTP, or with rsync.
+"""Static export of one platform's build to a folder, over SFTP, with rsync, or to a git
+repository such as a GitHub Pages site.
 
 Every target keeps a small manifest (``.constellation-export.json``) at its root so the next
 export can compute a diff (added, changed, removed) without hashing remote files, and so that
-deletion only ever touches files this tool wrote.
+deletion only ever touches files this tool wrote. Git targets are the exception: the
+repository itself is the record, so they hash the files git tracks instead (see
+:class:`GitTarget`).
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import html
 import json
 import os
 import posixpath
+import re
 import shutil
 import stat
 import subprocess
@@ -49,11 +55,17 @@ class ExportFiles:
     manifest: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
-def layout_files(build: Build, platform: str, layout: str, site: Site) -> ExportFiles:
+def layout_files(
+    build: Build, platform: str, layout: str, site: Site, *, pages: bool = False
+) -> ExportFiles:
     """Arrange a platform build for a target layout.
 
     ``plain`` is the release tree. ``agate`` nests the Gemini tree under ``content/<hostname>/``
     and adds a ``.meta`` sidecar so Agate serves feeds with the right media type.
+
+    Web exports also get a small forwarding page for each of the site's redirects, because
+    ordinary static hosts cannot send redirects themselves. ``pages`` adds what GitHub Pages
+    needs: ``CNAME`` with the site's web hostname and an empty ``.nojekyll``.
     """
     pb: PlatformBuild = build.platforms[platform]
     out = ExportFiles()
@@ -85,15 +97,69 @@ def layout_files(build: Build, platform: str, layout: str, site: Site) -> Export
         ]
         if meta_lines:
             data = ("\n".join(meta_lines) + "\n").encode()
-            out.files[prefix + ".meta"] = (data, None)
-            import hashlib
-
-            out.manifest[prefix + ".meta"] = {
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "size": len(data),
-                "type": "text/plain",
-            }
+            _add(out, prefix + ".meta", data, "text/plain")
+    if platform == "web":
+        for path, data in redirect_pages(site).items():
+            if path not in out.files:
+                _add(out, path, data, "text/html")
+    if pages:
+        if platform != "web":
+            raise ValueError("GitHub Pages serves the web platform only")
+        host = pages_hostname(site)
+        if host:
+            _add(out, "CNAME", (host + "\n").encode(), "text/plain")
+        _add(out, ".nojekyll", b"", "text/plain")
     return out
+
+
+def _add(out: ExportFiles, path: str, data: bytes, media_type: str) -> None:
+    out.files[path] = (data, None)
+    out.manifest[path] = {
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "size": len(data),
+        "type": media_type,
+    }
+
+
+def pages_hostname(site: Site) -> str:
+    """The custom domain for a GitHub Pages ``CNAME`` file, or "" for a ``*.github.io`` site."""
+    web = site.config.platform("web")
+    host = web.hostnames[0] if web.hostnames else urlsplit(web.base_url).hostname or ""
+    if not host or host == "localhost" or host.endswith(".github.io"):
+        return ""
+    return host
+
+
+def redirect_pages(site: Site) -> dict[str, bytes]:
+    """A forwarding page for each redirect whose source is a path on this site.
+
+    ``/old/`` becomes ``old/index.html`` and ``/old.html`` stays ``old.html``. The page uses a
+    meta refresh (which works without JavaScript), a canonical link so search engines move to the
+    new address, and a script that keeps any ``#fragment``.
+    """
+    pages: dict[str, bytes] = {}
+    for r in site.config.redirects:
+        src = r.from_path
+        if not src.startswith("/") or src.startswith("//") or "*" in src or ".." in src:
+            continue
+        rel = src.lstrip("/")
+        if rel == "" or rel.endswith("/"):
+            rel += "index.html"
+        elif not rel.endswith((".html", ".htm")):
+            rel += "/index.html"
+        to = html.escape(r.to, quote=True)
+        script = json.dumps(r.to).replace("<", "\\u003c")
+        pages[rel] = (
+            "<!doctype html>\n"
+            '<html><head><meta charset="utf-8">\n'
+            "<title>Moved</title>\n"
+            f'<link rel="canonical" href="{to}">\n'
+            f'<meta http-equiv="refresh" content="0; url={to}">\n'
+            '<meta name="robots" content="noindex">\n'
+            f"<script>location.replace({script} + location.hash)</script>\n"
+            f'</head><body><p>This page has moved to <a href="{to}">{to}</a>.</p></body></html>\n'
+        ).encode()
+    return pages
 
 
 class Target(ABC):
@@ -117,6 +183,14 @@ class Target(ABC):
     def close(self) -> None:
         """Release connections; targets without connections need nothing."""
         return None
+
+    def finish(self, summary: str) -> None:
+        """Called once after every write and delete; git targets commit and push here."""
+        return None
+
+    def keeps(self, path: str) -> bool:
+        """True for a file the target never deletes even when the site no longer has it."""
+        return False
 
     @abstractmethod
     def describe(self) -> str: ...
@@ -263,7 +337,228 @@ class SftpTarget(Target):
             )
 
 
+GITHUB_SPEC = re.compile(
+    r"^github:(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/(?P<repo>[A-Za-z0-9._-]{1,100})"
+    r"(?:#(?P<branch>[A-Za-z0-9._/-]{1,200}))?$"
+)
+# Files a Pages repository keeps even though the site does not produce them.
+GIT_KEEP = re.compile(
+    r"^(\.github/|\.gitignore$|\.gitattributes$|README[^/]*$|LICEN[CS]E[^/]*$|CNAME$)"
+)
+
+
+def remove_tree(path: Path) -> None:
+    """Delete a folder, including the read-only files git leaves on Windows."""
+
+    def retry(func: Any, name: str, exc: BaseException) -> None:
+        os.chmod(name, stat.S_IWRITE)
+        func(name)
+
+    shutil.rmtree(path, onexc=retry)
+
+
+def is_git_target(spec: str) -> bool:
+    return spec.startswith(("github:", "git:"))
+
+
+def parse_git_spec(spec: str) -> tuple[str, str, str]:
+    """``github:owner/repo[#branch]`` or ``git:URL-or-path[#branch]`` → (url, branch, label)."""
+    if spec.startswith("github:"):
+        m = GITHUB_SPEC.match(spec)
+        if not m or m.group("repo") in (".", ".."):
+            raise ValueError(
+                "a GitHub target looks like github:owner/repository or github:owner/repository#branch"
+            )
+        owner, repo = m.group("owner"), m.group("repo").removesuffix(".git")
+        return f"https://github.com/{owner}/{repo}.git", m.group("branch") or "", f"{owner}/{repo}"
+    if spec.startswith("git:"):
+        rest = spec[len("git:") :]
+        url, _, branch = rest.partition("#")
+        if not url or url.startswith("-") or any(c in rest for c in " \t\n\"'`;|&$<>"):
+            raise ValueError("a git target looks like git:https://host/owner/repo.git#branch")
+        if branch and not re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", branch):
+            raise ValueError(f"bad branch name {branch!r}")
+        return url, branch, url
+    raise ValueError(f"not a git target: {spec!r}")
+
+
+class GitTarget(Target):
+    """A git repository, such as the one behind a GitHub Pages site.
+
+    The repository is cloned once into the cache folder and brought up to date with the remote
+    before every export, so it always starts from what is published. Writes go into that
+    working copy; :meth:`finish` commits them and pushes. Pushing uses git's own sign-in (for
+    GitHub, ``gh auth setup-git`` or Git Credential Manager), never a stored password.
+
+    The files git tracks are the record of what is published, so no manifest file is kept. The
+    first export into a repository made by another tool replaces its files (old versions stay in
+    the history); a README, licence, ``.gitignore``, ``CNAME`` and ``.github/`` are kept.
+    """
+
+    def __init__(self, spec: str, *, cache_dir: Path | None = None) -> None:
+        self.url, branch, self.label = parse_git_spec(spec)
+        if shutil.which("git") is None:
+            raise RuntimeError(
+                "git is not installed on this machine; install it to publish to a git repository"
+            )
+        if cache_dir is None:
+            from constellation.studio.state import default_cache_dir
+
+            cache_dir = default_cache_dir() / "git"
+        name = (
+            re.sub(r"[^A-Za-z0-9._-]+", "-", self.label.rstrip("/").split("/")[-1])[-40:] or "repo"
+        )
+        self.workdir = (
+            Path(cache_dir) / f"{name}-{hashlib.sha256(self.url.encode()).hexdigest()[:10]}"
+        )
+        self.branch = self._sync(branch)
+        self.folder = FolderTarget(self.workdir)
+
+    def describe(self) -> str:
+        return f"git {self.label} ({self.branch})"
+
+    def _git(
+        self, *args: str, check: bool = True, cwd: Path | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        env = dict(os.environ, GIT_TERMINAL_PROMPT="0", LC_ALL="C")
+        proc = subprocess.run(
+            ["git", "-c", "core.autocrlf=false", "-c", "core.quotepath=false", *args],
+            cwd=cwd or self.workdir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=False,
+        )
+        if check and proc.returncode != 0:
+            message = (proc.stderr or proc.stdout).strip()
+            if "Authentication failed" in message or "could not read Username" in message:
+                message += (
+                    "\ngit could not sign in. For GitHub, run `gh auth login` and then `gh auth setup-git`, "
+                    "or sign in once with Git Credential Manager."
+                )
+            raise RuntimeError(f"git {args[0]} failed: {message}")
+        return proc
+
+    def _sync(self, branch: str) -> str:
+        """Clone or refresh the working copy and return the branch it is on."""
+        if not (self.workdir / ".git").is_dir():
+            if self.workdir.exists():
+                remove_tree(self.workdir)
+            self.workdir.parent.mkdir(parents=True, exist_ok=True)
+            args = ["clone", "--quiet", "--no-tags", "--single-branch"]
+            if branch:
+                args += ["--branch", branch]
+            proc = self._git(
+                *args, "--", self.url, str(self.workdir), check=False, cwd=self.workdir.parent
+            )
+            if proc.returncode != 0 and branch and "not found in upstream" in proc.stderr:
+                # A branch that does not exist yet starts empty.
+                if self.workdir.exists():
+                    remove_tree(self.workdir)
+                self._git(
+                    "clone",
+                    "--quiet",
+                    "--no-tags",
+                    "--",
+                    self.url,
+                    str(self.workdir),
+                    cwd=self.workdir.parent,
+                )
+                self._git("checkout", "--quiet", "--orphan", branch)
+                self._git("rm", "-r", "-q", "--cached", "--ignore-unmatch", ".")
+                self._git("clean", "-fdxq")
+                return branch
+            if proc.returncode != 0:
+                raise RuntimeError(f"git clone failed: {(proc.stderr or proc.stdout).strip()}")
+            self._git("config", "core.autocrlf", "false")
+        else:
+            self._git("remote", "set-url", "origin", self.url)
+        has_commits = self._git("rev-parse", "--verify", "-q", "HEAD", check=False).returncode == 0
+        if not branch:
+            head = self._git("symbolic-ref", "--short", "HEAD", check=False).stdout.strip()
+            branch = head or "main"
+        remote_has = (
+            self._git(
+                "ls-remote", "--exit-code", "--heads", "origin", branch, check=False
+            ).returncode
+            == 0
+        )
+        if remote_has:
+            self._git(
+                "fetch",
+                "--quiet",
+                "--no-tags",
+                "origin",
+                f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
+            )
+            self._git("checkout", "--quiet", "-B", branch, f"origin/{branch}")
+            self._git("reset", "--quiet", "--hard", f"origin/{branch}")
+        elif (
+            has_commits
+            and self._git("symbolic-ref", "--short", "HEAD", check=False).stdout.strip() != branch
+        ):
+            self._git("checkout", "--quiet", "--orphan", branch)
+            self._git("rm", "-r", "-q", "--cached", "--ignore-unmatch", ".")
+        elif not has_commits:
+            self._git("symbolic-ref", "HEAD", f"refs/heads/{branch}")
+        self._git("clean", "-fdxq")
+        return branch
+
+    def _check(self, path: str) -> None:
+        first = PurePosixPath(path).parts[:1]
+        if first and first[0].lower() == ".git":
+            raise ValueError(f"refusing to write inside .git: {path}")
+
+    def keeps(self, path: str) -> bool:
+        return bool(GIT_KEEP.match(path))
+
+    def read_manifest(self) -> dict[str, dict[str, Any]] | None:
+        out = self._git("ls-files", "-z").stdout
+        manifest: dict[str, dict[str, Any]] = {}
+        for path in filter(None, out.split("\0")):
+            f = self.workdir / path
+            if f.is_file():
+                data = f.read_bytes()
+                manifest[path] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+        return manifest
+
+    def write(self, path: str, data: bytes | None, source: Path | None) -> None:
+        self._check(path)
+        self.folder.write(path, data, source)
+
+    def delete(self, path: str) -> None:
+        self._check(path)
+        self.folder.delete(path)
+
+    def exists(self, path: str) -> bool:
+        return self.folder.exists(path)
+
+    def write_manifest(self, manifest: dict[str, dict[str, Any]]) -> None:
+        return None  # the repository is the record
+
+    def finish(self, summary: str) -> None:
+        self._git("add", "-A")
+        if self._git("diff", "--cached", "--quiet", check=False).returncode == 0:
+            return
+        identity: list[str] = []
+        if not self._git("config", "user.email", check=False).stdout.strip():
+            identity = [
+                "-c",
+                "user.name=ConstellationCMS",
+                "-c",
+                "user.email=constellation@localhost",
+            ]
+        self._git(
+            *identity, "commit", "--quiet", "-m", f"Publish with ConstellationCMS\n\n{summary}"
+        )
+        self._git("push", "--quiet", "origin", f"HEAD:refs/heads/{self.branch}")
+
+
 def open_target(spec: str) -> Target:
+    if is_git_target(spec):
+        return GitTarget(spec)
     if spec.startswith("folder:"):
         return FolderTarget(Path(spec[len("folder:") :]).expanduser())
     if spec.startswith("sftp://"):
@@ -285,7 +580,8 @@ def plan_export(files: ExportFiles, target: Target) -> Plan:
         if p in old and p not in d["changed"] and p not in d["added"] and not target.exists(p):
             d["added"].append(p)
     unchanged = len(files.manifest) - len(d["added"]) - len(d["changed"])
-    return Plan(sorted(d["added"]), sorted(d["changed"]), sorted(d["removed"]), unchanged)
+    removed = [p for p in d["removed"] if not target.keeps(p)]
+    return Plan(sorted(d["added"]), sorted(d["changed"]), sorted(removed), unchanged)
 
 
 def apply_export(files: ExportFiles, target: Target, plan: Plan, *, delete: bool = True) -> None:
@@ -301,6 +597,7 @@ def apply_export(files: ExportFiles, target: Target, plan: Plan, *, delete: bool
         for path in plan.removed:
             manifest[path] = old[path]
     target.write_manifest(manifest)
+    target.finish(plan.summary())
 
 
 def export_rsync(files: ExportFiles, spec: str, *, dry_run: bool, delete: bool = False) -> str:
