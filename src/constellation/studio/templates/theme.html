@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Theme{% endblock %}
+{% block content %}
+<h1>Theme</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}{% if installed %}<p class="ok">Installed theme {{ installed }}.</p>{% endif %}
+<form method="post" action="/sites/{{ site_id }}/theme" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>Theme <select name="theme">{% for t in available %}<option {% if t == current %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <p class="muted">{{ theme.description }} Platforms: {{ theme.platforms | join(', ') }}.</p>
+  {% if schema %}<h2>Settings</h2>{% endif %}
+  {% for s in schema %}
+    {% if s.type == 'bool' %}
+    <label class="check"><input type="checkbox" name="s.{{ s.key }}" {% if values.get(s.key, s.default) %}checked{% endif %}> {{ s.label }}</label>
+    {% elif s.type == 'color' %}
+    <label>{{ s.label }} <input type="color" name="s.{{ s.key }}" value="{{ values.get(s.key, s.default) }}"></label>
+    {% else %}
+    <label>{{ s.label }} <input name="s.{{ s.key }}" value="{{ values.get(s.key, s.default) or '' }}"></label>
+    {% endif %}
+  {% endfor %}
+  <button class="primary" {% if read_only %}disabled{% endif %}>Save</button>
+</form>
+<details class="card"><summary>Install a theme from a zip</summary>
+  <form method="post" action="/themes/install" enctype="multipart/form-data" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="site_id" value="{{ site_id }}">
+    <input type="file" name="file" accept=".zip" required><button>Install</button>
+  </form>
+  <p class="muted small">The zip must hold one folder with a <code>theme.toml</code>. See <code>docs/themes.md</code>.</p>
+</details>
+<p class="muted">Per-site template overrides go in <code>sites/{{ site_id }}/theme/web/</code> and <code>theme/gemini/</code>; installed themes live in the workspace's <code>themes/</code> folder.</p>
+{% endblock %}

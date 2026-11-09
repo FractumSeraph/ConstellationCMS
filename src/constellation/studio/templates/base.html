@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Studio{% endblock %} · ConstellationCMS</title>
+<link rel="stylesheet" href="/static/studio.css">
+<meta name="csrf" content="{{ csrf }}">
+<script src="/static/vendor/htmx.min.js" defer></script>
+<script src="/static/studio.js" defer></script>
+</head>
+<body class="{% block body_class %}{% endblock %}" hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
+<header class="topbar">
+  <a class="brand" href="/">✦ Constellation</a>
+  {% if site_id is defined %}
+  <nav class="site-nav">
+    <span class="site-name">{{ site_id }}</span>
+    <a href="/sites/{{ site_id }}">Dashboard</a>
+    <a href="/sites/{{ site_id }}/posts">Posts</a>
+    <a href="/sites/{{ site_id }}/pages">Pages</a>
+    <a href="/sites/{{ site_id }}/taxonomies">Taxonomies</a>
+    <a href="/sites/{{ site_id }}/settings">Settings</a>
+    <a href="/sites/{{ site_id }}/theme">Theme</a>
+    <a href="/sites/{{ site_id }}/publish">Publish</a>
+    <a href="/sites/{{ site_id }}/analytics">Analytics</a>
+    <a href="/sites/{{ site_id }}/preview/web/" target="_blank" rel="noopener">Preview ↗</a>
+  </nav>
+  {% endif %}
+  <nav class="account-nav">
+    <a href="/servers">Servers</a>
+    <a href="/doctor">Doctor</a>
+    <a href="/account">Account</a>
+    <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form>
+  </nav>
+</header>
+{% if read_only is defined and read_only %}
+<div class="banner warn">This site is read-only here: {{ read_only }}.
+  <form method="post" action="/sites/{{ site_id }}/take-over" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Take over</button></form>
+</div>
+{% endif %}
+<main class="{% block main_class %}page{% endblock %}">
+{% block content %}{% endblock %}
+</main>
+<footer class="foot">ConstellationCMS {{ version }}</footer>
+</body>
+</html>

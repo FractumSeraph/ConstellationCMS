@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Taxonomies{% endblock %}
+{% block content %}
+<h1>Tags, categories and series</h1>
+{% for kind, terms in groups %}
+<section class="card">
+  <h2>{{ kind | capitalize }}{% if kind != 'series' %}s{% endif %}</h2>
+  <table class="items"><thead><tr><th>Term</th><th>Posts</th><th>Description</th><th></th></tr></thead><tbody>
+  {% for slug, title, count, description in terms %}
+  <tr><td>{{ title }} <span class="muted">({{ slug }})</span></td><td>{{ count }}</td><td>{{ description }}</td>
+    <td><details><summary>edit</summary>
+      <form method="post" action="/sites/{{ site_id }}/taxonomies" class="grid small">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="slug" value="{{ slug }}">
+        <label>Title <input name="title" value="{{ title }}"></label>
+        <label>Description <input name="description" value="{{ description }}"></label>
+        <button>Save</button>
+      </form></details></td></tr>
+  {% else %}<tr><td colspan="4" class="muted">None yet. Add them in posts' front matter.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endfor %}
+{% endblock %}

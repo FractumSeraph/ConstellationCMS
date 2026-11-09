@@ -1,0 +1,6 @@
+A claim[1] and another[2].
+
+### Notes
+[1] The first note.
+[2] The second note, with a link.
+=> https://n.example a link

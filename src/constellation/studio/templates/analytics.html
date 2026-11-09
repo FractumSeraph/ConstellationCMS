@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+{% block content %}
+<h1>Analytics</h1>
+{% if data.error %}<p class="muted">{{ data.error }}{% if not server %} Assign a server on the <a href="/servers">Servers</a> page.{% endif %}</p>
+{% else %}
+<p class="filters">Range: {% for d in [7, 30, 90, 365] %}<a href="?days={{ d }}" {% if d == days %}class="current"{% endif %}>{{ d }} days</a>{% if not loop.last %} · {% endif %}{% endfor %}
+ · <a href="{{ server.admin_url }}/sites/{{ site_id }}/analytics/export.csv?days={{ days }}" rel="noopener">CSV</a></p>
+{% set ov = data.overview %}
+<section class="card"><h2>Totals</h2>
+  <table class="items"><thead><tr><th>Platform</th><th>Views</th><th>Visitors</th><th>Feed fetches</th><th>Bot hits</th></tr></thead><tbody>
+  {% for platform, t in ov.totals.items() %}<tr><td>{{ platform }}</td><td>{{ t.views }}</td><td>{{ t.visitors }}</td><td>{{ t.feeds }}</td><td>{{ t.bots }}</td></tr>{% else %}<tr><td colspan="5" class="muted">No traffic recorded yet.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section class="card"><h2>Views per day</h2>
+  {% set peak = ov.series | map(attribute='views') | max %}
+  <div class="bars">
+  {% for row in ov.series %}<div class="bar" title="{{ row.day }}: {{ row.views }} views, {{ row.visitors }} visitors"><span style="height: {{ (row.views / peak * 100) if peak else 0 }}%"></span></div>{% endfor %}
+  </div>
+  <p class="muted small">{{ ov.series[0].day }} to {{ ov.series[-1].day }}; hover for values. Views exclude bots, feeds, media and assets.</p>
+</section>
+<div class="columns">
+<section class="card"><h2>Top content</h2>
+  <table class="items small"><thead><tr><th>Path</th><th>Platform</th><th>Views</th><th>Visitors</th></tr></thead><tbody>
+  {% for r in data.content %}<tr><td><code>{{ r.path }}</code></td><td>{{ r.platform }}</td><td>{{ r.views }}</td><td>{{ r.visitors }}</td></tr>{% else %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+<section class="card"><h2>Referrers (web)</h2>
+  <table class="items small"><thead><tr><th>Site</th><th>Views</th></tr></thead><tbody>
+  {% for r in data.referrers %}<tr><td>{{ r.referrer }}</td><td>{{ r.views }}</td></tr>{% else %}<tr><td colspan="2" class="muted">None recorded.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+</div>
+{% set tech = data.technical %}
+<section class="card"><h2>Technical</h2>
+  <p>Status codes: {% for s, n in tech.statuses.items() %}<span class="pill">{{ s }}: {{ n }}</span> {% endfor %}</p>
+  <p>TLS: {% for t, n in tech.tls.items() %}<span class="pill">{{ t }}: {{ n }}</span> {% endfor %} · Bot share: {{ (tech.bot_share * 100) | round(1) }}%</p>
+  {% if tech.missing %}<h3>Not found</h3><table class="items small"><tbody>{% for m in tech.missing %}<tr><td><code>{{ m.path }}</code></td><td>{{ m.hits }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+  {% if tech.agents %}<h3>User agents (web)</h3><table class="items small"><tbody>{% for a in tech.agents %}<tr><td>{{ a.agent | truncate(90) }}</td><td>{{ a.hits }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,17 @@
+```python
+def mend(thing):
+    return thing.fixed()
+```
+
+```code
+no info string here
+```
+
+```code
+indented code block
+```
+
+```text
+contains a fence:
+ ```
+```

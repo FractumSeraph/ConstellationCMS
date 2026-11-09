@@ -1,0 +1,24 @@
+[theme]
+name = "nebula"
+version = "1.0.0"
+description = "Magenta on black, monospace: the look of the owner's capsule mirror, for web and Gemini."
+platforms = ["web", "gemini"]
+extends = "base"
+
+[[settings]]
+key = "accent"
+type = "color"
+label = "Accent colour"
+default = "#df00ff"
+
+[[settings]]
+key = "font"
+type = "string"
+label = "Font stack (CSS font-family)"
+default = "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, 'Courier New', monospace"
+
+[[settings]]
+key = "glow"
+type = "bool"
+label = "Glow on headings"
+default = true

@@ -1,0 +1,5 @@
+{{ gopher_info((term.title if term.kind != 'tag' else '#' ~ term.title) | upper) }}
+{% if term.meta.description %}{{ gopher_info(term.meta.description) }}
+{% endif %}{{ gopher_info("") }}
+{% for post in posts %}{{ gopher_item("1", post.date | date('iso') ~ " " ~ post.meta.title, url_for('post', post.slug)) }}
+{% endfor %}{{ gopher_item("1", "Home", "/") }}

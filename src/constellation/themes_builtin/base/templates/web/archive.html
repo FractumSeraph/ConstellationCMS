@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Archive{% if year %} {{ year }}{% endif %} · {{ site.config.site.title }}{% endblock %}
+{% block body_class %}archive{% endblock %}
+{% block content %}
+<section class="archive">
+  <h1>Archive{% if year %}: {{ year }}{% endif %}</h1>
+  {% if not year %}
+  <ul class="archive-years">
+  {% for y, count in years %}<li><a href="{{ url_for('archive', '', year=y|string) }}">{{ y }}</a> <span class="count">({{ count }})</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  <ul class="post-list">
+  {% for post in posts %}
+    <li class="post-summary"><time datetime="{{ post.date | isoformat }}">{{ post.date | date('iso') }}</time> <a href="{{ url_for('post', post.slug) }}">{{ post.meta.title }}</a></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

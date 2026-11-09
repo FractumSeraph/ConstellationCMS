@@ -1,0 +1,18 @@
+[theme]
+name = "paper"
+version = "1.0.0"
+description = "Warm paper, serif type, generous margins. Web only; Gemini falls back to the base templates."
+platforms = ["web"]
+extends = "base"
+
+[[settings]]
+key = "accent"
+type = "color"
+label = "Accent colour"
+default = "#8a3b12"
+
+[[settings]]
+key = "font"
+type = "string"
+label = "Font stack (CSS font-family)"
+default = "Georgia, 'Iowan Old Style', 'Palatino Linotype', serif"

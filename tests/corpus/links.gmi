@@ -1,0 +1,31 @@
+A descriptive link and here and a bare https://example.net/bare one.
+=> https://example.net/docs descriptive link — With a title
+=> https://example.net/here here: A descriptive link and here and a bare https://example.net/b…
+=> https://example.net/bare example.net/bare
+
+Internal post link, foo, page link, tag link, same page.
+=> /posts/other.gmi post link
+=> /posts/foo.gmi foo
+=> /about.gmi page link
+=> /tags/mending.gmi tag link
+
+Twice in one block: one and two.
+=> https://dup.example one
+
+A paragraph that is only a link
+=> https://solo.example A paragraph that is only a link
+
+## Heading with a link
+=> /posts/zed.gmi a link
+
+* Alpha
+* Beta
+* item with link one
+* item with link two
+=> /posts/alpha.gmi Alpha
+=> https://beta.example Beta
+=> https://l1.example link one
+=> https://l2.example link two
+
+> quoted link text
+=> https://q.example link: quoted link text

@@ -1,0 +1,4 @@
+{{ gopher_info(heading | upper) }}
+{{ gopher_info("") }}
+{% for term in terms %}{{ gopher_item("1", (("#" if kind == 'tag' else "") ~ term.title) ~ " (" ~ (term.posts | length) ~ ")", url_for(kind, term.slug)) }}
+{% endfor %}{{ gopher_item("1", "Home", "/") }}

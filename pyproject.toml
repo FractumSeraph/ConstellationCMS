@@ -1,0 +1,99 @@
+[project]
+name = "constellationcms"
+version = "0.1.0"
+description = "A static site manager for multiple web stacks: write once, publish to the web, Gemini, and more."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Fractum Seraph" }]
+keywords = ["static site generator", "gemini", "gopher", "cms", "blog", "small web"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Site Management",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+    "markdown-it-py>=3.0",
+    "mdit-py-plugins>=0.4",
+    "linkify-it-py>=2.0",
+    "python-frontmatter>=1.1",
+    "python-slugify>=8.0",
+    "jinja2>=3.1",
+    "tomlkit>=0.13",
+    "pydantic>=2.7",
+    "pillow>=10.3",
+    "tzdata>=2024.1",
+    "paramiko>=3.4",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+    "argon2-cffi>=23.1",
+    "watchfiles>=0.22",
+    "itsdangerous>=2.2",
+    "httpx>=0.27",
+    "qrcode>=7.4",
+    "acme>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "hypothesis>=6.100",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "types-python-slugify",
+    "types-PyYAML",
+    "types-paramiko>=5.1.0.20261030",
+    "httpx>=0.27",
+    "playwright>=1.45",
+]
+
+[project.urls]
+Homepage = "https://github.com/FractumSeraph/ConstellationCMS"
+Source = "https://github.com/FractumSeraph/ConstellationCMS"
+Issues = "https://github.com/FractumSeraph/ConstellationCMS/issues"
+
+[project.scripts]
+constellation = "constellation.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "constellation"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["constellation", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/constellation/studio/app.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["constellation"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["frontmatter", "frontmatter.*", "mdit_py_plugins.*", "markdown_it.*", "qrcode", "qrcode.*"]
+ignore_missing_imports = true

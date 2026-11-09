@@ -1,0 +1,15 @@
+# {{ item.meta.title }}
+
+{{ item.date | date('iso') }}{% if author %} · {{ author.name }}{% endif %}{% if theme.show_year_numeral and site.config.calendar.numerals != 'arabic' %} · {{ item.date.year | numeral }}{% endif %}
+{% if theme.show_discordian_date %}{{ item.date | date('long', calendar='discordian') }}
+{% endif %}{% for t in item.meta.tags %}=> {{ url_for('tag', t | slug) }} #{{ t }}
+{% endfor %}{% if series %}=> {{ url_for('series', series.slug) }} Part {{ series.part }} of "{{ series.title }}"
+{% endif %}
+{{ body }}
+{{ hr }}
+{% if prev_post %}=> {{ url_for('post', prev_post.slug) }} ← Previous: {{ prev_post.meta.title }}
+{% endif %}{% if next_post %}=> {{ url_for('post', next_post.slug) }} → Next: {{ next_post.meta.title }}
+{% endif %}{% if web_url %}=> {{ web_url }} Read this post on the web (images, tables and formatting)
+{% endif %}=> / Home
+{% if "atom" in site.config.platform("gemini").feeds %}=> /feed.xml Atom feed
+{% endif %}

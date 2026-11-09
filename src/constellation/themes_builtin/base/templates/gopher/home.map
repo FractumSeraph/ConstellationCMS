@@ -1,0 +1,14 @@
+{{ gopher_info(site.config.site.title) }}
+{% if site.config.site.tagline %}{{ gopher_info(site.config.site.tagline) }}
+{% endif %}{{ gopher_info("") }}
+{% for post in posts %}{{ gopher_item("1", post.date | date('iso') ~ " " ~ post.meta.title, url_for('post', post.slug)) }}
+{% endfor %}{{ gopher_info("") }}
+{% for item in site.config.menu.items %}{% if item.url %}{{ gopher_item("h", item.label, "URL:" ~ item.url) }}
+{% elif item.ref and item.ref != 'home' %}{{ gopher_item("1", item.label, menu_url(item)) }}
+{% endif %}{% for c in item.children %}{% if c.url %}{{ gopher_item("h", c.label, "URL:" ~ c.url) }}
+{% else %}{{ gopher_item("1", c.label, menu_url(c)) }}
+{% endif %}{% endfor %}{% endfor %}{{ gopher_item("1", "Tags", url_for('tag', '') | replace('//', '/')) }}
+{{ gopher_item("1", "Archive", '/archive/') }}
+{% if site.config.footer.text %}{{ gopher_info("") }}
+{{ gopher_info(site.config.footer.text) }}
+{% endif %}

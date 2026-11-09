@@ -1,0 +1,35 @@
+[theme]
+name = "base"
+version = "0.2.0"
+description = "The minimal, readable theme every other theme extends. Covers web and Gemini."
+platforms = ["web", "gemini"]
+
+[[settings]]
+key = "accent"
+type = "color"
+label = "Accent colour"
+default = "#4a3fbf"
+
+[[settings]]
+key = "font"
+type = "string"
+label = "Font stack (CSS font-family)"
+default = "system-ui, -apple-system, 'Segoe UI', sans-serif"
+
+[[settings]]
+key = "show_discordian_date"
+type = "bool"
+label = "Show the Discordian date under post titles"
+default = false
+
+[[settings]]
+key = "gemini_favicon"
+type = "string"
+label = "Emoji favicon for the capsule (favicon.txt)"
+default = "✦"
+
+[[settings]]
+key = "show_year_numeral"
+type = "bool"
+label = "Show the year in the site's numeral system next to the date"
+default = false

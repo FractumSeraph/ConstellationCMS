@@ -1,0 +1,5 @@
+{{ item.meta.title | upper }}
+{{ "=" * (item.meta.title | length) }}
+{{ item.date | date('iso') }}{% if author %} · {{ author.name }}{% endif %}
+
+{{ body }}

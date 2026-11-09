@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · {{ site.config.site.title }}{% endblock %}
+{% block body_class %}terms terms-{{ kind }}{% endblock %}
+{% block content %}
+<section class="terms">
+  <h1>{{ heading }}</h1>
+  <ul class="term-list">
+  {% for term in terms %}
+    <li><a href="{{ url_for(kind, term.slug) }}">{% if kind == 'tag' %}#{% endif %}{{ term.title }}</a> <span class="count">({{ term.posts | length }})</span></li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}

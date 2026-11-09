@@ -1,0 +1,21 @@
+Before the rule.
+
+---
+
+After the rule.
+
+* * *
+
+#hashtag at the start of a paragraph.
+
+=> looks like a link line
+
+Term
+: Its definition.
+
+Another term
+: With a longer definition that keeps going.
+
+Math $x^2$ is kept as source.
+
+A task list in prose: [x] not a task.
