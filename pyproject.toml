@@ -1,6 +1,6 @@
 [project]
 name = "constellationcms"
-version = "0.1.0"
+version = "0.2.0"
 description = "A static site manager for multiple web stacks: write once, publish to the web, Gemini, and more."
 readme = "README.md"
 requires-python = ">=3.12"

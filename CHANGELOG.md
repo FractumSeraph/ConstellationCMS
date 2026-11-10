@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-10)
 
 - The desktop app (stage C of `docs/plan/11-easy-for-everyone.md`): a Windows installer
   (`ConstellationCMS-<version>-Setup.exe`, per user, no administrator password, optional start
