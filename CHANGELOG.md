@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-10)
 
 - **Plain words everywhere** (stage F). Errors now show a page that says what happened and
   what to do, instead of a bare code; a button that fails shows its reason in place instead of
