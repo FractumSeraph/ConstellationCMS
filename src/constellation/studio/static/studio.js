@@ -85,3 +85,33 @@ if (navToggle) {
 document.querySelectorAll("input[data-detect-tz]").forEach((input) => {
   try { input.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) { /* keep UTC */ }
 });
+
+// Signing in with GitHub: ask the studio every few seconds whether the code was entered.
+const ghPoll = document.querySelector("[data-github-poll]");
+if (ghPoll) {
+  const form = ghPoll.closest("form");
+  const status = document.querySelector("[data-github-status]");
+  let wait = Number(ghPoll.dataset.interval || 5) * 1000;
+  const ask = async () => {
+    try {
+      const r = await fetch("/github/poll", {
+        method: "POST",
+        headers: { "x-csrf-token": form.elements.csrf.value, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ next: form.elements.next.value }),
+      });
+      const data = await r.json();
+      if (data.state === "done") { location.href = data.next; return; }
+      if (data.state === "expired" || data.state === "denied" || data.state === "error") {
+        if (status) status.textContent = data.state === "denied"
+          ? "GitHub says the sign-in was cancelled. Start again when you're ready."
+          : data.state === "expired" ? "The code ran out. Start again for a new one." : data.error;
+        if (status) status.className = "error";
+        ghPoll.hidden = true;
+        return;
+      }
+      wait = Number(data.interval || 5) * 1000;
+    } catch (e) { /* the studio blinked; ask again */ }
+    setTimeout(ask, wait);
+  };
+  setTimeout(ask, wait);
+}

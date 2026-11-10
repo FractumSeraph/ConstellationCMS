@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Sign in with GitHub** and put a site on GitHub Pages with one button (stage E). The sign-in
+  is GitHub's device flow (a short code to enter on github.com; no tokens to copy) and asks
+  only for public repositories. The studio makes the repository, publishes, turns on Pages and
+  sets the custom domain. Sites without a domain go at `https://<account>.github.io/`. The
+  first-run wizard offers GitHub Pages, the Publish page has a *Put this site on GitHub Pages*
+  button, and **Account → GitHub** signs in and out. Publishing to `github:` targets then goes
+  through GitHub's web API as one commit with only what changed, so git isn't needed; without
+  the sign-in, git is used as before. See `docs/github-pages.md`.
+
 ## 0.2.0 (2026-11-10)
 
 - The desktop app (stage C of `docs/plan/11-easy-for-everyone.md`): a Windows installer

@@ -8,9 +8,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from constellation.core.build.pipeline import build_site
 from constellation.core.content import load_site
 from constellation.publish.export import (
+    Target,
     apply_export,
     export_rsync,
     is_git_target,
@@ -23,8 +26,17 @@ from constellation.studio.workspace import atomic_write
 
 
 def run_export(
-    job: Job, root: Path, site_id: str, spec: dict[str, Any], *, apply: bool
+    job: Job,
+    root: Path,
+    site_id: str,
+    spec: dict[str, Any],
+    *,
+    apply: bool,
+    github_token: str = "",
+    client: httpx.Client | None = None,
 ) -> dict[str, Any]:
+    """Export one platform to a target. ``github:`` targets go through GitHub's web API when
+    this computer is signed in to GitHub (``github_token``), and through git otherwise."""
     platform = str(spec.get("platform", "web"))
     target_spec = str(spec.get("target", ""))
     layout = str(spec.get("layout", "plain"))
@@ -45,7 +57,7 @@ def run_export(
             job.say(line)
         result = {"mode": "rsync", "applied": apply}
     else:
-        target = open_target(target_spec)
+        target = _open(target_spec, job, github_token, client)
         try:
             plan = plan_export(files, target)
             job.say(f"{target.describe()}: {plan.summary()}")
@@ -81,6 +93,14 @@ def run_export(
             },
         )
     return result
+
+
+def _open(spec: str, job: Job, github_token: str, client: httpx.Client | None) -> Target:
+    if spec.startswith("github:") and github_token:
+        from constellation.publish.github_api import GitHubAPI, GitHubApiTarget
+
+        return GitHubApiTarget(spec, GitHubAPI(github_token, client=client, say=job.say))
+    return open_target(spec)
 
 
 def _record_release(root: Path, entry: dict[str, Any]) -> None:

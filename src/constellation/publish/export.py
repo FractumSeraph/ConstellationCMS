@@ -192,6 +192,10 @@ class Target(ABC):
         """True for a file the target never deletes even when the site no longer has it."""
         return False
 
+    def local_manifest(self, files: ExportFiles) -> dict[str, dict[str, Any]]:
+        """The files to export, described the way :meth:`read_manifest` describes the target's."""
+        return files.manifest
+
     @abstractmethod
     def describe(self) -> str: ...
 
@@ -399,7 +403,10 @@ class GitTarget(Target):
         self.url, branch, self.label = parse_git_spec(spec)
         if shutil.which("git") is None:
             raise RuntimeError(
-                "git is not installed on this machine; install it to publish to a git repository"
+                "git is not installed on this machine. For GitHub, sign in with GitHub on the "
+                "studio's Account page instead (no git needed), or install git"
+                if spec.startswith("github:")
+                else "git is not installed on this machine; install it to publish to a git repository"
             )
         if cache_dir is None:
             from constellation.studio.state import default_cache_dir
@@ -574,12 +581,13 @@ def open_target(spec: str) -> Target:
 
 def plan_export(files: ExportFiles, target: Target) -> Plan:
     old = target.read_manifest() or {}
-    d = diff_manifests(old, files.manifest)
+    new = target.local_manifest(files)
+    d = diff_manifests(old, new)
     # Files the manifest says exist but are gone on the target are re-sent.
-    for p in list(files.manifest):
+    for p in list(new):
         if p in old and p not in d["changed"] and p not in d["added"] and not target.exists(p):
             d["added"].append(p)
-    unchanged = len(files.manifest) - len(d["added"]) - len(d["changed"])
+    unchanged = len(new) - len(d["added"]) - len(d["changed"])
     removed = [p for p in d["removed"] if not target.keeps(p)]
     return Plan(sorted(d["added"]), sorted(d["changed"]), sorted(removed), unchanged)
 

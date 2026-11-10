@@ -28,6 +28,7 @@ from constellation.publish.export import (
     remove_tree,
 )
 from constellation.studio.jobs import Job
+from constellation.studio.state import State
 from tests.test_studio import _setup, studio  # noqa: F401  (pytest fixture)
 
 DEMO = Path(__file__).resolve().parent.parent / "examples" / "demo-site"
@@ -358,9 +359,10 @@ def test_server_publish_also_runs_linked_exports(
     )
     site = load_site(root)
     job = Job(id="j", kind="publish", site="demo")
-    _run_linked_exports(job, root, "site", site, apply=False)
+    state = State(tmp_path / "state", tmp_path / "statecache")
+    _run_linked_exports(job, state, root, "site", site, apply=False)
     assert not (_checkout_or_none(tmp_path, bare))  # a preview pushes nothing
-    _run_linked_exports(job, root, "site", site, apply=True)
+    _run_linked_exports(job, state, root, "site", site, apply=True)
     assert (_checkout(tmp_path, bare) / "index.html").is_file()
     assert not (tmp_path / "manual").exists()  # only targets marked with_publish
     assert any("export pages" in line for line in job.log)
@@ -380,7 +382,7 @@ def test_server_publish_also_runs_linked_exports(
     with pytest.raises(
         RuntimeError, match="published to the server, but these export targets failed: pages"
     ):
-        _run_linked_exports(job, broken_root, "site", broken, apply=True)
+        _run_linked_exports(job, state, broken_root, "site", broken, apply=True)
 
 
 def _checkout_or_none(tmp_path: Path, bare: Path) -> bool:

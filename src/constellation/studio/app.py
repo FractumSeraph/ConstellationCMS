@@ -32,7 +32,8 @@ from constellation.core.render.html import HtmlRenderer
 from constellation.core.routes import RefResolver, url_for
 from constellation.core.themes import BUILTIN_DIR, load_theme, theme_chain
 from constellation.publish.export import is_git_target, parse_git_spec
-from constellation.studio import content_ops, locks, looks, setup_code, updates
+from constellation.publish.github_api import GitHubAPI, GitHubError
+from constellation.studio import content_ops, github, locks, looks, setup_code, updates
 from constellation.studio.auth import (
     hash_password,
     host_is_loopback,
@@ -291,6 +292,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         ctx.setdefault("update", updates.available(studio.state) if ctx["csrf"] else None)
         ctx.setdefault("desktop", app.state.on_quit is not None)
         ctx.setdefault("update_check", updates.enabled(studio.state))
+        ctx.setdefault("gh_login", github.login(studio.state) if ctx["csrf"] else "")
         return cast(HTMLResponse, templates.TemplateResponse(request, name, ctx))
 
     # ---- setup, login, logout -------------------------------------------------------------
@@ -621,6 +623,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         entry = ws.site(site_id)
         if entry is None:
             raise HTTPException(404, f"no site {site_id!r}")
+        if place == "github":
+            return RedirectResponse(f"/sites/{site_id}/github?wizard=1", 303)
         if place == "server" and ws.server(server_id) is not None:
             entry.server = server_id
             save_workspace(ws)
@@ -1446,6 +1450,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             jobs=studio.jobs.for_site(site_id),
             read_only=studio.read_only_reason(site_id),
             releases=_releases(root),
+            has_github=any(str(e.get("target", "")).startswith("github:") for e in exports),
             server=server,
             remote=remote,
             connected=bool(
@@ -1526,7 +1531,15 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             job = await studio.jobs.start(
                 "export",
                 site_id,
-                lambda job: run_export(job, root, site_id, spec, apply=mode == "apply"),
+                lambda job: run_export(
+                    job,
+                    root,
+                    site_id,
+                    spec,
+                    apply=mode == "apply",
+                    github_token=github.token(studio.state),
+                    client=app.state.github_client,
+                ),
             )
         except RuntimeError as e:
             raise HTTPException(409, str(e)) from e
@@ -2403,6 +2416,176 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             if latest is None:
                 saved = "update-unknown"
         return RedirectResponse(f"/account?saved={saved}#updates", 303)
+
+    # ---- GitHub (sign in, GitHub Pages) ------------------------------------------------------
+    app.state.github_client = None  # tests put a fake GitHub here
+
+    def _gh_next(value: str) -> str:
+        return safe_next(value) if value.startswith("/") else "/account#github"
+
+    @app.get("/github", response_class=HTMLResponse)
+    async def github_page(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_session),
+        next: str = "",
+        error: str = "",
+    ) -> Response:
+        return render(
+            request,
+            "github.html",
+            gh_login=github.login(studio.state),
+            next_url=_gh_next(next),
+            error=error,
+        )
+
+    @app.post("/github/start")
+    async def github_start(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf), next: str = Form("")
+    ) -> Response:
+        try:
+            await asyncio.to_thread(github.begin, studio.state, client=app.state.github_client)
+        except GitHubError as e:
+            return RedirectResponse(
+                f"/github?next={quote(_gh_next(next))}&error={quote(str(e))}", 303
+            )
+        return RedirectResponse(f"/github/code?next={quote(_gh_next(next))}", 303)
+
+    @app.get("/github/code", response_class=HTMLResponse)
+    async def github_code(
+        request: Request, sess: dict[str, Any] = Depends(require_session), next: str = ""
+    ) -> Response:
+        pending = github.pending(studio.state)
+        if pending is None:
+            if github.token(studio.state):
+                return RedirectResponse(_gh_next(next), 303)
+            return RedirectResponse(f"/github?next={quote(_gh_next(next))}", 303)
+        return render(request, "github_code.html", device=pending, next_url=_gh_next(next))
+
+    @app.post("/github/poll")
+    async def github_poll(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf), next: str = Form("")
+    ) -> Response:
+        try:
+            status = await asyncio.to_thread(
+                github.poll, studio.state, client=app.state.github_client
+            )
+        except GitHubError as e:
+            return JSONResponse({"state": "error", "error": str(e)})
+        if status == "done":
+            studio.state.audit("github_signin", github.login(studio.state), client_host(request))
+        pending = github.pending(studio.state)
+        if request.headers.get("x-csrf-token") is None:  # the no-JavaScript button
+            if status == "done":
+                return RedirectResponse(_gh_next(next), 303)
+            return RedirectResponse(f"/github/code?next={quote(_gh_next(next))}", 303)
+        return JSONResponse(
+            {
+                "state": status,
+                "next": _gh_next(next),
+                "interval": int(pending["interval"]) if pending else 5,
+            }
+        )
+
+    @app.post("/github/signout")
+    async def github_signout(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        studio.state.audit("github_signout", github.login(studio.state), client_host(request))
+        github.sign_out(studio.state)
+        return RedirectResponse("/account?saved=github#github", 303)
+
+    @app.get("/sites/{site_id}/github", response_class=HTMLResponse)
+    async def github_pages_page(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_session),
+        wizard: str = "",
+    ) -> Response:
+        return _github_pages(request, site_id, wizard=bool(wizard))
+
+    def _github_pages(
+        request: Request,
+        site_id: str,
+        *,
+        wizard: bool,
+        repo: str = "",
+        error: str = "",
+        exists: bool = False,
+        job: Any = None,
+        status: int = 200,
+    ) -> HTMLResponse:
+        root = studio.site_root(site_id)
+        account = github.login(studio.state)
+        try:
+            domain = github.own_domain(root)
+        except ContentError as e:
+            domain, error = "", error or str(e)
+        entry = studio.workspace.site(site_id)
+        repo = repo or (github.suggested_repo(site_id, account, domain) if account else "")
+        response = render(
+            request,
+            "github_pages.html",
+            site_id=site_id,
+            wizard_site=site_id if wizard else "",
+            wizard=wizard,
+            site_name=entry.name if entry else site_id,
+            gh_login=account,
+            domain=domain,
+            repo=repo,
+            address=github.site_address(account, repo, domain) if account else "",
+            error=error,
+            exists=exists,
+            job=job,
+            read_only=studio.read_only_reason(site_id),
+        )
+        response.status_code = status
+        return response
+
+    @app.post("/sites/{site_id}/github", response_class=HTMLResponse)
+    async def github_pages_submit(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        repo: str = Form(""),
+        confirm: str = Form(""),
+        wizard: str = Form(""),
+    ) -> Response:
+        root = studio.site_root(site_id)
+        _check_writable(studio, site_id)
+        account = github.login(studio.state)
+        if not account:
+            return RedirectResponse(f"/sites/{site_id}/github", 303)
+        repo = repo.strip()
+        domain = github.own_domain(root)
+        problem = github.check_repo_name(repo, account, domain)
+        if problem:
+            return _github_pages(
+                request, site_id, wizard=bool(wizard), repo=repo, error=problem, status=400
+            )
+        if not confirm:
+            api = GitHubAPI(github.token(studio.state), client=app.state.github_client)
+            try:
+                existing = await asyncio.to_thread(api.repo, account, repo)
+            except GitHubError as e:
+                return _github_pages(
+                    request, site_id, wizard=bool(wizard), repo=repo, error=str(e), status=400
+                )
+            finally:
+                api.close()
+            if existing is not None and int(existing.get("size") or 0) > 0:
+                return _github_pages(request, site_id, wizard=bool(wizard), repo=repo, exists=True)
+        try:
+            job = await studio.jobs.start(
+                "GitHub Pages",
+                site_id,
+                lambda job: github.setup_pages(
+                    job, studio.state, root, site_id, repo, client=app.state.github_client
+                ),
+            )
+        except RuntimeError as e:
+            raise HTTPException(409, str(e)) from e
+        studio.state.audit("github_pages", f"{site_id}->{account}/{repo}", client_host(request))
+        return _github_pages(request, site_id, wizard=bool(wizard), repo=repo, job=job)
 
     @app.post("/app/quit", response_class=HTMLResponse)
     async def app_quit(request: Request, sess: dict[str, Any] = Depends(require_csrf)) -> Response:

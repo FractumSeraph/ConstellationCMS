@@ -48,6 +48,18 @@
     <button class="primary">Apply</button>
   </form>
 </section>
+<section class="card" id="github"><h2>GitHub</h2>
+  {% if gh_login %}
+  <p>Signed in as <strong>{{ gh_login }}</strong>. The studio uses this to publish sites to GitHub Pages.</p>
+  <form method="post" action="/github/signout" class="row" data-confirm="Sign this studio out of GitHub?">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><button>Sign out of GitHub</button>
+  </form>
+  <p class="muted small">Signing out forgets the sign-in on this computer. To cut off access completely, also remove ConstellationCMS under <a href="https://github.com/settings/applications" target="_blank" rel="noopener">GitHub → Settings → Applications</a>.</p>
+  {% else %}
+  <p class="muted">Not signed in. Signing in lets the studio put sites on GitHub Pages (free hosting) without any other programs.</p>
+  <form method="post" action="/github/start"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="/account#github"><button class="primary">Sign in with GitHub</button></form>
+  {% endif %}
+</section>
 <section class="card" id="look"><h2>Look</h2>
   <form method="post" action="/account/look">
     <input type="hidden" name="csrf" value="{{ csrf }}">

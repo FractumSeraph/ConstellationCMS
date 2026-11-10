@@ -1,31 +1,54 @@
-# Serving the web version from GitHub Pages
+# Putting a site on GitHub Pages
 
-GitHub Pages can serve a site's web pages from GitHub's worldwide network for free, while your
-own server keeps Gemini and Gopher (which GitHub cannot serve). ConstellationCMS publishes to it
-as an export target: each publish commits the web build to a git repository and pushes it.
+GitHub Pages hosts a site's web pages for free, from GitHub's worldwide network. You need a free
+GitHub account and nothing else: the studio signs in to GitHub, makes the repository (the folder
+on GitHub that holds the site), turns Pages on and publishes. Your own server can still serve
+Gemini and Gopher, which GitHub cannot.
 
-## Set it up
+## The easy way: Sign in with GitHub
 
-1. **Let git sign in to GitHub**, once per computer, with the
-   [GitHub CLI](https://cli.github.com/):
+1. Open the site's **Publish** page and press **Put this site on GitHub Pages** (or choose
+   *GitHub Pages* in the first-run wizard).
+2. Press **Sign in with GitHub**. The studio shows a short code; open GitHub, paste the code and
+   press **Authorize**. The studio notices by itself and carries on.
+3. Check the repository name and press **Put it on GitHub Pages**. The studio:
+   - makes the repository on your account if it isn't there yet (public, since free Pages sites
+     are public),
+   - publishes the site to it,
+   - turns on GitHub Pages and, for a site with its own domain, sets that domain.
+4. **Point your domain at GitHub** (only for a site with its own address). The site's
+   **Domain** page lists exactly which records to add where you bought the domain, and checks
+   them for you.
 
-   ```bash
-   gh auth login
-   gh auth setup-git
-   ```
+After that, the Publish page's **Publish** button sends only what changed, as one commit.
 
-   Git Credential Manager (part of Git for Windows) works too. ConstellationCMS never stores a
-   GitHub password or token; it runs `git push` and git signs in.
+**Without a domain of your own**, the site goes at `https://<your-account>.github.io/`, in the
+repository called `<your-account>.github.io`. GitHub gives each account one such address. (Other
+repositories are served at `https://<your-account>.github.io/<repository>/`, a sub-folder, which
+ConstellationCMS sites don't support, because their links start at the top of the address.)
 
-2. **Pick the repository.** Create one on GitHub (it can be empty), then in its
-   **Settings → Pages** choose *Deploy from a branch*, the branch (usually `main`) and `/ (root)`.
-   An existing Pages repository, for example one Publii published to, works as well: the first
-   publish replaces its files, and the old versions stay in the repository's history.
+**What the sign-in allows:** the studio asks GitHub only for access to your *public*
+repositories (`public_repo`). The sign-in is kept in this computer's studio settings, never in
+the synced sites folder. **Account → GitHub → Sign out of GitHub** forgets it; to cut off access
+completely, also remove ConstellationCMS under GitHub's
+[Settings → Applications](https://github.com/settings/applications).
 
-3. **Add the target** on the site's Publish page in the studio: platform `web`, target
-   `github:owner/repository`. Add `#branch` if Pages serves a branch other than the default one,
-   for example `github:owner/repository#gh-pages`. Tick **Also update this target when I publish
-   to the server** so that one Publish button updates both. In `site.toml` it looks like this:
+**An existing repository** (one Publii published to, for example) works too: the studio asks
+before using a repository that already has files, then replaces them with the site. Old
+versions stay in the repository's history.
+
+## The other way: git
+
+Without signing in to GitHub in the studio, a `github:` target is published with git, which
+must be installed and signed in (`gh auth login` then `gh auth setup-git` with the
+[GitHub CLI](https://cli.github.com/), or Git Credential Manager). This also works from the
+command line and for other git hosts:
+
+1. Create the repository on GitHub and, in its **Settings → Pages**, choose *Deploy from a
+   branch*, the branch (usually `main`) and `/ (root)`.
+2. Add the target on the site's Publish page: platform `web`, target `github:owner/repository`
+   (add `#branch` for another branch, such as `github:owner/repository#gh-pages`). In
+   `site.toml`:
 
    ```toml
    [[exports]]
@@ -36,16 +59,20 @@ as an export target: each publish commits the web build to a git repository and 
    ```
 
    From the command line: `constellation export SITE --platform web --target github:owner/repository`.
-   Any other git host works with `git:https://host/owner/repository.git#branch`.
+   Any other git host works with `git:https://host/owner/repository.git#branch`. With git, the
+   studio keeps a working copy of the repository in its cache folder.
 
-4. **Set the addresses.** A domain name points to one place, so the web keeps the main name
-   and Gemini and Gopher get one of their own:
+Ticking **Also update this target when I publish to the server** (`with_publish`) makes the
+server's Publish button update GitHub Pages too, either way.
 
-   - Web: `https://example.org`, pointed at GitHub Pages as GitHub's
-     [custom domain instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site)
-     describe. ConstellationCMS writes the `CNAME` file from the site's web hostname.
-   - Gemini and Gopher: `gemini.example.org`, an A record pointing at your server (with
-     Cloudflare, *DNS only*), set as the Gemini and Gopher addresses in the site's settings.
+## Addresses when a server serves Gemini and Gopher
+
+A domain name points to one place, so the web keeps the main name and Gemini and Gopher get one
+of their own:
+
+- Web: `https://example.org`, pointed at GitHub Pages (the Domain page shows how).
+- Gemini and Gopher: `gemini.example.org`, an A record pointing at your server (with
+  Cloudflare, *DNS only*), set as the Gemini and Gopher addresses in the site's settings.
 
 ## What is published
 
@@ -60,9 +87,6 @@ A README, licence, `.gitignore`, `.gitattributes`, `CNAME` and anything under `.
 in the repository are kept. Everything else that the site no longer produces is removed. The
 repository itself is the record of what is published, so a change made on GitHub is noticed on
 the next publish. "Preview diff" shows the changes without pushing anything.
-
-The studio keeps a working copy of the repository in its cache folder and brings it up to date
-before every publish.
 
 ## What changes compared with the server
 

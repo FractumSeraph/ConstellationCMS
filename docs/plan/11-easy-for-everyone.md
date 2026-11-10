@@ -71,7 +71,7 @@ picked from pictures, web address), then *Where should it go?* (**This computer 
 **My server** (stage B), or **GitHub Pages** (stage E)), then straight into writing the first post
 in Visual mode.
 
-### E · GitHub Pages with a button
+### E · GitHub Pages with a button (done 2026-11-10)
 
 *Sign in with GitHub* using GitHub's device flow (a code to type on github.com, no tokens to
 copy). The studio creates the repository, turns on Pages, sets the custom domain, and publishes.

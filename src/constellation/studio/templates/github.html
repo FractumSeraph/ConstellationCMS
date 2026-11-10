@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}GitHub{% endblock %}
+{% block content %}
+<section class="card wizard">
+  <h1>Sign in with GitHub</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if gh_login %}
+  <p class="ok">This studio is signed in to GitHub as <strong>{{ gh_login }}</strong>.</p>
+  <p><a class="button primary" href="{{ next_url }}">Continue</a></p>
+  {% else %}
+  <p>GitHub can host your site for free with <strong>GitHub Pages</strong>. Signing in lets the studio make a place for it on your GitHub account and publish it there, with no extra programs.</p>
+  <ul class="small">
+    <li>No GitHub account yet? <a href="https://github.com/signup" target="_blank" rel="noopener">Make one first</a> (free), then come back.</li>
+    <li>The studio can only work with your <em>public</em> repositories (folders on GitHub). A site on GitHub Pages is public anyway.</li>
+    <li>The sign-in stays on this computer. You can sign out on the Account page at any time.</li>
+  </ul>
+  <form method="post" action="/github/start">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <button class="primary">Sign in with GitHub</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

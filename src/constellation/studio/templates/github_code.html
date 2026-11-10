@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Enter the code on GitHub{% endblock %}
+{% block content %}
+<section class="card wizard">
+  <h1>Enter this code on GitHub</h1>
+  <ol>
+    <li>Copy the code:
+      <div class="cmd device-code"><pre><code>{{ device.user_code }}</code></pre><button type="button" class="copy" data-copy>Copy</button></div>
+    </li>
+    <li><a href="{{ device.uri }}" target="_blank" rel="noopener"><strong>Open GitHub</strong></a>, sign in if it asks, and paste the code.</li>
+    <li>Press <strong>Authorize</strong> on GitHub, then come back here.</li>
+  </ol>
+  <form method="post" action="/github/poll">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <p data-github-status class="muted" aria-live="polite"><span data-github-poll data-interval="{{ device.interval }}">Waiting for GitHub… this page moves on by itself.</span></p>
+    <div class="wizard-actions">
+      <button class="primary">I've done it</button>
+      <a href="/github?next={{ next_url | urlencode }}">Start again</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

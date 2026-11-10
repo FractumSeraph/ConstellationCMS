@@ -215,13 +215,13 @@ def run_publish(
             job.say(f"- {p}")
         if not apply:
             planned: dict[str, Any] = {"planned": True, **{k: len(v) for k, v in diff.items()}}
-            _run_linked_exports(job, root, site_id, site, apply=False)
+            _run_linked_exports(job, state, root, site_id, site, apply=False)
             return planned
         report = client.publish(site_id, manifest, blob_reader(build), progress=job.say)
     finally:
         client.close()
     try:
-        _run_linked_exports(job, root, site_id, site, apply=True)
+        _run_linked_exports(job, state, root, site_id, site, apply=True)
     finally:
         _record_release(
             root,
@@ -242,12 +242,15 @@ def run_publish(
     }
 
 
-def _run_linked_exports(job: Job, root: Path, site_id: str, site: Any, *, apply: bool) -> None:
+def _run_linked_exports(
+    job: Job, state: State, root: Path, site_id: str, site: Any, *, apply: bool
+) -> None:
     """Run the export targets marked ``with_publish`` (such as GitHub Pages) after the server.
 
     Every target is attempted; if any fails, the job fails afterwards with all their errors,
     so a GitHub problem is never hidden behind a successful server publish.
     """
+    from constellation.studio import github
     from constellation.studio.publish_ops import run_export
 
     failures: list[str] = []
@@ -256,7 +259,14 @@ def _run_linked_exports(job: Job, root: Path, site_id: str, site: Any, *, apply:
             continue
         job.say(f"export {spec.name}: {spec.target}")
         try:
-            run_export(job, root, site_id, spec.model_dump(), apply=apply)
+            run_export(
+                job,
+                root,
+                site_id,
+                spec.model_dump(),
+                apply=apply,
+                github_token=github.token(state),
+            )
         except Exception as e:  # noqa: BLE001 - reported to the user below
             job.say(f"export {spec.name} failed: {e}")
             failures.append(f"{spec.name}: {e}")

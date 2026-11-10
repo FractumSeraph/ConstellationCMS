@@ -24,6 +24,12 @@
 {% else %}
 <p class="muted">This site is not assigned to a server; assign one on the <a href="/servers">Servers</a> page to publish directly, or use an export target below. New to servers? Follow the <a href="/guide">server guide</a>.</p>
 {% endif %}
+{% if not has_github %}
+<section class="card">
+  <h2>GitHub Pages</h2>
+  <p>Free hosting from GitHub. <a class="button" href="/sites/{{ site_id }}/github">Put this site on GitHub Pages</a></p>
+</section>
+{% endif %}
 <section class="card">
   <h2>Export targets</h2>
   <table class="items"><thead><tr><th>Name</th><th>Platform</th><th>Target</th><th>Layout</th><th></th></tr></thead><tbody>
@@ -47,7 +53,7 @@
     <label class="check"><input type="checkbox" name="with_publish" value="1"> Also update this target when I publish to the server</label>
     <button>Add</button>
   </form>
-  <p class="muted small"><strong>GitHub Pages:</strong> use <code>github:owner/repository</code> (add <code>#branch</code> if Pages serves another branch) with the web platform. Each publish commits the web pages to that repository and pushes them, with a <code>CNAME</code> file for your domain and a small forwarding page for each redirect. Git signs in for you once you have run <code>gh auth login</code> and <code>gh auth setup-git</code>. Point the domain's DNS at GitHub, and give Gemini and Gopher their own name (such as <code>gemini.example.org</code>) pointing at your server. See the <a href="/guide#github-pages">guide</a>.</p>
+  <p class="muted small"><strong>GitHub Pages:</strong> use <code>github:owner/repository</code> (add <code>#branch</code> if Pages serves another branch) with the web platform. Each publish commits the web pages to that repository and pushes them, with a <code>CNAME</code> file for your domain and a small forwarding page for each redirect. {% if gh_login %}The studio publishes as <strong>{{ gh_login }}</strong> (signed in with GitHub), without git.{% else %}<a href="/github?next=/sites/{{ site_id }}/publish">Sign in with GitHub</a> to publish without git; otherwise git signs in for you once you have run <code>gh auth login</code> and <code>gh auth setup-git</code>.{% endif %} Point the domain's DNS at GitHub, and give Gemini and Gopher their own name (such as <code>gemini.example.org</code>) pointing at your server. See the <a href="/guide#github-pages">guide</a>.</p>
   </details>
 </section>
 {% if releases %}<section class="card"><h2>History</h2><ul class="plain stars small">{% for r in releases %}<li>{{ r.time[:19] }} · {{ r.kind }} {{ r.name }} · {{ r.platform }} · release {{ r.release }}</li>{% endfor %}</ul></section>{% endif %}

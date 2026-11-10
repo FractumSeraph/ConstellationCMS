@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}GitHub Pages{% endblock %}
+{% block content %}
+<section class="card wizard welcome">
+  {% if wizard %}<ol class="wizard-steps" aria-label="Steps"><li>Your site</li><li class="current" aria-current="step">Where it goes</li><li>First post</li></ol>{% endif %}
+  <h1>Put {{ site_name }} on GitHub Pages</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not gh_login %}
+  <p>GitHub Pages hosts your site for free. First, sign in with GitHub so the studio can make a place for it on your account.</p>
+  <form method="post" action="/github/start">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="next" value="/sites/{{ site_id }}/github{% if wizard %}?wizard=1{% endif %}">
+    <div class="wizard-actions">
+      <button class="primary">Sign in with GitHub</button>
+      {% if wizard %}<a href="/welcome/{{ site_id }}/write">Skip for now</a>{% endif %}
+    </div>
+  </form>
+  {% elif job %}
+  <p>The studio is putting your site on GitHub. You can keep going; this carries on by itself.</p>
+  {% include "partials/job.html" %}
+  {% if domain %}
+  <p>One more thing, once: tell your domain to point at GitHub. The <a href="/sites/{{ site_id }}/domain">Domain page</a> shows exactly what to add where you bought {{ domain }}, and checks it for you.</p>
+  {% endif %}
+  <div class="wizard-actions">
+    {% if wizard %}<a class="button primary" href="/welcome/{{ site_id }}/write">Next: your first post</a>{% else %}<a class="button" href="/sites/{{ site_id }}/publish">Back to Publish</a>{% endif %}
+  </div>
+  {% else %}
+  <p>Signed in to GitHub as <strong>{{ gh_login }}</strong>.</p>
+  <form method="post" action="/sites/{{ site_id }}/github" class="grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if wizard %}<input type="hidden" name="wizard" value="1">{% endif %}
+    <label>Repository name <span class="muted small">(the folder on GitHub that holds the site)</span>
+      <input name="repo" value="{{ repo }}" required pattern="[A-Za-z0-9._\-]+" {% if not domain %}readonly{% endif %}></label>
+    {% if domain %}
+    <p class="small">People will read it at <strong>https://{{ domain }}/</strong>. After this, the Domain page shows what to change where you bought {{ domain }}.</p>
+    {% else %}
+    <p class="small">People will read it at <strong>{{ address }}</strong>. That's GitHub's free address for your account, and it can hold one site. To use another name, give the site <a href="/sites/{{ site_id }}/settings">its own web address</a> first.</p>
+    {% endif %}
+    {% if exists %}
+    <div class="warn">
+      <p><strong>{{ gh_login }}/{{ repo }} already exists on GitHub and has files in it.</strong> Publishing replaces them with this site (a README, licence and <code>.github</code> folder are kept, and GitHub keeps the old versions in the repository's history).</p>
+      <label class="check"><input type="checkbox" name="confirm" value="1" required> Yes, use this repository</label>
+    </div>
+    {% endif %}
+    <div class="wizard-actions">
+      <button class="primary" {% if read_only %}disabled{% endif %}>Put it on GitHub Pages</button>
+      {% if wizard %}<a href="/welcome/{{ site_id }}/write">Skip for now</a>{% endif %}
+    </div>
+  </form>
+  <p class="muted small">Each time you publish after this, the Publish page sends only what changed. Signed in as the wrong account? <a href="/account#github">Sign out of GitHub</a>.</p>
+  {% endif %}
+</section>
+{% endblock %}

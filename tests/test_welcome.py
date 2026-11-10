@@ -73,7 +73,7 @@ def test_setup_leads_into_the_wizard_and_through_it(fresh) -> None:
     where = client.get("/welcome/garden-diary/where")
     assert "Where should Garden Diary go?" in where.text
     assert "Set up a server" in where.text  # no servers yet
-    assert 'value="github" disabled' in where.text  # stage E
+    assert 'value="github"' in where.text and 'value="github" disabled' not in where.text
     r = client.post(
         "/welcome/garden-diary/where",
         data={"csrf": csrf, "place": "local"},
