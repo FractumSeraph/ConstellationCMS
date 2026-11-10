@@ -41,8 +41,8 @@ A wizard in the studio, **Add a server**:
 2. The studio connects over SSH, checks the system (Ubuntu or Debian, enough memory and disk,
    ports 80, 443 and 1965 free, or an existing Caddy it can work with), and shows a plain list of
    what it will do.
-3. It installs Python's venv support, ConstellationCMS (uploading the copy the studio itself runs,
-   so it works before the package is on PyPI), the service, HTTPS (built-in Let's Encrypt, or a
+3. It installs Python's venv support, ConstellationCMS (from the GitHub release, or the copy the
+   studio itself runs), the service, HTTPS (built-in Let's Encrypt, or a
    Caddy block when Caddy is already there), the firewall rules, and optionally a studio on the
    server. Progress is shown step by step; every step can be retried, and a failure says what to
    do in plain words.
@@ -84,15 +84,29 @@ Rename jargon in the studio (*export targets* become *Publish destinations*, *wo
 *your sites folder*, *admin token* disappears), add short help text to every setting, and turn
 error messages into "what happened, what to do".
 
+## Distribution: GitHub Releases, no PyPI
+
+Every release (a `v…` tag) builds, in GitHub Actions, the Python wheel, the Windows installer
+and the Linux AppImage and `.deb`, and attaches them to the GitHub release. That one page is
+where everything comes from:
+
+- **People** download the desktop app from the release page (the README links to the latest).
+- **Servers** install the wheel straight from the release
+  (`pip install https://github.com/…/releases/download/vX/constellationcms-X-py3-none-any.whl`);
+  the server wizard does this itself, or uploads the studio's own copy when the server can't reach
+  GitHub.
+- **Updates:** the desktop app and servers ask GitHub's public "latest release" address once a
+  day and offer the new version.
+
+Downloads without signing in need the repository to be public.
+
 ## What the owner needs to provide
 
-- **PyPI:** publishing the package lets servers install it with one command and lets the desktop
-  app update itself cleanly. Stage B works without it by uploading the studio's own copy.
-- **A GitHub OAuth app** for stage E (two minutes in GitHub's settings).
+- **The repository public**, so release downloads work for everyone.
+- **A GitHub OAuth app** for stage E (two minutes in GitHub's settings), unless stage E is
+  dropped.
 - **Code signing for Windows** (optional): an unsigned installer shows a SmartScreen warning the
   first time ("More info → Run anyway"). A certificate removes it but costs money.
-- **The repository public** (or releases mirrored somewhere public) so friends can download the
-  desktop app.
 
 ## Order
 
