@@ -22,8 +22,17 @@ one Publish button. A static site manager for the small web and the big one.
 
 ## Install
 
+Step-by-step guides for putting the studio on a computer, including keeping your sites in step
+between machines:
+
+- **[Install on Windows](docs/install-windows.md)**
+- **[Install on Linux](docs/install-linux.md)**
+- **[A studio on your server](docs/studio-on-a-server.md)**, to write from any browser
+
+In short:
+
 ```
-uv tool install constellationcms      # or: pipx install constellationcms
+uv tool install git+https://github.com/FractumSeraph/ConstellationCMS
 constellation studio                  # opens http://localhost:8787
 ```
 
