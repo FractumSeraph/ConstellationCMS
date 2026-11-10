@@ -298,7 +298,7 @@ def test_settings_reject_bad_values_and_can_disable_platforms(studio) -> None:  
         data={"csrf": csrf, "f.site.timezone": "Mars/Olympus"},
         follow_redirects=False,
     )
-    assert r.status_code == 200 and "unknown timezone" in r.text
+    assert r.status_code == 200 and "one the studio knows" in r.text
     r = client.post(
         "/sites/demo/settings",
         data={"csrf": csrf, "f.platforms.web.pagination": "lots"},

@@ -16,9 +16,10 @@ their own addresses, and a studio on the server has its own (for example `studio
 
 Other names you may see:
 
-- **Workspace**: the folder holding your sites (`sites/…`) and `workspace.toml`. Studios edit it.
-- **Export target**: somewhere else a studio can publish a site, such as GitHub Pages, a folder or
-  SFTP.
+- **Your sites folder** (called the *workspace* in files and commands): the folder holding your
+  sites (`sites/…`) and `workspace.toml`. Studios edit it.
+- **Other places to publish** (*export targets* in `site.toml`): somewhere else a studio can
+  publish a site, such as GitHub Pages, a folder or SFTP.
 - **Caddy** or **nginx**: an existing web server on the VPS that passes web requests to the
   ConstellationCMS server (`behind-proxy` mode). Not part of ConstellationCMS.
 - **Syncthing**: an optional, separate program that keeps a workspace in step between machines.
@@ -51,7 +52,8 @@ setup page refuses, a few wrong guesses lock it for a while, and the code stops 
 studio is set up. A studio on your own computer needs none of this; it is set up at
 http://localhost:8787 with just a password.
 
-Until a studio's owner turns on remote mode (which needs the authenticator), it answers only its
+Until a studio's owner turns on *Reaching the studio from other devices* (remote mode, which needs
+the authenticator), it answers only its
 own computer: the setup page is the one exception, for a server's studio waiting to be set up.
 
 ## Keeping the server's studio and your computer in step

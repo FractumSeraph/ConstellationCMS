@@ -6,7 +6,7 @@
 <form method="post" action="/sites/{{ site_id }}/theme" class="card">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <label>Theme <select name="theme">{% for t in available %}<option {% if t == current %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
-  <p class="muted">{{ theme.description }} Platforms: {{ theme.platforms | join(', ') }}.</p>
+  <p class="muted">{{ theme.description }} Works for: {{ theme.platforms | join(', ') | replace('web', 'website') }}.</p>
   {% if schema %}<h2>Settings</h2>{% endif %}
   {% for s in schema %}
     {% if s.type == 'bool' %}

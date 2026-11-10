@@ -86,7 +86,7 @@ of their own:
 A README, licence, `.gitignore`, `.gitattributes`, `CNAME` and anything under `.github/` already
 in the repository are kept. Everything else that the site no longer produces is removed. The
 repository itself is the record of what is published, so a change made on GitHub is noticed on
-the next publish. "Preview diff" shows the changes without pushing anything.
+the next publish. "Preview changes" lists them without publishing anything.
 
 ## What changes compared with the server
 

@@ -13,21 +13,21 @@
   <aside class="meta-panel">
     <h2 class="small">{{ item.kind | capitalize }}</h2>
     <label>Title <input id="m-title" value="{{ item.meta.title or '' }}" required></label>
-    <label>Slug <input id="m-slug" value="{{ item.meta.slug or '' }}" placeholder="{{ item.slug }}"></label>
+    <label>Address name <span class="hint">The last part of the page's address. Leave empty to make it from the title.</span><input id="m-slug" value="{{ item.meta.slug or '' }}" placeholder="{{ item.slug }}"></label>
     <label>Status
-      <select id="m-status">{% for s in ['draft', 'published', 'hidden'] %}<option value="{{ s }}" {% if (item.meta.status or 'published') == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+      <select id="m-status">{% for s, t in [('draft', 'Draft (not published)'), ('published', 'Published'), ('hidden', 'Hidden (published, but left out of lists)')] %}<option value="{{ s }}" {% if (item.meta.status or 'published') == s %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
     </label>
     {% if item.kind == 'post' %}
     <label>Date <input id="m-date" type="datetime-local" value="{{ date_input }}"> <span class="muted small">{{ timezone }}</span></label>
     <label>Tags <input id="m-tags" value="{{ item.meta.tags | join(', ') if item.meta.tags else '' }}" placeholder="comma, separated"></label>
     <label>Categories <input id="m-categories" value="{{ item.meta.categories | join(', ') if item.meta.categories else '' }}"></label>
     <label>Series <input id="m-series" value="{{ item.meta.series or '' }}"></label>
-    <label>Part <input id="m-series_part" type="number" min="1" value="{{ item.meta.series_part or '' }}"></label>
+    <label>Part number in the series <input id="m-series_part" type="number" min="1" value="{{ item.meta.series_part or '' }}"></label>
     <label class="check"><input type="checkbox" id="m-featured" {% if item.meta.featured %}checked{% endif %}> Featured (pinned to the top of the home page)</label>
     <label class="check"><input type="checkbox" id="m-comments" {% if item.meta.comments is not sameas false %}checked{% endif %}> Show comments</label>
-    <label>Mastodon toot for comments <input id="m-mastodon" type="url" value="{{ item.meta.mastodon or '' }}" placeholder="https://mastodon.social/@you/1122334455"></label>
+    <label>Mastodon post for comments <span class="hint">Replies to it show under this post, if comments are set to Mastodon.</span><input id="m-mastodon" type="url" value="{{ item.meta.mastodon or '' }}" placeholder="https://mastodon.social/@you/1122334455"></label>
     {% else %}
-    <label>Menu order <input id="m-menu_order" type="number" value="{{ item.meta.menu_order or '' }}"></label>
+    <label>Place in the menu <span class="hint">A number; lower comes first.</span><input id="m-menu_order" type="number" value="{{ item.meta.menu_order or '' }}"></label>
     <label>Template <input id="m-template" value="{{ item.meta.template or '' }}" placeholder="page"></label>
     {% endif %}
     <label>Author <input id="m-author" list="authors" value="{{ item.meta.author or '' }}"><datalist id="authors">{% for a in authors %}<option value="{{ a }}">{% endfor %}</datalist></label>

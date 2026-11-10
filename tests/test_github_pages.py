@@ -320,10 +320,12 @@ def test_studio_adds_a_github_target_linked_to_publish(studio) -> None:  # noqa:
     assert entry["target"] == "github:me/site" and entry["with_publish"] is True
     assert load_site(ws / "sites" / "demo").config.exports[-1].with_publish
     page = client.get("/sites/demo/publish").text
-    assert "also updated by the server" in page and "github:owner/repository" in page
+    assert (
+        "also updated when you publish to your server" in page and "github:owner/repository" in page
+    )
 
     bad = client.post("/sites/demo/exports", data={**form, "name": "g2", "platform": "gemini"})
-    assert bad.status_code == 400 and "web platform only" in bad.text
+    assert bad.status_code == 400 and "only hold the website" in bad.text
     bad = client.post("/sites/demo/exports", data={**form, "name": "g3", "target": "github:me"})
     assert bad.status_code == 400
 
@@ -333,7 +335,7 @@ def test_guide_explains_github_pages(studio) -> None:  # noqa: F811
     _setup(client)
     page = client.get("/guide", params={"site": "fractum.example"}).text
     assert 'id="github-pages"' in page
-    assert "gh auth setup-git" in page and "gemini.fractum.example" in page
+    assert "Put this site on GitHub Pages" in page and "gemini.fractum.example" in page
 
 
 @needs_git

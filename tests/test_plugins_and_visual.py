@@ -295,7 +295,7 @@ def test_studio_saves_reader_features_and_comments(studio) -> None:  # noqa: F81
     bad = client.post(
         "/sites/demo/settings", data={"csrf": csrf, "f.comments.shortname": "bad name!"}
     )
-    assert "Not saved" in bad.text
+    assert "Nothing was saved" in bad.text
 
 
 def test_studio_plugins_page(studio, tmp_path: Path) -> None:  # noqa: F811

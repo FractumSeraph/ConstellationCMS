@@ -142,27 +142,16 @@ sudo systemctl enable --now constellation{% if g.studio %} constellation-studio{
   </ol>
 </section>
 <section class="card guide" id="github-pages">
-  <h2>Optional · Serve the web version from GitHub Pages</h2>
+  <h2>Optional · Let GitHub Pages serve the website</h2>
   <p>GitHub Pages can serve the web pages from its worldwide network while your server keeps Gemini and Gopher. A domain name points to one place, so the web keeps <code>{{ g.site_or }}</code> and Gemini and Gopher get a name of their own, such as <code>gemini.{{ g.site_or }}</code>.</p>
   <ol class="steps">
     <li>
-      <h3>Let git sign in to GitHub</h3>
-      <p>Once per computer, with the <a href="https://cli.github.com/">GitHub CLI</a>:</p>
-      {% set cmd %}gh auth login
-gh auth setup-git{% endset %}
-      {% include "partials/guide_cmd.html" %}
-    </li>
-    <li>
-      <h3>Make or pick the repository</h3>
-      <p>Create a repository on GitHub (it can be empty). In its <strong>Settings → Pages</strong>, choose <em>Deploy from a branch</em>, the branch (usually <code>main</code>) and the <code>/ (root)</code> folder. An existing Pages repository works too: the first publish replaces its files, and the old ones stay in its history.</p>
-    </li>
-    <li>
-      <h3>Add the target</h3>
-      <p>On the site's <strong>Publish</strong> page, add a target with platform <em>web</em> and target <code>github:owner/repository</code>. Tick <em>Also update this target when I publish to the server</em> so one Publish button does both. "Preview diff" shows what the first publish will change.</p>
+      <h3>Put the site on GitHub Pages</h3>
+      <p>On the site's <strong>Publish</strong> page, press <strong>Put this site on GitHub Pages</strong> and sign in with GitHub (you type a short code on github.com). The studio makes the repository, publishes the site and turns Pages on. To have your server's Publish button update GitHub Pages too, tick <em>Also update this place whenever I publish to my server</em> on a place added by hand, or publish to both from the Publish page.</p>
     </li>
     <li>
       <h3>Set the addresses</h3>
-      <p>In the site's Settings, keep the web address <code>https://{{ g.site_or }}</code> and set the Gemini (and Gopher) address to <code>gemini.{{ g.site_or }}</code>. Add <code>gemini.{{ g.site_or }}</code> to the server's DNS as an A record for <code>{{ g.ip_or }}</code>. Point <code>{{ g.site_or }}</code> at GitHub Pages as GitHub's <a href="https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site">custom domain instructions</a> describe. The studio writes the <code>CNAME</code> file for you.</p>
+      <p>In the site's Settings, keep the web address <code>https://{{ g.site_or }}</code> and set the Gemini (and Gopher) address to <code>gemini.{{ g.site_or }}</code>. Add <code>gemini.{{ g.site_or }}</code> to the server's DNS as an A record for <code>{{ g.ip_or }}</code>. Point <code>{{ g.site_or }}</code> at GitHub Pages as GitHub's <a href="https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site">custom domain instructions</a> describe. The studio sets the domain on GitHub for you, and the site's <strong>Domain</strong> page shows the DNS records to add.</p>
     </li>
     <li>
       <h3>What changes</h3>

@@ -10,15 +10,19 @@ import secrets
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from html import escape as html_escape
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote, urlsplit
 
 import tomlkit
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, UploadFile
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from constellation import __version__
@@ -80,7 +84,7 @@ class Studio:
         ws = self.workspace
         entry = ws.site(site_id)
         if entry is None:
-            raise HTTPException(404, f"no site {site_id!r}")
+            raise HTTPException(404, f"There is no site called {site_id!r} in your sites folder.")
         return ws.site_dir(site_id)
 
     def needs_setup(self) -> bool:
@@ -90,7 +94,7 @@ class Studio:
         root = self.site_root(site_id)
         lock = locks.held_elsewhere(root, self.state.settings.machine_id)
         if lock is not None:
-            return f"open on {lock.label or lock.machine_id}; take over if that studio is closed"
+            return f"it is open in the studio on {lock.label or lock.machine_id}"
         return ""
 
     def touch_lock(self, site_id: str) -> None:
@@ -110,6 +114,86 @@ class Studio:
         for site_id in list(self._heartbeats):
             with contextlib.suppress(Exception):
                 locks.release_lock(self.site_root(site_id), self.state.settings.machine_id)
+
+
+# Plain names for the Recent activity list on the Account page.
+EVENT_NAMES = {
+    "setup": "Studio set up",
+    "setup_remote": "Studio set up from another device",
+    "setup_bad_code": "Wrong setup code entered",
+    "login": "Signed in",
+    "login_failed": "Wrong password entered",
+    "login_failed_totp": "Wrong authenticator code entered",
+    "login_locked": "Signing in paused after too many tries",
+    "password_changed": "Password changed",
+    "totp_enabled": "Authenticator app added",
+    "totp_disabled": "Authenticator app removed",
+    "remote_mode": "Access from other devices changed",
+    "site_created": "Site made",
+    "created": "Post or page made",
+    "trashed": "Moved to the trash",
+    "settings": "Site settings saved",
+    "plugins": "Plugins changed",
+    "theme_installed": "Theme added",
+    "umami_set": "Umami connected",
+    "umami_removed": "Umami removed",
+    "site_assigned": "Site's server changed",
+    "servers_changed": "Server list changed",
+    "server_connected": "Server added",
+    "server_setup_started": "Server setup started",
+    "server_setup_checked": "Server checked before setup",
+    "server_admin": "Server settings changed",
+    "computer_connected": "This computer connected to a server",
+    "computer_disconnected": "This computer disconnected from a server",
+    "computer_removed": "A computer removed from a server",
+    "pairing_code": "Pairing code made",
+    "publish_plan": "Changes previewed (server)",
+    "publish_apply": "Published to the server",
+    "export_plan": "Changes previewed",
+    "export_apply": "Published",
+    "rollback": "Earlier version put back",
+    "github_signin": "Signed in to GitHub",
+    "github_signout": "Signed out of GitHub",
+    "github_pages": "Site put on GitHub Pages",
+}
+
+ERROR_HEADINGS = {
+    400: "That didn't work",
+    403: "The studio refused that",
+    404: "Not found",
+    409: "Busy right now",
+    423: "This site can't be changed right now",
+}
+ERROR_TODO = {
+    400: "Go back, check what you entered, and try again.",
+    403: (
+        "Reload the page and try again. This usually happens when a page was left open for a "
+        "long time or you signed out in another tab."
+    ),
+    404: (
+        "It may have been renamed, moved or deleted, perhaps on another computer. Go back to "
+        "your sites and look for it there."
+    ),
+    409: "Wait for it to finish (its progress shows on the page), then try again.",
+}
+
+
+def _explain(exc: StarletteHTTPException) -> tuple[str, str]:
+    """(what happened, what to do) for an error. ``detail`` is either plain text, or a pair of
+    the two when the place that raised it knows better what to do."""
+    detail = exc.detail
+    if isinstance(detail, tuple | list) and len(detail) == 2:
+        return str(detail[0]), str(detail[1])
+    happened = str(detail or "")
+    if not happened or happened == HTTPStatus(exc.status_code).phrase:
+        happened = {
+            404: "There is no page at this address.",
+            405: "This address can't be used that way.",
+        }.get(exc.status_code, f"The studio answered with error {exc.status_code}.")
+    todo = ERROR_TODO.get(
+        exc.status_code, "Go back and try again. If it keeps happening, the studio's log says more."
+    )
+    return happened, todo
 
 
 def create_app(state: State, workspace_root: Path) -> FastAPI:
@@ -157,6 +241,12 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     templates.env.filters["tojson_attr"] = lambda v: json.dumps(v)
     templates.env.filters["when"] = lambda ts: (
         datetime.fromtimestamp(float(ts), UTC).strftime("%Y-%m-%d") if ts else ""
+    )
+    templates.env.filters["when_time"] = lambda ts: (
+        datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M") if ts else ""
+    )
+    templates.env.filters["event_name"] = lambda e: EVENT_NAMES.get(
+        str(e), str(e).replace("_", " ").capitalize()
     )
 
     # ---- auth plumbing --------------------------------------------------------------------
@@ -222,7 +312,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     ) -> dict[str, Any]:
         """Mutating requests carry the session's CSRF token in a header (htmx, fetch) or a form field."""
         if not same_origin(request):
-            raise HTTPException(403, "cross-origin request refused")
+            raise HTTPException(
+                403, "The request came from another website, so the studio ignored it."
+            )
         token = request.headers.get("x-csrf-token")
         if token is None and request.headers.get("content-type", "").startswith(
             ("application/x-www-form-urlencoded", "multipart/form-data")
@@ -230,7 +322,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             form = await request.form()
             token = str(form.get("csrf", "")) or None
         if not token or not secrets.compare_digest(token, str(sess["csrf"])):
-            raise HTTPException(403, "bad or missing CSRF token")
+            raise HTTPException(
+                403, "The page you used is out of date (it was opened before you last signed in)."
+            )
         return sess
 
     class SecurityHeaders(BaseHTTPMiddleware):
@@ -295,6 +389,32 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         ctx.setdefault("gh_login", github.login(studio.state) if ctx["csrf"] else "")
         return cast(HTMLResponse, templates.TemplateResponse(request, name, ctx))
 
+    # ---- errors: what happened, what to do ---------------------------------------------------
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
+        """Errors as a page (or, for buttons that update part of a page, a short note) that says
+        what happened and what to do, instead of a bare status code."""
+        accept = request.headers.get("accept", "")
+        wants_page = "text/html" in accept or request.headers.get("hx-request")
+        if exc.status_code < 400 or exc.status_code == 401 or not wants_page:
+            return await http_exception_handler(request, exc)
+        happened, todo = _explain(exc)
+        if request.headers.get("hx-request"):
+            return HTMLResponse(
+                f'<p class="error" role="alert">{html_escape(happened)} {html_escape(todo)}</p>',
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        response = render(
+            request,
+            "error.html",
+            heading=ERROR_HEADINGS.get(exc.status_code, "Something went wrong"),
+            happened=happened,
+            todo=todo,
+        )
+        response.status_code = exc.status_code
+        return response
+
     # ---- setup, login, logout -------------------------------------------------------------
     @app.get("/setup", response_class=HTMLResponse)
     async def setup_form(request: Request, code: str = "") -> Response:
@@ -337,7 +457,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if not studio.needs_setup():
             return RedirectResponse("/", 303)
         if not same_origin(request):
-            raise HTTPException(403, "cross-origin request refused")
+            raise HTTPException(
+                403, "The request came from another website, so the studio ignored it."
+            )
         if not is_local(request):
             return _remote_setup_submit(
                 request, password, confirm, look, mode, setup_code_value, secret, otp
@@ -433,7 +555,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         request: Request, password: str = Form(...), next: str = Form("/"), code: str = Form("")
     ) -> Response:
         if not same_origin(request):
-            raise HTTPException(403, "cross-origin request refused")
+            raise HTTPException(
+                403, "The request came from another website, so the studio ignored it."
+            )
         host = client_host(request)
         locked = studio.state.login_locked(host)
         if locked:
@@ -602,7 +726,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         ws = studio.workspace
         entry = ws.site(site_id)
         if entry is None:
-            raise HTTPException(404, f"no site {site_id!r}")
+            raise HTTPException(404, f"There is no site called {site_id!r} in your sites folder.")
         return render(
             request,
             "welcome_where.html",
@@ -622,7 +746,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         ws = studio.workspace
         entry = ws.site(site_id)
         if entry is None:
-            raise HTTPException(404, f"no site {site_id!r}")
+            raise HTTPException(404, f"There is no site called {site_id!r} in your sites folder.")
         if place == "github":
             return RedirectResponse(f"/sites/{site_id}/github?wizard=1", 303)
         if place == "server" and ws.server(server_id) is not None:
@@ -739,7 +863,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         root = studio.site_root(site_id)
         _check_writable(studio, site_id)
         if kind not in ("post", "page"):
-            raise HTTPException(400, "kind must be post or page")
+            raise HTTPException(400, "Only posts and pages can be made here.")
         rel = content_ops.create_item(root, kind, title.strip() or "Untitled")
         studio.state.audit("created", rel, client_host(request))
         return RedirectResponse(f"/sites/{site_id}/edit?rel={quote(rel)}", 303)
@@ -753,7 +877,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         try:
             item = content_ops.load_item(root, rel, state=studio.state, site_id=site_id)
         except FileNotFoundError as e:
-            raise HTTPException(404, "no such post or page") from e
+            raise HTTPException(404, "That post or page isn't in this site any more.") from e
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         site = _try_load_site(root, site_id)
@@ -782,7 +906,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         try:
             item = content_ops.load_item(root, rel)
         except FileNotFoundError as e:
-            raise HTTPException(404, "no such post or page") from e
+            raise HTTPException(404, "That post or page isn't in this site any more.") from e
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         return Response(item.body, media_type="text/plain; charset=utf-8")
@@ -860,7 +984,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         payload = await request.json()
         items = payload.get("items", [])
         if not isinstance(items, list) or len(items) > 5000:
-            raise HTTPException(400, "bad items")
+            raise HTTPException(400, "Nothing was chosen, or the choice wasn't understood.")
         clean = [i for i in items if isinstance(i, dict)]
         lead, tail = str(payload.get("lead", "")), str(payload.get("tail", "\n"))
         return JSONResponse({"body": visual.to_markdown(clean, lead=lead, tail=tail)})
@@ -1112,7 +1236,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         _check_writable(studio, site_id)
         folder = {"tag": "tags", "category": "categories", "series": "series"}.get(kind)
         if folder is None or not content_ops.SAFE_MEDIA.sub("", slug) == slug:
-            raise HTTPException(400, "bad taxonomy")
+            raise HTTPException(400, "Only tags, categories and series can be listed here.")
         path = root / "content" / folder / f"{slug}.md"
         existing = ""
         if path.is_file():
@@ -1211,7 +1335,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                     toml_text=str(form["toml_text"]),
                     saved="",
                     read_only="",
-                    error=f"Not saved: {e}",
+                    error=f"Nothing was saved. {_plain_toml_error(e)} Fix it and save again.",
                 )
             write_site_toml(root, new_doc)
         else:
@@ -1235,7 +1359,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                     toml_text=tomlkit.dumps(read_site_toml(root)),
                     saved="",
                     read_only="",
-                    error=f"Not saved: {e}",
+                    error=f"Nothing was saved. {_plain_toml_error(e)} Fix it and save again.",
                 )
             write_site_toml(root, doc)
         studio.state.audit("settings", site_id, client_host(request))
@@ -1279,7 +1403,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                             400, f"{name}: {st.label or st.key} must be a whole number"
                         ) from None
                 elif st.type == "choice" and st.choices and value not in st.choices:
-                    raise HTTPException(400, f"{name}: {value!r} is not one of the choices")
+                    raise HTTPException(400, f"{value!r} isn't one of the choices for {name}.")
                 else:
                     values[st.key] = value
             if values:
@@ -1524,7 +1648,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         doc = read_site_toml(root)
         spec = next((dict(e) for e in doc.get("exports", []) if e.get("name") == name), None)
         if spec is None:
-            raise HTTPException(404, "no such export")
+            raise HTTPException(
+                404, "That publish destination isn't in this site's settings any more."
+            )
         from constellation.studio.publish_ops import run_export
 
         try:
@@ -2004,7 +2130,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         entry = ws.site(site_id)
         server = ws.server(entry.server) if entry and entry.server else None
         if server is None:
-            raise HTTPException(400, "this site is not assigned to a server")
+            raise HTTPException(
+                400,
+                (
+                    "This site isn't set to publish to a server.",
+                    "Open Servers and press Publish here next to the site.",
+                ),
+            )
         try:
             job = await studio.jobs.start(
                 "publish",
@@ -2032,7 +2164,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         entry = ws.site(site_id)
         server = ws.server(entry.server) if entry and entry.server else None
         if server is None:
-            raise HTTPException(400, "this site is not assigned to a server")
+            raise HTTPException(
+                400,
+                (
+                    "This site isn't set to publish to a server.",
+                    "Open Servers and press Publish here next to the site.",
+                ),
+            )
         try:
             srv.rollback(studio.state, site_id, server, release_id)
         except Exception as e:  # noqa: BLE001
@@ -2099,7 +2237,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         form = await request.form()
         key = admin_token.strip() or srv.admin_key(studio.state, server.id)
         if not key:
-            raise HTTPException(400, "this computer is not connected to that server")
+            raise HTTPException(
+                400,
+                (
+                    "This computer isn't connected to that server yet.",
+                    "Open Servers and connect it with a pairing code.",
+                ),
+            )
         client = PublishClient(server.admin_url, key)
         result: dict[str, Any] = {}
         error = ""
@@ -2338,7 +2482,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         mode: str = Form(looks.DEFAULT_MODE),
     ) -> Response:
         if look not in looks.LOOK_IDS or mode not in looks.MODE_IDS:
-            raise HTTPException(400, "unknown look or mode")
+            raise HTTPException(400, "That look isn't one of the choices.")
         studio.state.settings.look = look
         studio.state.settings.mode = mode
         studio.state.save_settings()
@@ -2693,7 +2837,14 @@ def _login_response(studio: Studio, request: Request, next_url: str) -> Response
 def _check_writable(studio: Studio, site_id: str) -> None:
     reason = studio.read_only_reason(site_id)
     if reason:
-        raise HTTPException(423, f"site is read-only: {reason}")
+        raise HTTPException(
+            423,
+            (
+                f"This site can only be read here, because {reason}.",
+                "Close it there, or press Take over at the top of the site's pages if that "
+                "computer is switched off or its studio is closed.",
+            ),
+        )
 
 
 def _try_load_site(root: Path, site_id: str) -> Any:
@@ -2769,31 +2920,31 @@ EXPORT_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 
 def _export_problem(name: str, platform: str, target: str, layout: str, taken: list[str]) -> str:
     if not EXPORT_NAME.match(name):
-        return "the name must be lowercase letters, digits, - or _ (for example vps-web)"
+        return "Use only lowercase letters, digits, - and _ for the name, such as backup-folder."
     if name in taken:
-        return f"there is already a target called {name!r}"
+        return f"There is already a place called {name!r}; choose another name."
     if platform not in ("web", "gemini", "gopher"):
-        return "unknown platform"
+        return "Choose Website, Gemini or Gopher."
     if layout not in ("plain", "agate"):
-        return "unknown layout"
+        return "Choose the plain or agate folder layout."
     if target.startswith("folder:"):
         folder = target[len("folder:") :].strip()
         if not Path(folder).expanduser().is_absolute():
-            return "a folder target needs a full path, such as folder:C:\\sites\\out or folder:/srv/out"
+            return "A folder needs its full path, such as folder:C:\\sites\\out or folder:/srv/out."
         return ""
     if target.startswith("sftp://") or target.startswith("rsync:"):
         if any(c in target for c in " \t\n\"'`;|&$"):
-            return "the target must not contain spaces or shell characters"
+            return "The address can't contain spaces or characters such as ; | & $ or quotes."
         return ""
     if is_git_target(target):
         if platform != "web":
-            return "GitHub Pages and git targets publish the web platform only"
+            return "GitHub Pages (and git) can only hold the website, not Gemini or Gopher."
         try:
             parse_git_spec(target)
         except ValueError as e:
             return str(e)
         return ""
-    return "the target must start with folder:, sftp://, rsync:, github: or git:"
+    return "Start “Where” with folder:, sftp://, github: (or rsync: or git:), as in the examples."
 
 
 def build_hosts(root: Path, platform: str) -> list[str]:
@@ -2974,6 +3125,55 @@ def _settings_extras(root: Path) -> dict[str, Any]:
     }
 
 
+# The names the settings page shows, for messages about a setting.
+FIELD_NAMES = {
+    "site.title": "Title",
+    "site.tagline": "Tagline",
+    "site.language": "Language",
+    "site.timezone": "Time zone",
+    "site.author": "Usual author",
+    "platforms.web.base_url": "Web address",
+    "platforms.web.hostnames": "Names it answers to (Website)",
+    "platforms.web.pagination": "Posts per page",
+    "platforms.web.feeds": "Feeds (Website)",
+    "platforms.gemini.base_url": "Gemini address",
+    "platforms.gemini.hostnames": "Names it answers to (Gemini)",
+    "platforms.gemini.feeds": "Feeds (Gemini)",
+    "platforms.gopher.base_url": "Gopher address",
+    "platforms.gopher.hostnames": "Name it answers to (Gopher)",
+    "platforms.gopher.port": "Port (Gopher)",
+    "menu.items": "Menu",
+    "redirects": "Moved pages",
+    "features.toc_min_headings": "Table of contents: at least this many headings",
+    "features.related_posts": "Related posts",
+}
+
+
+def _field_name(dotted: str) -> str:
+    """A setting's name as the settings page shows it, falling back to where it is in site.toml."""
+    parts = dotted.split(".")
+    for n in range(len(parts), 0, -1):
+        key = ".".join(parts[:n])
+        if key in FIELD_NAMES:
+            return f"“{FIELD_NAMES[key]}”"
+    return f"“{dotted}” in site.toml"
+
+
+def _plain_toml_error(e: Exception) -> str:
+    """One sentence for a settings problem (a typing mistake in site.toml, or a value)."""
+    from pydantic import ValidationError
+    from tomlkit.exceptions import ParseError
+
+    if isinstance(e, ValidationError):
+        first = e.errors()[0]
+        where = ".".join(str(x) for x in first.get("loc", ()))
+        return f"{_field_name(where)}: {first.get('msg', 'not valid')}."
+    if isinstance(e, ParseError):
+        return f"The file has a typing mistake on line {e.line}, column {e.col}."
+    text = str(e).strip()
+    return text if text.endswith((".", "?", "!")) else text + "."
+
+
 def _coerce(dotted: str, value: str) -> Any:
     key = dotted.rsplit(".", 1)[-1]
     if key in ("enabled", "image_link", "toc", "lightbox", "search", "pin_featured"):
@@ -2991,9 +3191,13 @@ def _coerce(dotted: str, value: str) -> Any:
         try:
             number = int(value)
         except ValueError:
-            raise ValueError(f"{dotted} must be a whole number, not {value!r}") from None
+            raise ValueError(
+                f"{_field_name(dotted)} needs a whole number, such as 10, not {value!r}."
+            ) from None
         if number < (0 if key == "related_posts" else 1):
-            raise ValueError(f"{dotted} must be at least {0 if key == 'related_posts' else 1}")
+            raise ValueError(
+                f"{_field_name(dotted)} can't be less than {0 if key == 'related_posts' else 1}."
+            )
         return number
     if key in ("hostnames", "feeds", "display"):
         return [x.strip() for x in value.split(",") if x.strip()]
@@ -3003,7 +3207,10 @@ def _coerce(dotted: str, value: str) -> Any:
         try:
             return json.loads(value)
         except json.JSONDecodeError as e:
-            raise ValueError(f"{dotted} is not valid JSON ({e.msg} at line {e.lineno})") from None
+            raise ValueError(
+                f"{_field_name(dotted)} isn't written the way the example shows "
+                f"(line {e.lineno}: {e.msg}). Check the brackets, quotes and commas."
+            ) from None
     return value
 
 
@@ -3021,12 +3228,13 @@ def _validate_site_doc(doc: Any) -> None:
     except ValidationError as e:
         first = e.errors()[0]
         where = ".".join(str(x) for x in first.get("loc", ()))
-        raise ValueError(f"{where}: {first.get('msg', 'invalid')}") from None
+        raise ValueError(f"{_field_name(where)}: {first.get('msg', 'not valid')}.") from None
     try:
         ZoneInfo(cfg.site.timezone)
     except Exception:  # noqa: BLE001
         raise ValueError(
-            f"unknown timezone {cfg.site.timezone!r}; use a name like America/Chicago"
+            f"“Time zone” {cfg.site.timezone!r} isn't one the studio knows. Use a name such "
+            "as America/Chicago or Europe/London"
         ) from None
 
 

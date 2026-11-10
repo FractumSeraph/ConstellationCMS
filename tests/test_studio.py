@@ -244,7 +244,7 @@ def test_settings_roundtrip_keeps_comments(studio) -> None:
         data={"csrf": csrf, "toml_text": "this is not = toml ["},
         follow_redirects=False,
     )
-    assert r.status_code == 200 and "Not saved" in r.text
+    assert r.status_code == 200 and "Nothing was saved" in r.text
 
 
 def test_taxonomies_theme_publish_pages_render(studio) -> None:
@@ -261,7 +261,7 @@ def test_taxonomies_theme_publish_pages_render(studio) -> None:
     assert "show_discordian_date = true" in (ws / "sites" / "demo" / "site.toml").read_text(
         encoding="utf-8"
     )
-    assert "Export targets" in client.get("/sites/demo/publish").text
+    assert "Other places to publish" in client.get("/sites/demo/publish").text
 
 
 def test_export_job_from_studio(studio, tmp_path: Path) -> None:

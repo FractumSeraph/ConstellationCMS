@@ -2,59 +2,62 @@
 {% block title %}Publish{% endblock %}
 {% block content %}
 <h1>Publish</h1>
-{% if problems %}<section class="card error"><h2>The site does not load</h2><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
-{% if errors %}<section class="card warn"><h2>{{ errors | length }} error-level warnings block publishing</h2><ul>{% for w in errors[:20] %}<li><code>{{ w.code }}</code> {{ w.message }}</li>{% endfor %}</ul></section>{% endif %}
+{% if problems %}<section class="card error"><h2>The site can't be built</h2><p>Fix these first; the site's files say:</p><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
+{% if errors %}<section class="card warn"><h2>{{ errors | length }} problem{{ 's' if errors | length != 1 }} to fix before publishing</h2><p class="small">Publishing waits until these are fixed, so readers never get a broken page. The editor's preview marks them too.</p><ul>{% for w in errors[:20] %}<li>{{ w.message }} <span class="muted small">({{ w.code }})</span></li>{% endfor %}</ul></section>{% endif %}
 {% if server %}
 <section class="card">
-  <h2>Server: {{ server.name }} <span class="muted small"><code>{{ server.admin_url }}</code></span></h2>
-  {% if not connected %}<p class="warn">This machine has no publish token for this site on {{ server.name }}. <a href="/servers">Connect it</a>.</p>{% endif %}
+  <h2>Your server: {{ server.name }} <span class="muted small"><code>{{ server.admin_url | replace('/_constellation', '') }}</code></span></h2>
+  {% if not connected %}<p class="warn">This computer isn't connected to {{ server.name }} yet, so it has no publish key for this site. <a href="/servers">Connect it on the Servers page</a> (it takes a pairing code).</p>{% endif %}
   <div class="row">
-    <form hx-post="/sites/{{ site_id }}/publish-to-server" hx-target="#server-job" hx-swap="innerHTML" class="inline"><input type="hidden" name="mode" value="plan"><button {% if not connected %}disabled{% endif %}>Preview diff</button></form>
-    <form hx-post="/sites/{{ site_id }}/publish-to-server" hx-target="#server-job" hx-swap="innerHTML" hx-confirm="Publish every platform to {{ server.name }}?" class="inline"><input type="hidden" name="mode" value="apply"><button class="primary" {% if errors or read_only or not connected %}disabled{% endif %}>Publish</button></form>
+    <form hx-post="/sites/{{ site_id }}/publish-to-server" hx-target="#server-job" hx-swap="innerHTML" class="inline"><input type="hidden" name="mode" value="plan"><button {% if not connected %}disabled{% endif %}>Preview changes</button></form>
+    <form hx-post="/sites/{{ site_id }}/publish-to-server" hx-target="#server-job" hx-swap="innerHTML" hx-confirm="Publish the site (web, and Gemini and Gopher if it has them) to {{ server.name }}?" class="inline"><input type="hidden" name="mode" value="apply"><button class="primary" {% if errors or read_only or not connected %}disabled{% endif %}>Publish</button></form>
   </div>
+  <p class="muted small">"Preview changes" lists what would be added, changed and removed, without publishing anything.</p>
   <div id="server-job"></div>
   {% if remote and remote.releases %}
-  <h3>Releases on the server</h3>
-  <table class="items small"><thead><tr><th>Release</th><th>Built</th><th>Files</th><th></th></tr></thead><tbody>
-  {% for r in remote.releases %}<tr><td><code>{{ r.id }}</code>{% if r.active %} <span class="pill published">active</span>{% endif %}</td><td>{{ r.built_at[:19] }}</td><td>{{ r.files }}</td>
-    <td>{% if not r.active %}<form method="post" action="/sites/{{ site_id }}/rollback" class="inline" data-confirm="Activate release {{ r.id }}?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="release_id" value="{{ r.id }}"><button class="link">activate</button></form>{% endif %}</td></tr>{% endfor %}
+  <h3>Earlier versions on the server</h3>
+  <p class="muted small">Each publish is kept as a version. If something went wrong, put an earlier one back.</p>
+  <table class="items small"><thead><tr><th>Version</th><th>Published</th><th>Files</th><th></th></tr></thead><tbody>
+  {% for r in remote.releases %}<tr><td><code>{{ r.id }}</code>{% if r.active %} <span class="pill published">showing now</span>{% endif %}</td><td>{{ r.built_at[:16] | replace('T', ' ') }}</td><td>{{ r.files }}</td>
+    <td>{% if not r.active %}<form method="post" action="/sites/{{ site_id }}/rollback" class="inline" data-confirm="Show version {{ r.id }} to readers instead of the current one?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="release_id" value="{{ r.id }}"><button class="link">put this one back</button></form>{% endif %}</td></tr>{% endfor %}
   </tbody></table>
-  {% elif remote and remote.error %}<p class="muted small">Could not list releases: {{ remote.error }}</p>{% endif %}
+  {% elif remote and remote.error %}<p class="muted small">Couldn't list the earlier versions: {{ remote.error }}</p>{% endif %}
 </section>
 {% else %}
-<p class="muted">This site is not assigned to a server; assign one on the <a href="/servers">Servers</a> page to publish directly, or use an export target below. New to servers? Follow the <a href="/guide">server guide</a>.</p>
+<p class="muted">This site isn't set to publish to a server of yours. To use one, press <strong>Publish here</strong> next to the site on the <a href="/servers">Servers</a> page (or <a href="/servers/setup">set up a server</a> first). Or use GitHub Pages or another place below.</p>
 {% endif %}
 {% if not has_github %}
 <section class="card">
   <h2>GitHub Pages</h2>
-  <p>Free hosting from GitHub. <a class="button" href="/sites/{{ site_id }}/github">Put this site on GitHub Pages</a></p>
+  <p>Free hosting from GitHub, with a free GitHub account. <a class="button" href="/sites/{{ site_id }}/github">Put this site on GitHub Pages</a></p>
 </section>
 {% endif %}
 <section class="card">
-  <h2>Export targets</h2>
-  <table class="items"><thead><tr><th>Name</th><th>Platform</th><th>Target</th><th>Layout</th><th></th></tr></thead><tbody>
+  <h2>Other places to publish</h2>
+  <p class="muted small">Besides your server: GitHub Pages, a folder on this computer, or another server reached over SSH. Each one gets the whole site in one go.</p>
+  <table class="items"><thead><tr><th>Name</th><th>What</th><th>Where</th><th></th></tr></thead><tbody>
   {% for e in exports %}
-  <tr><td>{{ e.name }}</td><td>{{ e.platform }}</td><td><code>{{ e.target }}</code>{% if e.with_publish %}<br><span class="muted small">also updated by the server's Publish button</span>{% endif %}</td><td>{{ e.layout }}</td>
+  <tr><td>{{ e.name }}</td><td>{{ {'web': 'Website', 'gemini': 'Gemini', 'gopher': 'Gopher'}.get(e.platform, e.platform) }}{% if e.layout == 'agate' %} <span class="muted small">(Agate folders)</span>{% endif %}</td><td><code>{{ e.target }}</code>{% if e.with_publish %}<br><span class="muted small">also updated when you publish to your server</span>{% endif %}</td>
     <td class="actions">
-      <form hx-post="/sites/{{ site_id }}/export/{{ e.name }}" hx-target="#job-{{ loop.index }}" hx-swap="innerHTML" class="inline"><input type="hidden" name="mode" value="plan"><button>Preview diff</button></form>
-      <form hx-post="/sites/{{ site_id }}/export/{{ e.name }}" hx-target="#job-{{ loop.index }}" hx-swap="innerHTML" hx-confirm="Apply this export to {{ e.target }}?" class="inline"><input type="hidden" name="mode" value="apply"><button class="primary" {% if errors or read_only %}disabled{% endif %}>Publish</button></form>
-      <form method="post" action="/sites/{{ site_id }}/exports" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="-"><input type="hidden" name="platform" value="web"><input type="hidden" name="target" value="-"><input type="hidden" name="delete" value="{{ e.name }}"><button class="link danger">remove</button></form>
+      <form hx-post="/sites/{{ site_id }}/export/{{ e.name }}" hx-target="#job-{{ loop.index }}" hx-swap="innerHTML" class="inline"><input type="hidden" name="mode" value="plan"><button>Preview changes</button></form>
+      <form hx-post="/sites/{{ site_id }}/export/{{ e.name }}" hx-target="#job-{{ loop.index }}" hx-swap="innerHTML" hx-confirm="Publish to {{ e.target }}?" class="inline"><input type="hidden" name="mode" value="apply"><button class="primary" {% if errors or read_only %}disabled{% endif %}>Publish</button></form>
+      <form method="post" action="/sites/{{ site_id }}/exports" class="inline" data-confirm="Remove {{ e.name }} from this list? Nothing already published there is deleted."><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="name" value="-"><input type="hidden" name="platform" value="web"><input type="hidden" name="target" value="-"><input type="hidden" name="delete" value="{{ e.name }}"><button class="link danger">remove</button></form>
     </td></tr>
-  <tr><td colspan="5"><div id="job-{{ loop.index }}"></div></td></tr>
-  {% else %}<tr><td colspan="5" class="empty">No export targets yet. Publishing to your server doesn't need one.</td></tr>{% endfor %}
+  <tr><td colspan="4"><div id="job-{{ loop.index }}"></div></td></tr>
+  {% else %}<tr><td colspan="4" class="empty">None yet. Publishing to your own server doesn't need one.</td></tr>{% endfor %}
   </tbody></table>
-  <details><summary>Add a target</summary>
+  <details><summary>Add a place by hand</summary>
   <form method="post" action="/sites/{{ site_id }}/exports" class="grid">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Name <input name="name" required pattern="[a-z0-9][a-z0-9_\-]*" placeholder="vps-web"></label>
-    <label>Platform <select name="platform"><option>web</option><option>gemini</option><option>gopher</option></select></label>
-    <label>Target <input name="target" required placeholder="github:owner/repository, sftp://user@host/var/www/site or folder:C:\sites\out"></label>
-    <label>Layout <select name="layout"><option>plain</option><option>agate</option></select></label>
-    <label class="check"><input type="checkbox" name="with_publish" value="1"> Also update this target when I publish to the server</label>
+    <label>Name <span class="hint">A short name for it: lowercase letters, digits, - and _.</span><input name="name" required pattern="[a-z0-9][a-z0-9_\-]*" placeholder="backup-folder"></label>
+    <label>What to publish <select name="platform"><option value="web">Website</option><option value="gemini">Gemini</option><option value="gopher">Gopher</option></select></label>
+    <label>Where <span class="hint">One of: <code>folder:</code> and a full path on this computer (<code>folder:C:\sites\out</code>, <code>folder:/srv/out</code>); <code>sftp://user@host/path</code> for a server you reach with SSH; <code>github:owner/repository</code> for GitHub Pages (the button above is easier).</span><input name="target" required placeholder="folder:C:\sites\out"></label>
+    <label>Folder layout <span class="hint">Leave on "plain". "Agate" only matters for Gemini files served by the Agate program.</span><select name="layout"><option value="plain">plain</option><option value="agate">agate</option></select></label>
+    <label class="check"><input type="checkbox" name="with_publish" value="1"> Also update this place whenever I publish to my server</label>
     <button>Add</button>
   </form>
-  <p class="muted small"><strong>GitHub Pages:</strong> use <code>github:owner/repository</code> (add <code>#branch</code> if Pages serves another branch) with the web platform. Each publish commits the web pages to that repository and pushes them, with a <code>CNAME</code> file for your domain and a small forwarding page for each redirect. {% if gh_login %}The studio publishes as <strong>{{ gh_login }}</strong> (signed in with GitHub), without git.{% else %}<a href="/github?next=/sites/{{ site_id }}/publish">Sign in with GitHub</a> to publish without git; otherwise git signs in for you once you have run <code>gh auth login</code> and <code>gh auth setup-git</code>.{% endif %} Point the domain's DNS at GitHub, and give Gemini and Gopher their own name (such as <code>gemini.example.org</code>) pointing at your server. See the <a href="/guide#github-pages">guide</a>.</p>
+  <p class="muted small"><strong>GitHub Pages:</strong> {% if gh_login %}the studio publishes as <strong>{{ gh_login }}</strong> (signed in with GitHub), with no other programs.{% else %}<a href="/github?next=/sites/{{ site_id }}/publish">Sign in with GitHub</a> to publish without git; otherwise git must be installed and signed in (<code>gh auth login</code>, then <code>gh auth setup-git</code>).{% endif %} Gemini and Gopher can't go on GitHub Pages; give them a name of their own pointing at your server. See <a href="/guide#github-pages">the guide</a>.</p>
   </details>
 </section>
-{% if releases %}<section class="card"><h2>History</h2><ul class="plain stars small">{% for r in releases %}<li>{{ r.time[:19] }} · {{ r.kind }} {{ r.name }} · {{ r.platform }} · release {{ r.release }}</li>{% endfor %}</ul></section>{% endif %}
+{% if releases %}<section class="card"><h2>History</h2><ul class="plain stars small">{% for r in releases %}<li>{{ r.time[:16] | replace('T', ' ') }} · {{ 'server' if r.kind == 'publish' else r.name or r.kind }} · {{ {'web': 'website', 'gemini': 'Gemini', 'gopher': 'Gopher'}.get(r.platform, r.platform) }}</li>{% endfor %}</ul></section>{% endif %}
 {% endblock %}

@@ -115,7 +115,7 @@ def test_register_connect_publish_rollback(world) -> None:
     assert "error=" in r.headers["location"]
     # Publish from the studio: plan, then apply; poll the job.
     page = client.get("/sites/demo/publish").text
-    assert "Server: First VPS" in page
+    assert "Your server: First VPS" in page
     r = client.post(
         "/sites/demo/publish-to-server", data={"mode": "apply"}, headers={"X-CSRF-Token": csrf}
     )
@@ -136,7 +136,7 @@ def test_register_connect_publish_rollback(world) -> None:
         history["releases"][-1]["kind"] == "publish" and history["releases"][-1]["release"] == rid
     )
     page = client.get("/sites/demo/publish").text
-    assert "Releases on the server" in page and rid in page
+    assert "Earlier versions on the server" in page and rid in page
     # Rollback to the same release is accepted (there is only one), and forgetting the token disables publishing.
     r = client.post(
         "/sites/demo/rollback", data={"csrf": csrf, "release_id": rid}, follow_redirects=False
@@ -145,7 +145,7 @@ def test_register_connect_publish_rollback(world) -> None:
     client.post(
         "/servers/vps-1/forget", data={"csrf": csrf, "site_id": "demo"}, follow_redirects=False
     )
-    assert "no publish token" in client.get("/sites/demo/publish").text
+    assert "no publish key for this site" in client.get("/sites/demo/publish").text
 
 
 def test_server_cli_install_and_prune(tmp_path: Path, capsys) -> None:

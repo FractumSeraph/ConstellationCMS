@@ -134,7 +134,10 @@ def test_connect_once_then_publish_without_tokens(world) -> None:  # noqa: F811
     # Publish here, then publish: the site's key is minted by itself.
     client.post(f"/servers/{server.id}/assign", data={"csrf": csrf, "site_id": "demo", "on": "1"})
     assert load_workspace(ws).site("demo").server == server.id
-    assert "Publish every platform" in client.get("/sites/demo/publish").text
+    assert (
+        "Publish the site (web, and Gemini and Gopher if it has them) to"
+        in client.get("/sites/demo/publish").text
+    )
     from constellation.studio.jobs import Job
 
     job = Job(id="j", kind="publish", site="demo")

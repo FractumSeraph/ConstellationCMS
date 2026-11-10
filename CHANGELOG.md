@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Plain words everywhere** (stage F). Errors now show a page that says what happened and
+  what to do, instead of a bare code; a button that fails shows its reason in place instead of
+  doing nothing. Settings problems name the setting as the page shows it ("Posts per page needs
+  a whole number"). Jargon is renamed: *export targets* are now *Other places to publish*,
+  *Preview diff* is *Preview changes*, *releases* are *earlier versions*, the *workspace* is
+  *your sites folder*, *remote mode* is *Reaching the studio from other devices*. Every site
+  setting has a line of help, Gemini and server options are described instead of listed as
+  codes, and Recent activity shows dates and plain names.
 - **Sign in with GitHub** and put a site on GitHub Pages with one button (stage E). The sign-in
   is GitHub's device flow (a short code to enter on github.com; no tokens to copy) and asks
   only for public repositories. The studio makes the repository, publishes, turns on Pages and

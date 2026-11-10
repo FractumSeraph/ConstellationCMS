@@ -2,8 +2,8 @@
 {% block title %}{{ site_id }}{% endblock %}
 {% block content %}
 <h1>{{ site_id }}</h1>
-{% if problems %}<section class="card error"><h2>The site does not load</h2><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
-{% if conflicts %}<section class="card warn"><h2>Sync conflict files</h2><p>Another machine saved these at the same time. Open each, keep the right one, delete the other.</p><ul>{% for c in conflicts %}<li><code>{{ c }}</code></li>{% endfor %}</ul></section>{% endif %}
+{% if problems %}<section class="card error"><h2>The site can't be built</h2><p class="small">Fix these in the files named; the preview and publishing wait until then.</p><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></section>{% endif %}
+{% if conflicts %}<section class="card warn"><h2>Two versions of the same file</h2><p>Your sync program found these saved on two computers at once and kept both. Open each pair, keep the right one, and delete the other.</p><ul>{% for c in conflicts %}<li><code>{{ c }}</code></li>{% endfor %}</ul></section>{% endif %}
 <div class="columns">
   <section class="card">
     <h2>Recent posts</h2>
@@ -16,9 +16,9 @@
   <section class="card">
     <h2>Status</h2>
     <p>Drafts: {{ drafts | length }}{% if not drafts %} <span class="muted">· clear skies</span>{% endif %}</p>
-    <p>Warnings in the preview build: {% for k, v in warnings.items() %}<span class="pill {{ k }}">{{ v }} {{ k }}</span> {% else %}none{% endfor %}</p>
-    {% if releases %}<p>Last export: {{ releases[0].time[:16] }} ({{ releases[0].platform }} → {{ releases[0].target }})</p>{% endif %}
-    {% if jobs %}<h3>Recent jobs</h3><ul class="plain">{% for j in jobs %}<li>{{ j.kind }} · {{ j.status }}</li>{% endfor %}</ul>{% endif %}
+    <p>Things to look at: {% for k, v in warnings.items() %}<span class="pill {{ k }}">{{ v }} {{ {"error": "to fix before publishing", "warn": "worth a look", "info": "notes"}.get(k, k) }}</span> {% else %}none{% endfor %}</p>
+    {% if releases %}<p>Last published: {{ releases[0].time[:16] | replace('T', ' ') }} ({{ 'your server' if releases[0].kind == 'publish' else releases[0].target }})</p>{% endif %}
+    {% if jobs %}<h3>Recent work</h3><ul class="plain">{% for j in jobs %}<li>{{ j.kind }} · {{ j.status }}</li>{% endfor %}</ul>{% endif %}
   </section>
 </div>
 {% endblock %}

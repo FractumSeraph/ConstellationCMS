@@ -78,7 +78,7 @@ copy). The studio creates the repository, turns on Pages, sets the custom domain
 No Git or GitHub CLI needed. This needs a GitHub OAuth app registered by the owner (a client ID is
 public and goes in the code).
 
-### F · Plain words everywhere
+### F · Plain words everywhere (done 2026-11-10)
 
 Rename jargon in the studio (*export targets* become *Publish destinations*, *workspace* becomes
 *your sites folder*, *admin token* disappears), add short help text to every setting, and turn

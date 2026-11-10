@@ -115,3 +115,19 @@ if (ghPoll) {
   };
   setTimeout(ask, wait);
 }
+
+// "Go back" links on error pages go back in history when there is somewhere to go back to.
+document.addEventListener("click", (e) => {
+  const link = e.target instanceof Element ? e.target.closest("[data-back]") : null;
+  if (link && history.length > 1) { e.preventDefault(); history.back(); }
+});
+
+// htmx normally ignores error answers, so a failed button press looked like nothing happened.
+// Show the studio's explanation where the result would have gone.
+document.addEventListener("htmx:beforeSwap", (e) => {
+  const xhr = e.detail.xhr;
+  if (xhr.status >= 400 && (xhr.getResponseHeader("content-type") || "").startsWith("text/html")) {
+    e.detail.shouldSwap = true;
+    e.detail.isError = false;
+  }
+});

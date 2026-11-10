@@ -23,7 +23,7 @@
   </form>
 </section>
 {% endif %}
-<section class="card"><h2>Second factor</h2>
+<section class="card"><h2>Authenticator app <span class="muted small">(optional)</span></h2>
   {% if settings.totp_secret %}
   <p class="ok">Enabled. Every sign-in asks for a code from your authenticator app.</p>
   <form method="post" action="/account/totp/disable" class="row">
@@ -31,19 +31,19 @@
     <input type="password" name="password" placeholder="password to confirm" required><button class="danger">Disable</button>
   </form>
   {% else %}
-  <p class="muted">Not enabled. Required before remote mode can be turned on.</p>
+  <p class="muted">Not set up. An authenticator app (such as Aegis, Google Authenticator or 1Password) adds a 6-digit code to signing in, so a stolen password isn't enough. Needed before other devices may reach the studio, unless the password is long.</p>
   <form method="post" action="/account/totp/begin"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">Set up an authenticator app</button></form>
   {% endif %}
 </section>
-<section class="card"><h2>Remote access</h2>
-  <p class="muted">Local mode answers this computer only. Remote mode lets other devices reach the studio: it always asks for the password (and the authenticator code, if you added one above) and never signs anyone in automatically. Without an authenticator, remote mode needs a password of at least 12 characters. If a reverse proxy such as Caddy provides HTTPS in front of the studio, tick "trust proxy headers".</p>
-  <p>Currently: <strong>{% if settings.remote_mode %}remote mode on ({{ settings.bind }}:{{ settings.port }}){% else %}local only{% endif %}</strong>{% if settings.trust_proxy %}, trusting proxy headers{% endif %}.</p>
-  {% if request.query_params.get('restart') %}<p class="warn">Restart the studio for the new bind address to take effect.</p>{% endif %}
+<section class="card"><h2>Reaching the studio from other devices</h2>
+  <p class="muted">Normally only this computer can open the studio. Turning this on lets other devices (a phone, a laptop) reach it over the network: it always asks for the password (and the authenticator code, if you added one above) and never signs anyone in automatically. Without an authenticator app, this needs a password of at least 12 characters. If a web server such as Caddy adds HTTPS in front of the studio, tick the box for it below.</p>
+  <p>Now: <strong>{% if settings.remote_mode %}other devices can reach it ({{ settings.bind }}:{{ settings.port }}){% else %}this computer only{% endif %}</strong>{% if settings.trust_proxy %}, behind a web server that adds HTTPS{% endif %}.</p>
+  {% if request.query_params.get('restart') %}<p class="warn">Close and open the studio again for this to take effect.</p>{% endif %}
   <form method="post" action="/account/remote" class="grid">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label class="check"><input type="checkbox" name="enable" {% if settings.remote_mode %}checked{% endif %}> Remote mode</label>
-    <label>Bind address <input name="bind" value="{{ settings.bind if settings.remote_mode else '0.0.0.0' }}"></label>
-    <label class="check"><input type="checkbox" name="trust_proxy" {% if settings.trust_proxy %}checked{% endif %}> Trust proxy headers (studio behind a reverse proxy)</label>
+    <label class="check"><input type="checkbox" name="enable" {% if settings.remote_mode %}checked{% endif %}> Let other devices reach the studio</label>
+    <label>Listen on <span class="hint"><code>0.0.0.0</code> means every network this computer is on. Change it only to limit the studio to one network address.</span><input name="bind" value="{{ settings.bind if settings.remote_mode else '0.0.0.0' }}"></label>
+    <label class="check"><input type="checkbox" name="trust_proxy" {% if settings.trust_proxy %}checked{% endif %}> The studio sits behind a web server (such as Caddy) that adds HTTPS</label>
     <label>Password to confirm <input type="password" name="password" required></label>
     <button class="primary">Apply</button>
   </form>
@@ -71,7 +71,7 @@
 <section class="card"><h2>Options</h2>
   <form method="post" action="/account/options">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label class="check"><input type="checkbox" name="auto_login_local" {% if settings.auto_login_local %}checked{% endif %}> Sign in automatically from this machine (never applies in remote mode or behind a proxy)</label>
+    <label class="check"><input type="checkbox" name="auto_login_local" {% if settings.auto_login_local %}checked{% endif %}> Sign in automatically on this computer (never for other devices, or when a web server sits in front)</label>
     <button>Save</button>
   </form>
   <form method="post" action="/account/signout-everywhere" class="top-gap"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Sign out everywhere</button></form>
@@ -87,6 +87,7 @@
   </form>
 </section>
 <section class="card"><h2>Recent activity</h2>
-  <table class="items small"><tbody>{% for ts, event, detail, remote in audit %}<tr><td>{{ ts | int }}</td><td>{{ event }}</td><td>{{ detail }}</td><td>{{ remote }}</td></tr>{% endfor %}</tbody></table>
+  <p class="muted small">What was done in this studio, newest first, with the address it was done from.</p>
+  <table class="items small"><thead><tr><th>When</th><th>What</th><th>Details</th><th>From</th></tr></thead><tbody>{% for ts, event, detail, remote in audit %}<tr><td>{{ ts | when_time }}</td><td>{{ event | event_name }}</td><td>{{ detail }}</td><td>{{ 'this computer' if remote in ('127.0.0.1', '::1', 'local') else remote }}</td></tr>{% endfor %}</tbody></table>
 </section>
 {% endblock %}

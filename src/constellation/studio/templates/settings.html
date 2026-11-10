@@ -7,63 +7,71 @@
 {% set site = doc.get('site', {}) %}{% set web = doc.get('platforms', {}).get('web', {}) %}{% set gem = doc.get('platforms', {}).get('gemini', {}) %}
 <form method="post" action="/sites/{{ site_id }}/settings" class="settings-form">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <section class="card"><h2>Identity</h2><div class="grid">
-    <label>Title <input name="f.site.title" value="{{ site.get('title', '') }}"></label>
-    <label>Tagline <input name="f.site.tagline" value="{{ site.get('tagline', '') }}"></label>
-    <label>Language <input name="f.site.language" value="{{ site.get('language', 'en') }}"></label>
-    <label>Timezone <input name="f.site.timezone" value="{{ site.get('timezone', 'UTC') }}"></label>
-    <label>Default author id <input name="f.site.author" value="{{ site.get('author', '') }}"></label>
+  <section class="card"><h2>About the site</h2><div class="grid">
+    <label>Title <span class="hint">The site's name, shown at the top of every page.</span><input name="f.site.title" value="{{ site.get('title', '') }}"></label>
+    <label>Tagline <span class="hint">A short line under the title. Can be left empty.</span><input name="f.site.tagline" value="{{ site.get('tagline', '') }}"></label>
+    <label>Language <span class="hint">A language code such as <code>en</code>, <code>de</code> or <code>pt-BR</code>. Browsers and screen readers use it.</span><input name="f.site.language" value="{{ site.get('language', 'en') }}"></label>
+    <label>Time zone <span class="hint">Post dates are shown in this time zone, such as <code>America/Chicago</code> or <code>Europe/London</code>.</span><input name="f.site.timezone" value="{{ site.get('timezone', 'UTC') }}"></label>
+    <label>Usual author <span class="hint">Who wrote a post when the post doesn't say. Use the author's short name (their id), such as <code>sam</code>.</span><input name="f.site.author" value="{{ site.get('author', '') }}"></label>
   </div></section>
-  <section class="card"><h2>Web</h2><div class="grid">
-    <input type="hidden" name="f.platforms.web.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.web.enabled" {% if web.get('enabled', True) %}checked{% endif %}> enabled</label>
-    <label>Base URL <input name="f.platforms.web.base_url" value="{{ web.get('base_url', '') }}"></label>
-    <label>Hostnames (comma separated; first is canonical) <input name="f.platforms.web.hostnames" value="{{ web.get('hostnames', []) | join(', ') }}"></label>
-    <label>Posts per page <input type="number" name="f.platforms.web.pagination" value="{{ web.get('pagination', 10) }}"></label>
-    <label>Feeds <input name="f.platforms.web.feeds" value="{{ web.get('feeds', ['atom', 'json']) | join(', ') }}"></label>
+  <section class="card"><h2>Website</h2>
+  <p class="muted small">The ordinary web version of the site, for any browser.</p>
+  <div class="grid">
+    <input type="hidden" name="f.platforms.web.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.web.enabled" {% if web.get('enabled', True) %}checked{% endif %}> Make a website</label>
+    <label>Web address <span class="hint">Where people read it, such as <code>https://example.org</code>. Leave empty while the site only lives on this computer.</span><input name="f.platforms.web.base_url" value="{{ web.get('base_url', '') }}" placeholder="https://example.org" inputmode="url"></label>
+    <label>Names it answers to <span class="hint">Usually just the name in the address, such as <code>example.org</code>. To have <code>www.example.org</code> work too, add it after a comma. The first is the main one.</span><input name="f.platforms.web.hostnames" value="{{ web.get('hostnames', []) | join(', ') }}" placeholder="example.org, www.example.org"></label>
+    <label>Posts per page <span class="hint">How many posts the home page and lists show before "Older posts".</span><input type="number" min="1" name="f.platforms.web.pagination" value="{{ web.get('pagination', 10) }}"></label>
+    <label>Feeds <span class="hint">Let readers follow the site in a feed reader. <code>atom</code> suits most readers, <code>json</code> some newer ones. Separate with commas; empty for none.</span><input name="f.platforms.web.feeds" value="{{ web.get('feeds', ['atom', 'json']) | join(', ') }}"></label>
   </div></section>
-  <section class="card"><h2>Gemini</h2><div class="grid">
-    <input type="hidden" name="f.platforms.gemini.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.gemini.enabled" {% if gem.get('enabled', False) %}checked{% endif %}> enabled</label>
-    <label>Base URL <input name="f.platforms.gemini.base_url" value="{{ gem.get('base_url', '') }}"></label>
-    <label>Hostnames <input name="f.platforms.gemini.hostnames" value="{{ gem.get('hostnames', []) | join(', ') }}"></label>
-    <label>Feeds <input name="f.platforms.gemini.feeds" value="{{ gem.get('feeds', ['atom', 'gemsub']) | join(', ') }}"></label>
+  <section class="card"><h2>Gemini <span class="muted small">(optional)</span></h2>
+  <p class="muted small">Gemini is a small, text-only cousin of the web, read with apps such as Lagrange. Your own server can serve the same posts there; GitHub Pages can't.</p>
+  <div class="grid">
+    <input type="hidden" name="f.platforms.gemini.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.gemini.enabled" {% if gem.get('enabled', False) %}checked{% endif %}> Make a Gemini version</label>
+    <label>Gemini address <span class="hint">Such as <code>gemini://example.org</code>.</span><input name="f.platforms.gemini.base_url" value="{{ gem.get('base_url', '') }}" placeholder="gemini://example.org"></label>
+    <label>Names it answers to <span class="hint">The name in the address, such as <code>example.org</code>; more after commas.</span><input name="f.platforms.gemini.hostnames" value="{{ gem.get('hostnames', []) | join(', ') }}"></label>
+    <label>Feeds <span class="hint"><code>atom</code> and <code>gemsub</code> (the Gemini way to follow a site). Separate with commas.</span><input name="f.platforms.gemini.feeds" value="{{ gem.get('feeds', ['atom', 'gemsub']) | join(', ') }}"></label>
   </div></section>
   {% set gop = doc.get('platforms', {}).get('gopher', {}) %}
-  <section class="card"><h2>Gopher</h2><div class="grid">
-    <input type="hidden" name="f.platforms.gopher.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.gopher.enabled" {% if gop.get('enabled', False) %}checked{% endif %}> enabled</label>
-    <label>Base URL <input name="f.platforms.gopher.base_url" value="{{ gop.get('base_url', '') }}" placeholder="gopher://example.org"></label>
-    <label>Hostname <input name="f.platforms.gopher.hostnames" value="{{ gop.get('hostnames', []) | join(', ') }}"></label>
-    <label>Port <input type="number" name="f.platforms.gopher.port" value="{{ gop.get('port', 70) }}"></label>
+  <section class="card"><h2>Gopher <span class="muted small">(optional)</span></h2>
+  <p class="muted small">Gopher is a menu-based text system from before the web, still loved by some readers. Your own server can serve the site there too.</p>
+  <div class="grid">
+    <input type="hidden" name="f.platforms.gopher.enabled" value="off"><label class="check"><input type="checkbox" name="f.platforms.gopher.enabled" {% if gop.get('enabled', False) %}checked{% endif %}> Make a Gopher version</label>
+    <label>Gopher address <span class="hint">Such as <code>gopher://example.org</code>.</span><input name="f.platforms.gopher.base_url" value="{{ gop.get('base_url', '') }}" placeholder="gopher://example.org"></label>
+    <label>Name it answers to <span class="hint">The name in the address, such as <code>example.org</code>.</span><input name="f.platforms.gopher.hostnames" value="{{ gop.get('hostnames', []) | join(', ') }}"></label>
+    <label>Port <span class="hint">Leave at 70 unless you know you need another.</span><input type="number" name="f.platforms.gopher.port" value="{{ gop.get('port', 70) }}"></label>
   </div></section>
   {% set rg = doc.get('render', {}).get('gemini', {}) %}
-  <section class="card"><h2>Gemini rendering</h2><div class="grid">
-    <label>Inline markup <select name="f.render.gemini.inline_markup">{% for v in ['markdown', 'strip'] %}<option {% if rg.get('inline_markup', 'markdown') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Deep headings <select name="f.render.gemini.heading_overflow">{% for v in ['text', 'promote', 'upper'] %}<option {% if rg.get('heading_overflow', 'text') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Nested lists <select name="f.render.gemini.nested_lists">{% for v in ['indent', 'flatten', 'sentence'] %}<option {% if rg.get('nested_lists', 'indent') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Tables <select name="f.render.gemini.tables">{% for v in ['auto', 'pre', 'records'] %}<option {% if rg.get('tables', 'auto') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Link markers <select name="f.render.gemini.link_markers">{% for v in ['none', 'numbers', 'letters'] %}<option {% if rg.get('link_markers', 'none') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Horizontal rule <input name="f.render.gemini.hr" value="{{ rg.get('hr', '~~~~') }}"></label>
-    <label>Image notice <input name="f.render.gemini.image_notice" value="{{ rg.get('image_notice', '[Image, web only. Alt text: {alt}]') }}"></label>
+  <section class="card"><h2>How posts look on Gemini</h2>
+  <p class="muted small">Gemini pages are plain text, so some things a web page can show need a choice.</p>
+  <div class="grid">
+    <label>Bold, italics and code <select name="f.render.gemini.inline_markup">{% for v, t in [('markdown', 'Keep the marks (*bold*, _italic_)'), ('strip', 'Remove the marks')] %}<option value="{{ v }}" {% if rg.get('inline_markup', 'markdown') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Small headings <span class="hint">Gemini has three heading sizes; this is for the fourth and smaller.</span><select name="f.render.gemini.heading_overflow">{% for v, t in [('text', 'As ordinary text'), ('promote', 'As the smallest heading'), ('upper', 'In CAPITALS')] %}<option value="{{ v }}" {% if rg.get('heading_overflow', 'text') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Lists inside lists <select name="f.render.gemini.nested_lists">{% for v, t in [('indent', 'Indented'), ('flatten', 'One flat list'), ('sentence', 'Joined into a sentence')] %}<option value="{{ v }}" {% if rg.get('nested_lists', 'indent') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Tables <select name="f.render.gemini.tables">{% for v, t in [('auto', 'Choose for each table'), ('pre', 'Drawn as a grid of text'), ('records', 'One block per row')] %}<option value="{{ v }}" {% if rg.get('tables', 'auto') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Links in the text <span class="hint">Gemini puts links on lines of their own; a marker shows which word each belongs to.</span><select name="f.render.gemini.link_markers">{% for v, t in [('none', 'No markers'), ('numbers', 'Numbers [1]'), ('letters', 'Letters [a]')] %}<option value="{{ v }}" {% if rg.get('link_markers', 'none') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Dividing line <span class="hint">The text that stands in for a horizontal line.</span><input name="f.render.gemini.hr" value="{{ rg.get('hr', '~~~~') }}"></label>
+    <label>Instead of a picture <span class="hint">Shown where a picture would be. <code>{alt}</code> becomes the picture's description.</span><input name="f.render.gemini.image_notice" value="{{ rg.get('image_notice', '[Image, web only. Alt text: {alt}]') }}"></label>
   </div></section>
   {% set cal = doc.get('calendar', {}) %}
   <section class="card"><h2>Calendars and numerals</h2><div class="grid">
-    <label>Calendars themes may show (comma separated: gregorian, discordian) <input name="f.calendar.display" value="{{ cal.get('display', ['gregorian']) | join(', ') }}"></label>
-    <label>Numeral system <select name="f.calendar.numerals">{% for v in ['arabic', 'roman', 'cistercian'] %}<option {% if cal.get('numerals', 'arabic') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Cistercian fallback on text platforms <select name="f.calendar.numerals_text_fallback">{% for v in ['arabic', 'words'] %}<option {% if cal.get('numerals_text_fallback', 'arabic') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Calendars to show dates in <span class="hint">Comma separated: <code>gregorian</code> (the usual one), <code>discordian</code>. Themes decide where they appear.</span><input name="f.calendar.display" value="{{ cal.get('display', ['gregorian']) | join(', ') }}"></label>
+    <label>Numbers written as <select name="f.calendar.numerals">{% for v, t in [('arabic', '1, 2, 3'), ('roman', 'Roman (I, II, III)'), ('cistercian', "Cistercian (monks' ciphers)")] %}<option value="{{ v }}" {% if cal.get('numerals', 'arabic') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Cistercian numbers on Gemini and Gopher <span class="hint">They can't be drawn in plain text.</span><select name="f.calendar.numerals_text_fallback">{% for v, t in [('arabic', 'Use 1, 2, 3'), ('words', 'Use words (one, two)')] %}<option value="{{ v }}" {% if cal.get('numerals_text_fallback', 'arabic') == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
   </div></section>
   <section class="card"><h2>Menu and footer</h2>
-    <label>Menu items (JSON list of {label, ref|url, children}) <textarea name="f.menu.items" rows="6">{{ doc.get('menu', {}).get('items', []) | tojson_attr }}</textarea></label>
-    <label>Footer text <input name="f.footer.text" value="{{ doc.get('footer', {}).get('text', '') }}"></label>
+    <label>Menu <span class="hint">One entry per link, written as a list. Each has a <code>label</code> (the words shown) and either a <code>ref</code> (a page in the site, such as <code>"home"</code> or <code>"page:about"</code>) or a <code>url</code> (any address). Example: <code>[{"label": "Home", "ref": "home"}, {"label": "About", "ref": "page:about"}]</code></span><textarea name="f.menu.items" rows="6" class="mono">{{ doc.get('menu', {}).get('items', []) | tojson_attr }}</textarea></label>
+    <label>Footer text <span class="hint">A line at the bottom of every page, such as a copyright notice.</span><input name="f.footer.text" value="{{ doc.get('footer', {}).get('text', '') }}"></label>
   </section>
-  <section class="card"><h2>SEO</h2><div class="grid">
-    <label>Default description <input name="f.seo.default_description" value="{{ doc.get('seo', {}).get('default_description', '') }}"></label>
-    <label>Twitter handle <input name="f.seo.twitter" value="{{ doc.get('seo', {}).get('twitter', '') }}"></label>
+  <section class="card"><h2>Search engines and sharing</h2><div class="grid">
+    <label>Description <span class="hint">A sentence or two about the site. Search engines and link previews show it when a page has no description of its own.</span><input name="f.seo.default_description" value="{{ doc.get('seo', {}).get('default_description', '') }}"></label>
+    <label>X (Twitter) account <span class="hint">Such as <code>@example</code>; shown in link previews there. Can be left empty.</span><input name="f.seo.twitter" value="{{ doc.get('seo', {}).get('twitter', '') }}"></label>
   </div></section>
-  <section class="card"><h2>Redirects (served by our server)</h2>
-    <label>JSON list of {from, to, status} <textarea name="f.redirects" rows="4">{{ doc.get('redirects', []) | tojson_attr }}</textarea></label>
+  <section class="card"><h2>Moved pages (redirects)</h2>
+    <label>When an old address should send readers to a new one <span class="hint">A list of <code>from</code> (the old address on this site), <code>to</code> (the new one) and <code>status</code> (<code>301</code> for "moved for good"). Example: <code>[{"from": "/old-post/", "to": "/posts/new-post/", "status": 301}]</code>. Your server sends readers on directly; GitHub Pages and other hosts get a small forwarding page.</span><textarea name="f.redirects" rows="4" class="mono">{{ doc.get('redirects', []) | tojson_attr }}</textarea></label>
   </section>
   {% set ch = doc.get('custom_html', {}) %}
-  <section class="card"><h2>Custom HTML (web only)</h2>
-    <p class="muted">Anything else that belongs in the page, injected as written. For Umami, use the Umami box below instead.</p>
+  <section class="card"><h2>Extra code for every web page <span class="muted small">(for experts)</span></h2>
+    <p class="muted">HTML put into every web page exactly as written, such as a script a service asks you to add. Mistakes here can break pages. For Umami, use the Umami box below instead.</p>
     <label>In &lt;head&gt; <textarea name="f.custom_html.head" rows="5">{{ ch.get('head', '') }}</textarea></label>
     <label>After &lt;body&gt; opens <textarea name="f.custom_html.body_start" rows="3">{{ ch.get('body_start', '') }}</textarea></label>
     <label>Before &lt;/body&gt; <textarea name="f.custom_html.body_end" rows="3">{{ ch.get('body_end', '') }}</textarea></label>
@@ -113,7 +121,7 @@
   <button class="primary" {% if read_only %}disabled{% endif %}>Save settings</button>
 </form>
 <section class="card" id="plugins"><h2>Plugins</h2>
-  <p class="muted">Plugins are Python files in your workspace's <code>plugins</code> folder (or installed packages). They run on this computer when the site is built, so only turn on plugins you trust. <a href="/guide#plugins">How to write one</a>.</p>
+  <p class="muted">Plugins add features to the site while it is built. They are Python files in the <code>plugins</code> folder inside your sites folder (or installed Python packages). They run on this computer when the site is built, so only turn on plugins you trust. <a href="/guide#plugins">How to write one</a>.</p>
   {% if plugins_available %}
   <form method="post" action="/sites/{{ site_id }}/plugins">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -168,7 +176,8 @@
   </details>
   {% endif %}
 </section>
-<details class="card"><summary>Edit site.toml directly</summary>
+<details class="card"><summary>Edit the settings file by hand (site.toml, for experts)</summary>
+  <p class="muted small">Everything on this page is stored in this file. Saving checks it first and keeps the old file if something is wrong.</p>
   <form method="post" action="/sites/{{ site_id }}/settings">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <textarea name="toml_text" rows="30" class="mono">{{ toml_text }}</textarea>

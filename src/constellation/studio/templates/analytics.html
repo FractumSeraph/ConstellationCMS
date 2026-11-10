@@ -2,7 +2,7 @@
 {% block title %}Analytics{% endblock %}
 {% block content %}
 <h1>Analytics</h1>
-<p class="muted">Counted by your own server on every platform, with no scripts or cookies.
+<p class="muted">Counted by your own server on the web, Gemini and Gopher, with no scripts or cookies.
 {% if umami_link %}This site also sends visits to <a href="{{ umami_link }}" target="_blank" rel="noopener">your Umami dashboard ↗</a>.{% else %}You can also connect Umami under <a href="/sites/{{ site_id }}/settings#umami">Settings</a>.{% endif %}</p>
 {% if data.error %}<p class="muted">{{ data.error }}{% if not server %} Assign a server on the <a href="/servers">Servers</a> page.{% endif %}</p>
 {% else %}
@@ -10,7 +10,7 @@
  · <a href="{{ server.admin_url }}/sites/{{ site_id }}/analytics/export.csv?days={{ days }}" rel="noopener">CSV</a></p>
 {% set ov = data.overview %}
 <section class="card"><h2>Totals</h2>
-  <table class="items"><thead><tr><th>Platform</th><th>Views</th><th>Visitors</th><th>Feed fetches</th><th>Bot hits</th></tr></thead><tbody>
+  <table class="items"><thead><tr><th>Where</th><th>Views</th><th>Visitors</th><th>Feed reader visits</th><th>Robots</th></tr></thead><tbody>
   {% for platform, t in ov.totals.items() %}<tr><td>{{ platform }}</td><td>{{ t.views }}</td><td>{{ t.visitors }}</td><td>{{ t.feeds }}</td><td>{{ t.bots }}</td></tr>{% else %}<tr><td colspan="5" class="muted">No traffic recorded yet.</td></tr>{% endfor %}
   </tbody></table>
 </section>
@@ -23,7 +23,7 @@
 </section>
 <div class="columns">
 <section class="card"><h2>Top content</h2>
-  <table class="items small"><thead><tr><th>Path</th><th>Platform</th><th>Views</th><th>Visitors</th></tr></thead><tbody>
+  <table class="items small"><thead><tr><th>Page</th><th>Where</th><th>Views</th><th>Visitors</th></tr></thead><tbody>
   {% for r in data.content %}<tr><td><code>{{ r.path }}</code></td><td>{{ r.platform }}</td><td>{{ r.views }}</td><td>{{ r.visitors }}</td></tr>{% else %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endfor %}
   </tbody></table>
 </section>

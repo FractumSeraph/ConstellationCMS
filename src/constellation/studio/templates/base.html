@@ -47,8 +47,8 @@
 </div>
 {% endif %}
 {% if read_only is defined and read_only %}
-<div class="banner warn">This site is read-only here: {{ read_only }}.
-  <form method="post" action="/sites/{{ site_id }}/take-over" class="inline" data-confirm="Only take over if the other machine is closed or not editing. Take over this site?"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Take over</button></form>
+<div class="banner warn">This site is read-only here (you can look but not change it), because {{ read_only }}. Close it there first. If that computer is off or its studio is closed:
+  <form method="post" action="/sites/{{ site_id }}/take-over" class="inline" data-confirm="Take over only if the other computer is off or not editing, or changes made there could be lost. Take over this site?"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Take over</button></form>
 </div>
 {% endif %}
 <main class="{% block main_class %}page{% endblock %}">
