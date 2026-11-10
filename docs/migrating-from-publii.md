@@ -34,6 +34,26 @@ What comes across:
 The rest of this page describes what each Publii feature becomes, for checking or for setting a
 site up by hand.
 
+## Drafts and unpublished pages
+
+The published folder only has what is live. Drafts live in Publii's database, which is in a
+Publii backup (*Backups* in the Publii app makes a `.tar`). Add them to the imported site with:
+
+```bash
+constellation import publii-backup path/to/site-backup.tar path/to/new-site
+```
+
+Every post and page the site doesn't have yet comes in, matched by slug, with its status (drafts
+stay drafts and are never published until you change them), date, tags (Publii's main tag
+first), author, SEO title and description, featured image and images. Links between posts and
+pages (Publii's `#INTERNAL_LINK#`) become ordinary links, so drafts can link to each other.
+Tags only drafts used get their descriptions too. Nothing already in the site is changed, so it
+is safe to run again after more work in Publii.
+
+Items in Publii's trash are listed and left out; add `--include-trashed` to bring them in as
+drafts. `--dry-run` lists what would be added. The command also takes an unpacked Publii site
+folder (the one with `input/db.sqlite`).
+
 ## Addresses stay the same
 
 Publii puts posts at `/post-slug/`, the same as pages. Set the post pattern to match, so every

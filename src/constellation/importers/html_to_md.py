@@ -53,6 +53,8 @@ class _Converter(HTMLParser):
         self.cell: list[str] | None = None
         self.header_rows = 0
         self.gallery: _Gallery | None = None
+        # Set right after an opening ** / * / ~~, so a leading space can move outside it.
+        self.just_opened = False
 
     # -- output helpers -------------------------------------------------------------------------
     def w(self, text: str) -> None:
@@ -69,6 +71,10 @@ class _Converter(HTMLParser):
         if tail.endswith(sep) or (not self.quote and tail.endswith("\n\n")):
             return
         self.w(sep)
+
+    def open_mark(self, mark: str) -> None:
+        self.w(mark)
+        self.just_opened = True
 
     def close_mark(self, mark: str) -> None:
         # Markdown needs the closing marker right after a word: move trailing spaces outside.
@@ -90,6 +96,7 @@ class _Converter(HTMLParser):
     # -- parser callbacks ------------------------------------------------------------------------
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = {k: v or "" for k, v in attrs}
+        self.just_opened = False
         if self.raw is not None:
             if tag == self.raw.tag:
                 self.raw.depth += 1
@@ -131,9 +138,9 @@ class _Converter(HTMLParser):
             elif tag == "br":
                 self.w(" ")
             elif tag in ("strong", "b"):
-                self.w("**")
+                self.open_mark("**")
             elif tag in ("em", "i"):
-                self.w("*")
+                self.open_mark("*")
             elif tag == "a":
                 self.links.append(a.get("href", ""))
                 self.w("[")
@@ -144,11 +151,11 @@ class _Converter(HTMLParser):
             self.block()
             self.w("#" * int(tag[1]) + " ")
         elif tag in ("strong", "b"):
-            self.w("**")
+            self.open_mark("**")
         elif tag in ("em", "i", "cite"):
-            self.w("*")
+            self.open_mark("*")
         elif tag in ("del", "s", "strike"):
-            self.w("~~")
+            self.open_mark("~~")
         elif tag == "a":
             self.links.append(a.get("href", ""))
             self.w("[")
@@ -196,6 +203,7 @@ class _Converter(HTMLParser):
             self.handle_endtag(tag)
 
     def handle_endtag(self, tag: str) -> None:
+        self.just_opened = False
         if self.raw is not None:
             self.raw.parts.append(f"</{tag}>")
             if tag == self.raw.tag:
@@ -285,6 +293,15 @@ class _Converter(HTMLParser):
             self.w(data)
             return
         text = re.sub(r"\s+", " ", data)
+        if self.just_opened and text[:1] == " ":
+            # "<em> word</em>" must become " *word*": Markdown ignores "* word*".
+            target = self.cell if self.cell is not None else self.out
+            mark = target.pop()
+            before = target[-1] if target else ""
+            self.w(mark if not before or before.endswith((" ", "\n")) else " " + mark)
+            text = text.lstrip()
+        if text:
+            self.just_opened = False
         if self.cell is None:
             text = _escape_markdown(text)
         if self.quote and self.out and self.out[-1].endswith("\n"):

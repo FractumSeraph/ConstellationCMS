@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Import: `constellation import publii-backup BACKUP SITE` reads a Publii backup `.tar` (or
+  site folder) including its database, and adds every post and page the site lacks, drafts as
+  drafts, with dates, tags, authors, SEO fields, images, featured images and internal links
+  resolved. Trashed items only with `--include-trashed`; `--dry-run` lists the changes. Unsafe
+  paths in the archive are ignored.
+- Import: emphasis written as `<em> text</em>` (a space inside the tag) now becomes ` *text*`;
+  before, the asterisks showed as text.
 - Reader features, in every theme and on any host (see `docs/features.md`):
   - Galleries: images between `::: gallery [columns]` and `:::` form a grid; on Gemini and
     Gopher each becomes a link. Publii galleries import as gallery blocks.

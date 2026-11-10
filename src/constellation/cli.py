@@ -163,6 +163,20 @@ def main(argv: list[str] | None = None) -> int:
         help="the site's time zone, e.g. America/Chicago (default: UTC)",
     )
     ip.set_defaults(func=cmd_import_publii)
+    ib = ims.add_parser(
+        "publii-backup",
+        help="add the drafts and other posts and pages from a Publii backup to a site",
+        description="Read a Publii backup (.tar) or site folder, including the drafts in its "
+        "database, and add every post and page the site does not have yet. Drafts stay "
+        "drafts; nothing already in the site is changed.",
+    )
+    ib.add_argument("backup", type=Path, help="Publii backup .tar, or the Publii site folder")
+    ib.add_argument("site", type=Path, help="the ConstellationCMS site to add to")
+    ib.add_argument(
+        "--include-trashed", action="store_true", help="also bring in Publii's trash, as drafts"
+    )
+    ib.add_argument("--dry-run", action="store_true", help="list what would be added")
+    ib.set_defaults(func=cmd_import_publii_backup)
 
     args = parser.parse_args(argv)
     result = args.func(args)
@@ -455,6 +469,34 @@ def _yaml_str(s: str) -> str:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def cmd_import_publii_backup(args: argparse.Namespace) -> int:
+    from constellation.importers.publii_backup import BackupImportError, merge_publii_backup
+
+    try:
+        report = merge_publii_backup(
+            args.backup, args.site, include_trashed=args.include_trashed, dry_run=args.dry_run
+        )
+    except BackupImportError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    verb = "would add" if args.dry_run else "added"
+    for a in report.added:
+        print(f"{verb} {a.kind} {a.slug} [{a.status}] -> {a.path}")
+    print(
+        f"{verb} {len(report.added)} items "
+        f"({sum(a.status == 'draft' for a in report.added)} drafts), "
+        f"{len(report.tags)} tags, {report.media} media files; "
+        f"{len(report.already)} already in the site"
+    )
+    if report.trashed:
+        print(f"left out {len(report.trashed)} items from Publii's trash (use --include-trashed):")
+        for t in report.trashed:
+            print(f"  {t}")
+    for w in report.warnings:
+        print(f"note: {w}")
+    return 0
 
 
 def cmd_import_publii(args: argparse.Namespace) -> int:

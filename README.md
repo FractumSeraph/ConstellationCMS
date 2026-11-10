@@ -59,6 +59,7 @@ and adding each new site, with your own names filled into every command.
 | `constellation export SITE --platform web --target github:owner/repo` | publish the web version to GitHub Pages |
 | `constellation new post SITE "Title"` | create a post bundle |
 | `constellation import publii PUBLISHED_SITE NEW_SITE` | bring a Publii site over |
+| `constellation import publii-backup BACKUP.tar SITE` | add Publii's drafts and anything else missing |
 | `constellation server install|run|backup|restore|prune|proxy-snippet [--caddy]` | the VPS program |
 | `constellation doctor` | self-checks |
 
