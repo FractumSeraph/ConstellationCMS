@@ -14,6 +14,7 @@ This folder is the plan for ConstellationCMS, written before any code. Read it i
 | 08 | [Calendars and numerals](08-calendars-and-numerals.md) | Timezones, the Discordian calendar, alternative numerals |
 | 09 | [Testing and quality](09-testing-and-quality.md) | Test layers, golden files, protocol tests, CI matrix |
 | 10 | [Roadmap](10-roadmap.md) | Milestones with exit criteria |
+| 11 | [Easy for everyone](11-easy-for-everyone.md) | Installers, guided server setup, no tokens, plain words |
 
 Background research that informed the plan is in [`../research/`](../research/): the Gemini protocol and gemtext, Markdown-to-gemtext conversion, and Gopher plus other small-web protocols. Those reports are long and detailed; the plan documents summarize what matters and link back where depth is useful.
 
