@@ -128,6 +128,9 @@ async function renderPreview() {
 }
 
 function showWarnings(list) {
+  const count = document.querySelector(".tab-count");
+  const serious = list.filter((w) => w.severity !== "info").length;
+  if (count) { count.textContent = String(serious); count.hidden = serious === 0; }
   const order = { error: 0, warn: 1, info: 2 };
   list.sort((a, b) => order[a.severity] - order[b.severity] || a.line - b.line);
   if (!list.length) { warningsEl.innerHTML = '<p class="muted">No warnings for this platform.</p>'; }
@@ -407,6 +410,33 @@ async function insertVisualImage(name) {
   while (top && top.parentElement !== visualHost) top = top.parentElement;
   if (top) top.after(fig); else visualHost.appendChild(fig);
   visualHost.dispatchEvent(new Event("input"));
+}
+
+// ---- phone layout ---------------------------------------------------------------------------------
+// On narrow screens the three columns become tabs: Details, Write and Preview, one at a time.
+const tabs = document.querySelectorAll(".editor-tabs [data-pane]");
+function showPane(pane) {
+  app.dataset.pane = pane;
+  tabs.forEach((t) => t.setAttribute("aria-selected", t.dataset.pane === pane ? "true" : "false"));
+  if (pane === "preview") {
+    if (mode === "visual") syncVisual().then(() => { renderPreview(); refreshFrame(); });
+    else { renderPreview(); refreshFrame(); }
+  }
+  window.scrollTo(0, 0);
+}
+tabs.forEach((t) => t.addEventListener("click", () => showPane(t.dataset.pane)));
+
+// Remember Markdown or Visual per browser. Phones start in Visual, where there is no syntax to type.
+function savedMode() {
+  try { return localStorage.getItem("cms-editor-mode"); } catch (e) { return null; }
+}
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
+  try { localStorage.setItem("cms-editor-mode", r.value); } catch (e) { /* private window */ }
+}));
+const startMode = savedMode() || (window.matchMedia("(max-width: 48rem)").matches ? "visual" : "markdown");
+if (startMode === "visual") {
+  const radio = document.querySelector('input[name="mode"][value="visual"]');
+  if (radio) { radio.checked = true; setMode("visual"); }
 }
 
 refreshFrame();

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Studio on phones: a one-row top bar with a Menu button; tables become one card per row; 16px
+  fields (no zooming in on tap), bigger tap targets, no page wider than the screen. The editor
+  becomes three tabs (Details, Write, Preview) with a full-height writing area, sticky Save and
+  formatting bars, a warning count on the Preview tab, and the Web/Gemini/Gopher switch on the
+  preview. Phones start in Visual mode; the chosen mode is remembered per browser. A browser
+  test checks every page at phone width.
+- Studio: its scripts and stylesheet carry a version fingerprint, so browsers load new ones
+  right after an update instead of keeping old copies.
 - Studio on a server, set up from one link: `server install --with-studio HOST` creates a
   one-time setup code and prints `https://HOST/setup?code=…`; the server's admin status reports
   the link, and a desktop studio shows it on its Servers page after connecting a site. The setup

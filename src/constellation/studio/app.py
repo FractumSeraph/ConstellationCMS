@@ -135,6 +135,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     templates.env.globals.update(
         {
             "version": __version__,
+            # Changes whenever the studio's own scripts or styles change, so browsers (phones in
+            # particular) fetch the new files instead of keeping old ones from their cache.
+            "asset_v": _asset_version(HERE / "static"),
             "looks": looks.LOOKS,
             "modes": looks.MODES,
             "site_stars": looks.site_stars,
@@ -1861,6 +1864,16 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
 
 
 # ---- helpers ------------------------------------------------------------------------------------
+def _asset_version(static: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    for name in ("studio.css", "studio.js", "editor.js"):
+        with contextlib.suppress(OSError):
+            digest.update((static / name).read_bytes())
+    return digest.hexdigest()[:10]
+
+
 def _admin_url(value: str) -> str:
     """A server's admin address; a bare https://host gets the server's API path added."""
     from urllib.parse import urlsplit

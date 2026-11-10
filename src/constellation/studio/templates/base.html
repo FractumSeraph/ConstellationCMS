@@ -4,15 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Studio{% endblock %} · ConstellationCMS</title>
-<link rel="stylesheet" href="/static/studio.css">
+<link rel="stylesheet" href="/static/studio.css?v={{ asset_v }}">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <meta name="csrf" content="{{ csrf }}">
 <script src="/static/vendor/htmx.min.js" defer></script>
-<script src="/static/studio.js" defer></script>
+<script src="/static/studio.js?v={{ asset_v }}" defer></script>
 </head>
 <body class="{% block body_class %}{% endblock %}" hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
 <header class="topbar">
   <a class="brand" href="/">{% include "partials/brand.html" %}<span>Constellation</span></a>
+  {% if site_id is defined %}<span class="topbar-site">{{ site_id }}</span>{% endif %}
+  {% if csrf %}<button type="button" class="nav-toggle" aria-expanded="false" aria-controls="topnav">Menu</button>{% endif %}
+  <div class="topnav" id="topnav">
   {% if site_id is defined %}
   {% set here = request.url.path %}
   <nav class="site-nav">
@@ -33,6 +36,7 @@
     <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form>
   </nav>
   {% endif %}
+  </div>
 </header>
 {% if read_only is defined and read_only %}
 <div class="banner warn">This site is read-only here: {{ read_only }}.

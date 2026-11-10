@@ -94,3 +94,77 @@ def test_editor_end_to_end(studio_server) -> None:
         files = list((ws / "sites" / "demo" / "content" / "posts").glob("*browser-post*/index.md"))
         assert files and "### Too deep" in files[0].read_text(encoding="utf-8")
         browser.close()
+
+
+PHONE_PAGES = [
+    "/",
+    "/sites/demo",
+    "/sites/demo/posts",
+    "/sites/demo/pages",
+    "/sites/demo/taxonomies",
+    "/sites/demo/settings",
+    "/sites/demo/theme",
+    "/sites/demo/publish",
+    "/sites/demo/analytics",
+    "/servers",
+    "/guide",
+    "/doctor",
+    "/account",
+]
+
+
+@pytest.mark.skipif(os.environ.get("CONSTELLATION_E2E", "auto") == "off", reason="e2e disabled")
+def test_studio_on_a_phone(studio_server) -> None:
+    """Every page fits a phone screen, and a post can be written with the Visual editor."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        pytest.skip("playwright not installed")
+    import re
+
+    base, ws = studio_server
+    with sync_playwright() as pw:
+        try:
+            browser = (
+                pw.chromium.launch(executable_path=CHROMIUM) if CHROMIUM else pw.chromium.launch()
+            )
+        except Exception as e:  # noqa: BLE001
+            pytest.skip(f"no browser: {e}")
+        phone = browser.new_context(
+            viewport={"width": 360, "height": 740}, is_mobile=True, has_touch=True
+        )
+        page = phone.new_page()
+        for path in PHONE_PAGES:
+            page.goto(base + path)
+            page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+            wide = page.evaluate("document.documentElement.scrollWidth")
+            assert wide <= 361, f"{path} is {wide}px wide on a 360px phone"
+        # The menu folds behind a button.
+        page.goto(f"{base}/sites/demo/posts")
+        assert not page.is_visible(".site-nav a[href='/sites/demo/settings']")
+        page.tap(".nav-toggle")
+        assert page.is_visible(".site-nav a[href='/sites/demo/settings']")
+        # Write a post: it opens on the Write tab, in Visual mode (no Markdown to type).
+        page.fill("input[name=title]", "Phone post")
+        page.tap("button.primary")
+        page.wait_for_url(re.compile(r".*/edit\?rel=.*"))
+        page.wait_for_selector("#visual:not([hidden])")
+        assert page.get_attribute("#editor-app", "data-pane") == "write"
+        assert not page.is_visible(".meta-panel")
+        page.tap("#visual")
+        page.keyboard.type("Written on a phone.")
+        page.tap(".editor-tabs [data-pane=details]")
+        assert page.is_visible("#m-featured") and not page.is_visible("#visual")
+        page.check("#m-featured")
+        page.tap(".editor-tabs [data-pane=preview]")
+        assert page.is_visible(".preview-bar") and not page.is_visible(".meta-panel")
+        page.tap(".editor-tabs [data-pane=write]")
+        page.tap("#save-now")
+        page.wait_for_function(
+            "() => document.querySelector('#save-state').innerText.startsWith('saved')"
+        )
+        files = list((ws / "sites" / "demo" / "content" / "posts").glob("*phone-post*/index.md"))
+        assert files, "the post was created"
+        text = files[0].read_text(encoding="utf-8")
+        assert "Written on a phone." in text and "featured: true" in text
+        browser.close()

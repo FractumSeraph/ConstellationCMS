@@ -323,3 +323,74 @@ html[data-look="terminal"] .site-nav, html[data-look="terminal"] .account-nav { 
 .cmd pre { margin: 0; padding: 0.7rem 5rem 0.7rem 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--field); border: 1px solid var(--rule); border-radius: var(--radius-sm); overflow-x: auto; font-family: var(--font-code); font-size: 0.85rem; color: var(--strong); }
 .cmd .copy { position: absolute; top: 0.4rem; right: 0.4rem; font-size: 0.8rem; padding: 0.2rem 0.6rem; }
 html[data-look="terminal"] .guide ol.steps > li::before { border-radius: 0; box-shadow: none; }
+
+/* ---- phones and small tablets ------------------------------------------------------------- */
+.topnav { display: contents; }
+.nav-toggle, .topbar-site, .editor-tabs { display: none; }
+code { overflow-wrap: anywhere; }
+.preview-bar { display: flex; gap: 0.9rem; align-items: center; padding: 0.4rem 0.75rem; border-bottom: 1px var(--rule-style) var(--rule); background: var(--panel); }
+.preview-bar .toggle { display: inline-flex; gap: 0.3rem; margin: 0; color: var(--fg); }
+.preview-bar .toggle input { width: auto; margin: 0; }
+.editor-toolbar { flex-wrap: wrap; }
+main.editor-main { flex-direction: column; }
+
+@media (max-width: 70rem) {
+  /* The editor's three columns become tabs. */
+  .editor-tabs { display: flex; position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px var(--rule-style) var(--rule); }
+  .editor-tabs button { flex: 1; border: 0; border-radius: 0; background: none; color: var(--fg); padding: 0.7rem 0.5rem; border-bottom: 2px solid transparent; }
+  .editor-tabs button[aria-selected="true"] { color: var(--strong); border-bottom-color: var(--ice); font-weight: 600; }
+  .tab-count { display: inline-block; min-width: 1.2rem; padding: 0 0.3rem; margin-left: 0.2rem; border-radius: 999px; background: var(--warn); color: #000; font-size: 0.75rem; font-weight: 600; }
+  .tab-count[hidden] { display: none; }
+  #editor-app { grid-template-rows: auto; }
+  #editor-app[data-pane="write"] .meta-panel, #editor-app[data-pane="write"] .preview-column,
+  #editor-app[data-pane="details"] .editor-column, #editor-app[data-pane="details"] .preview-column,
+  #editor-app[data-pane="preview"] .meta-panel, #editor-app[data-pane="preview"] .editor-column { display: none; }
+  .meta-panel, .editor-column { border-right: 0; }
+  .editor-toolbar { position: sticky; top: 3.05rem; z-index: 4; }
+  .cm-host, .visual-host { min-height: calc(100dvh - 9.5rem); }
+  .preview-pane, #preview-frame { min-height: calc(100dvh - 12rem); }
+  .warnings { max-height: none; }
+}
+
+@media (max-width: 48rem) {
+  html { font-size: 16px; }
+  body { background-attachment: scroll; }
+  /* Top bar: one row with a Menu button; the menu opens below it. */
+  .topbar { gap: 0.6rem; padding: 0.5rem 0.75rem; position: relative; }
+  .topbar-site { display: inline; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .nav-toggle { display: inline-flex; margin-left: auto; padding: 0.4rem 0.8rem; }
+  .topnav { display: none; width: 100%; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0 0.25rem; }
+  .topbar.open .topnav { display: flex; }
+  .site-nav, .account-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin-left: 0; }
+  .site-nav .site-name { display: none; }
+  .site-nav a, .account-nav a, .account-nav form { padding: 0.6rem 0.25rem; border-bottom: 1px var(--rule-style) var(--rule); }
+  .account-nav button.link { padding: 0; }
+  html:not([data-look="observatory"]):not([data-look="terminal"]) .site-nav a.current::after { display: none; }
+  .site-nav a.current { color: var(--ice); }
+  main.page { padding: 1rem 0.75rem; }
+  /* 16px text in fields, so phones don't zoom in when one is tapped; bigger tap targets. */
+  input, select, textarea, .cm-content { font-size: 16px !important; }
+  button { min-height: 2.5rem; white-space: normal; max-width: 100%; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .card { padding: 0.85rem; }
+  /* Tables become one card per row: the first cell on its own line, the rest after it. */
+  table.items thead { display: none; }
+  table.items, table.items tbody, table.items tr { display: block; width: 100%; }
+  table.items tr { padding: 0.55rem 0; border-bottom: 1px var(--rule-style) var(--rule); }
+  table.items td { display: inline-block; border: 0; padding: 0.1rem 0.6rem 0.1rem 0; max-width: 100%; }
+  table.items td:first-child { display: block; font-weight: 600; color: var(--strong); }
+  table.items td:empty { display: none; }
+  table.items td.actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; white-space: normal; }
+  table.items td { overflow-wrap: anywhere; }
+  table.items td.actions > details { flex: 1 1 100%; min-width: 0; }
+  table.items td.actions > details[open] > form { margin-top: 0.4rem; }
+  /* Editor toolbars. */
+  .editor-toolbar { gap: 0.5rem; padding: 0.4rem 0.6rem; }
+  .mode-switch { padding-left: 0; border-left: 0; }
+  .visual-bar { position: sticky; top: 6.45rem; z-index: 3; gap: 0.3rem; overflow-x: auto; flex-wrap: nowrap; }
+  .visual-bar button { flex: none; min-height: 2.4rem; min-width: 2.6rem; }
+  .visual-bar .visual-note, .visual-bar .sep { display: none; }
+  .visual-host { padding: 0.9rem 0.85rem; }
+  .meta-panel { font-size: 1rem; }
+  .look-choices { grid-template-columns: 1fr; }
+}

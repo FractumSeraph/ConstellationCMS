@@ -70,3 +70,13 @@ document.querySelectorAll("select[data-show-group]").forEach((select) => {
   syncGroups(select);
   select.addEventListener("change", () => syncGroups(select));
 });
+
+// Phone-sized screens: the top menu folds behind a Menu button.
+const navToggle = document.querySelector(".nav-toggle");
+if (navToggle) {
+  navToggle.addEventListener("click", () => {
+    const open = navToggle.closest(".topbar").classList.toggle("open");
+    navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    navToggle.textContent = open ? "Close" : "Menu";
+  });
+}
