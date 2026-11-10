@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- No more tokens to copy (stage A of `docs/plan/11-easy-for-everyone.md`):
+  - Each computer connects to a server once and gets a credential of its own, kept on that
+    computer; sites publishing to that server get their publish keys by themselves.
+  - Another computer connects with a short pairing code (ten minutes, single use) shown by
+    **Add another computer**; wrong codes pause pairing for a while. The Servers page lists the
+    connected computers, any of which can be removed, and can retire the installation key.
+  - `server install` prints an *installation key* used once to connect the first computer, and
+    a studio installed with `--with-studio` connects to its own server by itself.
+  - Server API: `/devices`, `/devices/{id}`, `/pairings`, `/pair`; the old admin token keeps
+    working until retired.
+  - Adding a server takes a name, an address and a pairing code (or the installation key); sites
+    are published to a server with **Publish here**.
+- Sign-in: the authenticator app is optional everywhere. Without one, a studio open to the
+  internet (remote mode, or a server's studio) needs a password of at least 12 characters;
+  lockout after wrong guesses applies as before.
 - Studio on phones: a one-row top bar with a Menu button; tables become one card per row; 16px
   fields (no zooming in on tap), bigger tap targets, no page wider than the screen. The editor
   becomes three tabs (Details, Write, Preview) with a full-height writing area, sticky Save and

@@ -378,7 +378,10 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         gopher=args.gopher,
     )
     print(f"wrote {config_path}")
-    print("admin token (shown once; paste it into the studio's Servers page):")
+    print(
+        "installation key (shown once): in your studio, Servers -> Add a server, paste it as the "
+        "pairing code. Other computers then connect with pairing codes instead."
+    )
     print(f"  {token}")
     if not args.no_unit:
         print(

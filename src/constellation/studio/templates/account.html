@@ -36,7 +36,7 @@
   {% endif %}
 </section>
 <section class="card"><h2>Remote access</h2>
-  <p class="muted">Local mode binds to this machine only. Remote mode listens on a network address, always asks for the password and the second factor, and never auto-signs-in. Prefer Tailscale or WireGuard over exposing the port to the internet; if a reverse proxy terminates HTTPS in front of the studio, enable "trust proxy headers".</p>
+  <p class="muted">Local mode answers this computer only. Remote mode lets other devices reach the studio: it always asks for the password (and the authenticator code, if you added one above) and never signs anyone in automatically. Without an authenticator, remote mode needs a password of at least 12 characters. If a reverse proxy such as Caddy provides HTTPS in front of the studio, tick "trust proxy headers".</p>
   <p>Currently: <strong>{% if settings.remote_mode %}remote mode on ({{ settings.bind }}:{{ settings.port }}){% else %}local only{% endif %}</strong>{% if settings.trust_proxy %}, trusting proxy headers{% endif %}.</p>
   {% if request.query_params.get('restart') %}<p class="warn">Restart the studio for the new bind address to take effect.</p>{% endif %}
   <form method="post" action="/account/remote" class="grid">

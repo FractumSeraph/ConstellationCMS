@@ -36,6 +36,123 @@ def connect_site(
     return str(minted["id"])
 
 
+def admin_key_name(server_id: str) -> str:
+    return f"admin:{server_id}"
+
+
+def admin_key(state: State, server_id: str) -> str:
+    """This computer's own credential for a server ("" when not connected). Never synced."""
+    return str(state.kv_get(admin_key_name(server_id), "") or "")
+
+
+def connect_computer(state: State, server: ServerEntry, secret: str, label: str) -> str:
+    """Connect this computer to a server with a pairing code or the installation key.
+
+    Either way this computer ends up with a credential of its own, which it keeps locally; the
+    installation key itself is not stored. Returns the new credential's id.
+    """
+    secret = secret.strip()
+    if not secret:
+        raise RuntimeError("enter the pairing code shown on a computer that is already connected")
+    if secret.startswith("cst_admin_"):
+        client = PublishClient(server.admin_url, secret)
+        try:
+            made = client.add_device(label)
+        finally:
+            client.close()
+    else:
+        client = PublishClient(server.admin_url, "")
+        try:
+            made = client.pair(secret, label)
+        finally:
+            client.close()
+    state.kv_set(admin_key_name(server.id), str(made["key"]))
+    return str(made["id"])
+
+
+def disconnect_computer(state: State, server_id: str) -> None:
+    state.kv_set(admin_key_name(server_id), "")
+
+
+def _admin_client(state: State, server: ServerEntry) -> PublishClient:
+    key = admin_key(state, server.id)
+    if not key:
+        raise RuntimeError(f"this computer is not connected to {server.name} yet")
+    return PublishClient(server.admin_url, key)
+
+
+def pairing_code(state: State, server: ServerEntry) -> dict[str, Any]:
+    client = _admin_client(state, server)
+    try:
+        return client.new_pairing()
+    finally:
+        client.close()
+
+
+def computers(state: State, server: ServerEntry) -> dict[str, Any]:
+    client = _admin_client(state, server)
+    try:
+        return client.devices()
+    finally:
+        client.close()
+
+
+def remove_computer(state: State, server: ServerEntry, device_id: str) -> None:
+    client = _admin_client(state, server)
+    try:
+        client.remove_device(device_id)
+    finally:
+        client.close()
+
+
+def ensure_site_token(
+    state: State, ws: Workspace, server: ServerEntry, site_id: str, label: str
+) -> str:
+    """The site's publish key on this computer, minted with this computer's credential if needed."""
+    token = str(state.kv_get(token_key(server.id, site_id), "") or "")
+    if token:
+        return token
+    key = admin_key(state, server.id)
+    if not key:
+        raise RuntimeError(
+            f"this computer is not connected to {server.name}; connect it on the Servers page"
+        )
+    connect_site(state, ws, server, site_id, key, label)
+    return str(state.kv_get(token_key(server.id, site_id), "") or "")
+
+
+def import_bootstrap(state: State, ws: Workspace) -> str:
+    """Connect a studio on a server to its own server, from the file the installer leaves.
+
+    ``server install --with-studio`` writes ``server-connection.json`` (address and a credential
+    made for this studio) into the studio's state folder; it is read once and deleted.
+    """
+    import json
+
+    path = state.dir / "server-connection.json"
+    if not path.is_file():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        url, key = str(data["admin_url"]), str(data["key"])
+        name = str(data.get("name") or "This server")
+    except (OSError, ValueError, KeyError):
+        return ""
+    server = next((s for s in ws.servers if s.admin_url.rstrip("/") == url.rstrip("/")), None)
+    if server is None:
+        sid = "this-server"
+        taken = {s.id for s in ws.servers}
+        n = 2
+        while sid in taken:
+            sid, n = f"this-server-{n}", n + 1
+        server = ServerEntry(id=sid, name=name, admin_url=url)
+        ws.servers.append(server)
+        save_workspace(ws)
+    state.kv_set(admin_key_name(server.id), key)
+    path.unlink(missing_ok=True)
+    return server.id
+
+
 def has_token(state: State, server_id: str, site_id: str) -> bool:
     return bool(state.kv_get(token_key(server_id, site_id)))
 
@@ -56,9 +173,22 @@ def run_publish(
     job: Job, state: State, root: Path, site_id: str, server: ServerEntry, *, apply: bool
 ) -> dict[str, Any]:
     token = state.kv_get(token_key(server.id, site_id))
+    if not token and admin_key(state, server.id) and root.parent.name == "sites":
+        # A connected computer gets the site's publish key by itself the first time.
+        from constellation.studio.locks import machine_label
+        from constellation.studio.workspace import load_workspace
+
+        job.say(f"getting a publish key for {site_id} from {server.name}")
+        token = ensure_site_token(
+            state,
+            load_workspace(root.parent.parent),
+            server,
+            site_id,
+            f"studio on {machine_label()}",
+        )
     if not token:
         raise RuntimeError(
-            f"no publish token for {site_id} on {server.name}; connect the site first"
+            f"this computer is not connected to {server.name}; connect it on the Servers page"
         )
     job.say(f"loading {site_id}")
     site = load_site(root, site_id=site_id)

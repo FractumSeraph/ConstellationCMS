@@ -117,6 +117,16 @@ def test_a_server_studio_is_set_up_from_its_link(studio) -> None:  # noqa: F811
     assert r.status_code == 303 and r.headers["location"] == "/"
 
 
+def test_server_studio_setup_without_an_authenticator(studio) -> None:  # noqa: F811
+    client, state, _ws = studio
+    r = _remote_setup(client, state, otp="", password="eleven char")
+    assert "at least 12 characters" in r.text and not state.settings.password_hash
+    r = _remote_setup(client, state, otp="", password="a long enough password")
+    assert r.status_code == 303
+    s = state.settings
+    assert s.password_hash and s.remote_mode and not s.totp_secret
+
+
 def test_wrong_setup_codes_lock_out(studio) -> None:  # noqa: F811
     client, state, _ws = studio
     for _ in range(12):

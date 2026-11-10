@@ -42,7 +42,9 @@ The install command prints a **setup link**, `https://studio.example.org/setup?c
 Open it and choose a password, scan the QR code with an authenticator app, and type the code it
 shows. That's the whole setup: the studio is then open to you from anywhere, with your password
 and a code from the app. You don't need to save the link: after you connect a site to the server
-from your desktop studio (Servers → connect, with the admin token), its Servers page shows it.
+from your desktop studio (Servers → Add a server, with the installation key the install
+command printed), its Servers page shows it. A studio on the server is connected to its own
+server automatically.
 
 The setup code is what keeps strangers out before you have chosen a password: without it the
 setup page refuses, a few wrong guesses lock it for a while, and the code stops working once the

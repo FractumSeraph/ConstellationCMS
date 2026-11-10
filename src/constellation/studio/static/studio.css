@@ -394,3 +394,8 @@ main.editor-main { flex-direction: column; }
   .meta-panel { font-size: 1rem; }
   .look-choices { grid-template-columns: 1fr; }
 }
+
+/* ---- servers: pairing ---------------------------------------------------------------------- */
+.row.wrap { flex-wrap: wrap; }
+.pairing-code { font-family: var(--font-code); font-size: 2rem; letter-spacing: 0.18em; color: var(--strong); margin: 0.4rem 0; user-select: all; }
+.connect-form { max-width: 32rem; }

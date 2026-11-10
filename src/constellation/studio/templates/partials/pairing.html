@@ -1,0 +1,7 @@
+{% if error %}<p class="error">{{ error }}</p>{% else %}
+<div class="notice pairing">
+  <p>On the other computer, open <strong>Servers</strong>, add or pick <strong>{{ server.name }}</strong> (address <code>{{ server.admin_url | replace('/_constellation', '') }}</code>), and enter this code:</p>
+  <p class="pairing-code" aria-label="Pairing code">{{ code }}</p>
+  <p class="muted small">It works once, for the next {{ minutes }} minutes.</p>
+</div>
+{% endif %}

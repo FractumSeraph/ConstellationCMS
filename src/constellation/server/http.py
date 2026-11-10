@@ -77,6 +77,10 @@ class HttpApp:
         self.headers: dict[str, dict[str, str]] = {}
         self.site_lang: dict[str, str] = {}
         self._rate: dict[str, list[float]] = {}
+        from constellation.server.devices import Devices, Pairings
+
+        self.devices = Devices(cfg.data)
+        self.pairings = Pairings()
         self._auth_ok: dict[str, float] = {}
         self._verify_slots: asyncio.Semaphore | None = None
         self.reload()
@@ -107,6 +111,10 @@ class HttpApp:
                 ),
                 Route("/_constellation/sites/{site}", self.retire_site, methods=["DELETE"]),
                 Route("/_constellation/status", self.status, methods=["GET"]),
+                Route("/_constellation/devices", self.devices_api, methods=["GET", "POST"]),
+                Route("/_constellation/devices/{id}", self.device_remove, methods=["DELETE"]),
+                Route("/_constellation/pairings", self.pairing_new, methods=["POST"]),
+                Route("/_constellation/pair", self.pair, methods=["POST"]),
                 Route(
                     "/_constellation/sites/{site}/analytics/{report}",
                     self.analytics_report,
@@ -394,11 +402,24 @@ class HttpApp:
         self._auth_ok.clear()
 
     async def _admin_ok(self, request: Request) -> bool:
+        """A computer's own credential, or the installation key printed by ``server install``."""
+        from constellation.server.devices import PREFIX
+
         raw = self._bearer(request)
-        hashed = self.cfg.admin.token_hash
-        if not raw or not hashed or not raw.startswith("cst_admin_"):
+        if not raw or not raw.startswith("cst_admin_"):
             return False
-        return await self._verified(raw, "admin", lambda: verify_admin_token(hashed, raw))
+        if raw.startswith(PREFIX):
+            device = await asyncio.to_thread(self.devices.verify, raw)
+            if device:
+                request.state.device = device
+                return True
+        hashed = self.cfg.admin.token_hash
+        if not hashed:
+            return False
+        ok = await self._verified(raw, "admin", lambda: verify_admin_token(hashed, raw))
+        if ok:
+            request.state.device = "install"
+        return ok
 
     async def _site_ok(self, request: Request, site: str) -> bool:
         raw = self._bearer(request)
@@ -751,6 +772,79 @@ class HttpApp:
         body = await request.json() if int(request.headers.get("content-length", "0") or 0) else {}
         tid, raw = store.mint_token(str(body.get("label", "studio")))
         return JSONResponse({"id": tid, "token": raw}, status_code=201)
+
+    async def devices_api(self, request: Request) -> Response:
+        """GET: the computers that may manage this server. POST: a credential for a new one."""
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if not await self._admin_ok(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if request.method == "GET":
+            return JSONResponse(
+                {
+                    "devices": [d.public() for d in self.devices.list()],
+                    "install_key": bool(self.cfg.admin.token_hash),
+                    "you": getattr(request.state, "device", ""),
+                }
+            )
+        body = await request.json() if int(request.headers.get("content-length", "0") or 0) else {}
+        device, raw = self.devices.add(str(body.get("label", "studio")))
+        return JSONResponse({"id": device.id, "key": raw}, status_code=201)
+
+    async def device_remove(self, request: Request) -> Response:
+        """Remove a computer; ``install`` retires the installation key once a computer has its own."""
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if not await self._admin_ok(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        dev_id = request.path_params["id"]
+        if dev_id == "install":
+            if not self.devices.list():
+                return JSONResponse(
+                    {
+                        "error": "connect a computer of its own first, or nothing could manage the server"
+                    },
+                    status_code=409,
+                )
+            from constellation.server.config import save_server_config
+
+            self.cfg.admin.token_hash = ""
+            save_server_config(self.cfg.data / "server.toml", self.cfg)
+            ok = True
+        else:
+            ok = self.devices.remove(dev_id)
+        self.forget_tokens()
+        return JSONResponse({"ok": ok}, status_code=200 if ok else 404)
+
+    async def pairing_new(self, request: Request) -> Response:
+        """A ten-minute, single-use code another computer can swap for its own credential."""
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if not await self._admin_ok(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        from constellation.server.devices import PAIRING_SECONDS
+
+        return JSONResponse(
+            {"code": self.pairings.new(), "expires_in": PAIRING_SECONDS}, status_code=201
+        )
+
+    async def pair(self, request: Request) -> Response:
+        """Swap a pairing code for this computer's credential. No other credential needed."""
+        if (g := self._api_guard(request)) is not None:
+            return g
+        if self.pairings.locked():
+            return JSONResponse(
+                {"error": "too many wrong pairing codes; wait ten minutes and make a new code"},
+                status_code=429,
+            )
+        body = await request.json() if int(request.headers.get("content-length", "0") or 0) else {}
+        if not self.pairings.redeem(str(body.get("code", ""))):
+            return JSONResponse(
+                {"error": "that pairing code is wrong or has expired; make a new one"},
+                status_code=403,
+            )
+        device, raw = self.devices.add(str(body.get("label", "studio")))
+        return JSONResponse({"id": device.id, "key": raw}, status_code=201)
 
     async def revoke_token(self, request: Request) -> Response:
         if (g := self._api_guard(request)) is not None:

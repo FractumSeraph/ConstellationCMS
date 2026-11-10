@@ -97,6 +97,23 @@ def install(
         cfg.studio.upstream = f"http://127.0.0.1:{studio_port}"
         cfg.studio.state_dir = str(data_dir / "studio-state")
         setup_code.ensure(data_dir / "studio-state")
+        # The studio on this server connects to the server by itself the first time it starts.
+        import json
+
+        from constellation.server.devices import Devices
+
+        _device, key = Devices(data_dir).add("studio on this server")
+        connection = data_dir / "studio-state" / "server-connection.json"
+        fd = os.open(connection, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "admin_url": f"https://{admin_hostname.lower()}/_constellation",
+                    "key": key,
+                    "name": admin_hostname.lower(),
+                },
+                fh,
+            )
     config_path = data_dir / "server.toml"
     save_server_config(config_path, cfg)
     with contextlib.suppress(OSError):

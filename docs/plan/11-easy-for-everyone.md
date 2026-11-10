@@ -20,7 +20,7 @@ Decisions (owner, 2026-11-10):
 
 Each stage leaves something usable and ships with tests, docs and a phone check.
 
-### A · No more tokens
+### A · No more tokens (done 2026-11-10)
 
 - The studio keeps each server's admin credential itself (machine-local, never in the synced
   workspace), so connecting a site to a server, minting its publish key and assigning it are

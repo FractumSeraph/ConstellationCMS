@@ -92,7 +92,7 @@ def test_register_connect_publish_rollback(world) -> None:
     )
     assert r.status_code == 303
     assert "vps1.example" in client.get("/servers").text
-    assert "not connected" in client.get("/servers").text
+    assert "Connect this computer" in client.get("/servers").text  # not connected yet
     # Connect with the admin token: a site token is minted and stored machine-locally, the site is assigned.
     r = client.post(
         "/servers/vps-1/connect",

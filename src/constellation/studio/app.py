@@ -56,6 +56,8 @@ from constellation.studio.workspace import (
 
 HERE = Path(__file__).resolve().parent
 SESSION_COOKIE = "constellation_session"
+# A studio open to the internet with no authenticator needs at least this long a password.
+REMOTE_PASSWORD_MIN = 12
 
 
 class Studio:
@@ -130,6 +132,10 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     app.state.studio = studio
     if studio.needs_setup():
         setup_code.ensure(state.dir)
+    with contextlib.suppress(Exception):
+        from constellation.studio import servers as _srv
+
+        _srv.import_bootstrap(state, studio.workspace)
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.globals.update(
@@ -145,6 +151,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         }
     )
     templates.env.filters["tojson_attr"] = lambda v: json.dumps(v)
+    templates.env.filters["when"] = lambda ts: (
+        datetime.fromtimestamp(float(ts), UTC).strftime("%Y-%m-%d") if ts else ""
+    )
 
     # ---- auth plumbing --------------------------------------------------------------------
     def client_host(request: Request) -> str:
@@ -243,8 +252,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     class LocalUntilRemote(BaseHTTPMiddleware):
         """Until remote mode is on, answer only requests addressed to this machine.
 
-        Remote mode needs the authenticator second factor, so it is the point where the studio
-        may face the internet; before it, sign-in with a password alone stays on this machine.
+        Remote mode is the owner's deliberate choice to face the internet (with a long password,
+        and an authenticator code if they set one up); before it, the studio stays on this machine.
         The one exception is first-run setup of a studio on a server, which other computers
         reach through the setup page, protected by the one-time setup code.
         """
@@ -367,29 +376,34 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 secret,
                 403,
             )
-        if len(password) < 10:
+        otp = otp.replace(" ", "")
+        if len(password) < (10 if otp else REMOTE_PASSWORD_MIN):
             return _remote_setup_page(
-                request, "Use at least 10 characters for the password.", code, secret
+                request,
+                f"Use at least {10 if otp else REMOTE_PASSWORD_MIN} characters for the password"
+                + ("." if otp else " (or add an authenticator app below)."),
+                code,
+                secret,
             )
         if password != confirm:
             return _remote_setup_page(request, "The two passwords differ.", code, secret)
-        if not secret or not _totp.verify(secret, otp.replace(" ", "")):
+        if otp and (not secret or not _totp.verify(secret, otp)):
             return _remote_setup_page(
                 request,
-                "That authenticator code didn't match. Scan the QR code again and type the current code.",
+                "That authenticator code didn't match. Scan the QR code again and type the current code, or leave it empty to skip the authenticator.",
                 code,
                 secret,
             )
         s = studio.state.settings
         s.password_hash = hash_password(password)
-        s.totp_secret = secret
+        s.totp_secret = secret if otp else ""
         s.remote_mode = True
         # Reached through a proxy (Caddy, nginx or the server program): trust its client address.
         s.trust_proxy = "x-forwarded-for" in request.headers
         s.look = looks.effective_look(look)
         s.mode = looks.effective_mode(mode)
         studio.state.save_settings()
-        counter = _totp.match(secret, otp.replace(" ", ""))
+        counter = _totp.match(secret, otp) if otp else None
         if counter is not None:
             studio.state.kv_set("totp_last_counter", counter)
         setup_code.clear(studio.state.dir)
@@ -1262,7 +1276,13 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             releases=_releases(root),
             server=server,
             remote=remote,
-            connected=bool(server and srv.has_token(studio.state, server.id, site_id)),
+            connected=bool(
+                server
+                and (
+                    srv.has_token(studio.state, server.id, site_id)
+                    or srv.admin_key(studio.state, server.id)
+                )
+            ),
         )
 
     @app.post("/sites/{site_id}/exports")
@@ -1370,6 +1390,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             s.id: str(studio.state.kv_get(f"studio_setup_link:{s.id}", "") or "")
             for s in ws.servers
         }
+        linked = {s.id: bool(srv.admin_key(studio.state, s.id)) for s in ws.servers}
         return render(
             request,
             "servers.html",
@@ -1377,6 +1398,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             sites=ws.sites,
             connected=connected,
             studio_links=studio_links,
+            linked=linked,
             error=error,
             ok=ok,
         )
@@ -1392,29 +1414,179 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     async def servers_add(
         request: Request,
         sess: dict[str, Any] = Depends(require_csrf),
-        id: str = Form(...),
+        id: str = Form(""),
         name: str = Form(""),
         admin_url: str = Form(...),
         delete: str = Form(""),
+        secret: str = Form(""),
     ) -> Response:
+        from urllib.parse import quote as _q
+
+        from slugify import slugify
+
+        from constellation.studio import servers as srv
+
         ws = studio.workspace
         if delete:
             ws.servers = [s for s in ws.servers if s.id != delete]
             for site in ws.sites:
                 if site.server == delete:
                     site.server = ""
+            save_workspace(ws)
+            srv.disconnect_computer(studio.state, delete)
+            studio.state.audit("servers_changed", delete, client_host(request))
+            return RedirectResponse("/servers?ok=1", 303)
+        url = admin_url.strip()
+        if url and "://" not in url:
+            url = "https://" + url
+        if not url.startswith("https://"):
+            return RedirectResponse(
+                "/servers?error=" + _q("The address must start with https://"), 303
+            )
+        url = _admin_url(url)
+        existing = next((s for s in ws.servers if s.admin_url == url), None)
+        if existing is not None:
+            server = existing
         else:
-            sid = id.strip().lower()
-            if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", sid) or not admin_url.startswith("https://"):
-                return RedirectResponse(
-                    "/servers?error=server+id+must+be+lowercase+and+the+admin+URL+must+use+https",
-                    303,
+            base = (
+                slugify(id.strip() or name.strip() or urlsplit(url).hostname or "server")[:40]
+                or "server"
+            )
+            sid, n = base, 2
+            while ws.server(sid) is not None:
+                sid, n = f"{base}-{n}", n + 1
+            server = ServerEntry(sid, name.strip() or sid, url)
+            ws.servers.append(server)
+            save_workspace(ws)
+        studio.state.audit("servers_changed", server.id, client_host(request))
+        if secret.strip():
+            try:
+                srv.connect_computer(
+                    studio.state, server, secret, f"studio on {locks.machine_label()}"
                 )
-            ws.servers = [s for s in ws.servers if s.id != sid]
-            ws.servers.append(ServerEntry(sid, name.strip() or sid, _admin_url(admin_url)))
-        save_workspace(ws)
-        studio.state.audit("servers_changed", delete or id, client_host(request))
+            except Exception as e:  # noqa: BLE001
+                return RedirectResponse(
+                    "/servers?error=" + _q(f"Added {server.name}, but connecting failed: {e}"), 303
+                )
+            studio.state.audit("computer_connected", server.id, client_host(request))
+        return RedirectResponse(f"/servers?ok=1#server-{server.id}", 303)
+
+    @app.post("/servers/{server_id}/connect-computer")
+    async def servers_connect_computer(
+        request: Request,
+        server_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        secret: str = Form(...),
+    ) -> Response:
+        from urllib.parse import quote as _q
+
+        from constellation.studio import servers as srv
+
+        server = studio.workspace.server(server_id)
+        if server is None:
+            raise HTTPException(404)
+        try:
+            srv.connect_computer(studio.state, server, secret, f"studio on {locks.machine_label()}")
+        except Exception as e:  # noqa: BLE001
+            return RedirectResponse("/servers?error=" + _q(f"Could not connect: {e}"), 303)
+        studio.state.audit("computer_connected", server_id, client_host(request))
+        return RedirectResponse(f"/servers?ok=1#server-{server_id}", 303)
+
+    @app.post("/servers/{server_id}/disconnect-computer")
+    async def servers_disconnect_computer(
+        request: Request, server_id: str, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        srv.disconnect_computer(studio.state, server_id)
+        studio.state.audit("computer_disconnected", server_id, client_host(request))
         return RedirectResponse("/servers?ok=1", 303)
+
+    @app.post("/servers/{server_id}/pairing-code", response_class=HTMLResponse)
+    async def servers_pairing_code(
+        request: Request, server_id: str, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        server = studio.workspace.server(server_id)
+        if server is None:
+            raise HTTPException(404)
+        try:
+            made = await asyncio.to_thread(srv.pairing_code, studio.state, server)
+        except Exception as e:  # noqa: BLE001
+            return render(request, "partials/pairing.html", error=str(e), server=server)
+        studio.state.audit("pairing_code", server_id, client_host(request))
+        return render(
+            request,
+            "partials/pairing.html",
+            error="",
+            server=server,
+            code=made.get("code", ""),
+            minutes=int(made.get("expires_in", 600)) // 60,
+        )
+
+    @app.get("/servers/{server_id}/computers", response_class=HTMLResponse)
+    async def servers_computers(
+        request: Request, server_id: str, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        from constellation.studio import servers as srv
+
+        server = studio.workspace.server(server_id)
+        if server is None:
+            raise HTTPException(404)
+        try:
+            data = await asyncio.to_thread(srv.computers, studio.state, server)
+        except Exception as e:  # noqa: BLE001
+            return render(request, "partials/computers.html", error=str(e), server=server)
+        return render(
+            request,
+            "partials/computers.html",
+            error="",
+            server=server,
+            devices=data.get("devices", []),
+            you=data.get("you", ""),
+            install_key=bool(data.get("install_key")),
+        )
+
+    @app.post("/servers/{server_id}/computers/{device_id}/remove")
+    async def servers_computer_remove(
+        request: Request,
+        server_id: str,
+        device_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+    ) -> Response:
+        from urllib.parse import quote as _q
+
+        from constellation.studio import servers as srv
+
+        server = studio.workspace.server(server_id)
+        if server is None or not re.fullmatch(r"[a-z0-9]{1,16}", device_id):
+            raise HTTPException(404)
+        try:
+            await asyncio.to_thread(srv.remove_computer, studio.state, server, device_id)
+        except Exception as e:  # noqa: BLE001
+            return RedirectResponse("/servers?error=" + _q(f"Could not remove it: {e}"), 303)
+        studio.state.audit("computer_removed", f"{server_id}:{device_id}", client_host(request))
+        return RedirectResponse(f"/servers?ok=1#server-{server_id}", 303)
+
+    @app.post("/servers/{server_id}/assign")
+    async def servers_assign(
+        request: Request,
+        server_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        site_id: str = Form(...),
+        on: str = Form(""),
+    ) -> Response:
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        if ws.server(server_id) is None or entry is None:
+            raise HTTPException(404)
+        entry.server = server_id if on else ""
+        save_workspace(ws)
+        studio.state.audit(
+            "site_assigned", f"{site_id}->{entry.server or '-'}", client_host(request)
+        )
+        return RedirectResponse(f"/servers?ok=1#server-{server_id}", 303)
 
     @app.post("/servers/{server_id}/connect")
     async def servers_connect(
@@ -1562,17 +1734,21 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         request: Request,
         server_id: str,
         sess: dict[str, Any] = Depends(require_csrf),
-        admin_token: str = Form(...),
+        admin_token: str = Form(""),
         action: str = Form("status"),
     ) -> Response:
         from constellation.publish.client import PublishClient, PublishError
+        from constellation.studio import servers as srv
 
         ws = studio.workspace
         server = ws.server(server_id)
         if server is None:
             raise HTTPException(404)
         form = await request.form()
-        client = PublishClient(server.admin_url, admin_token.strip())
+        key = admin_token.strip() or srv.admin_key(studio.state, server.id)
+        if not key:
+            raise HTTPException(400, "this computer is not connected to that server")
+        client = PublishClient(server.admin_url, key)
         result: dict[str, Any] = {}
         error = ""
         try:
@@ -1768,13 +1944,15 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             )
         s = studio.state.settings
         if enable == "on":
-            if not s.totp_secret:
+            if not s.totp_secret and len(password) < REMOTE_PASSWORD_MIN:
                 return render(
                     request,
                     "account.html",
                     audit=studio.state.audit_tail(30),
                     saved="",
-                    error="Remote mode needs the authenticator second factor; enable it first.",
+                    error=f"Remote access without an authenticator needs a password of at least "
+                    f"{REMOTE_PASSWORD_MIN} characters. Choose a longer password above, or add an "
+                    "authenticator (recommended).",
                 )
             s.remote_mode = True
             s.bind = bind.strip() or "0.0.0.0"

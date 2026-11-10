@@ -184,6 +184,25 @@ class PublishClient:
     def status(self) -> dict[str, Any]:
         return self._check(self.client.get(self._url("/status")))
 
+    # ---- computers allowed to manage the server ----------------------------------------------
+    def devices(self) -> dict[str, Any]:
+        return self._check(self.client.get(self._url("/devices")))
+
+    def add_device(self, label: str) -> dict[str, Any]:
+        return self._check(self.client.post(self._url("/devices"), json={"label": label}))
+
+    def remove_device(self, device_id: str) -> dict[str, Any]:
+        return self._check(self.client.delete(self._url(f"/devices/{device_id}")))
+
+    def new_pairing(self) -> dict[str, Any]:
+        return self._check(self.client.post(self._url("/pairings")))
+
+    def pair(self, code: str, label: str) -> dict[str, Any]:
+        """Swap a pairing code for this computer's credential (needs no credential itself)."""
+        return self._check(
+            self.client.post(self._url("/pair"), json={"code": code, "label": label})
+        )
+
     def plan(self, site: str, manifest: dict[str, Any]) -> tuple[dict[str, list[str]], list[str]]:
         """Diff against the active release and the list of blobs the server lacks (no side effects)."""
         from constellation.core.build.pipeline import diff_manifests

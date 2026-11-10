@@ -2,55 +2,73 @@
 {% block title %}Servers{% endblock %}
 {% block content %}
 <h1>Servers</h1>
-<p class="muted">Each VPS running <code>constellation server</code>. Addresses are shared through the workspace; publish tokens stay on this machine. New to this? Follow the <a href="/guide">server setup guide</a>.</p>
+<p class="muted">The servers your sites are published to. Their addresses are shared with your other computers through your sites folder; each computer connects once on its own. New to servers? The <a href="/guide">server guide</a> walks through it.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if ok %}<p class="ok">Saved.</p>{% endif %}
 {% for s in servers %}
-<section class="card">
-  <h2>{{ s.name }} <span class="muted small">{{ s.id }} · <code>{{ s.admin_url }}</code></span></h2>
+<section class="card" id="server-{{ s.id }}">
+  <h2>{{ s.name }} <span class="muted small"><code>{{ s.admin_url | replace('/_constellation', '') }}</code></span></h2>
   {% if studio_links[s.id] %}
   <div class="notice">
-    <p><strong>This server has a studio waiting to be set up.</strong> Open <a href="{{ studio_links[s.id] }}" target="_blank" rel="noopener">its setup page</a> to choose its password and authenticator; after that you can write and publish from any browser.</p>
+    <p><strong>This server has a studio waiting to be set up.</strong> Open <a href="{{ studio_links[s.id] }}" target="_blank" rel="noopener">its setup page</a> to choose its password; after that you can write and publish from any browser.</p>
     <form method="post" action="/servers/{{ s.id }}/studio-link/hide" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">It's set up; hide this</button></form>
   </div>
   {% endif %}
-  <table class="items"><thead><tr><th>Site</th><th>Assigned</th><th>Token on this machine</th><th></th></tr></thead><tbody>
+
+  {% if linked[s.id] %}
+  <p><span class="ok">✓ This computer is connected.</span></p>
+  <div class="row wrap">
+    <form hx-post="/servers/{{ s.id }}/pairing-code" hx-target="#pair-{{ s.id }}" hx-swap="innerHTML" class="inline"><button>Add another computer</button></form>
+    <button type="button" hx-get="/servers/{{ s.id }}/computers" hx-target="#computers-{{ s.id }}" hx-swap="innerHTML">Connected computers</button>
+  </div>
+  <div id="pair-{{ s.id }}"></div>
+  <div id="computers-{{ s.id }}"></div>
+  {% else %}
+  <form method="post" action="/servers/{{ s.id }}/connect-computer" class="connect-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Connect this computer: pairing code
+      <input name="secret" required autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH">
+    </label>
+    <p class="muted small">On a computer that is already connected, open Servers and choose <strong>Add another computer</strong> to get a code. Setting up a new server? Paste the installation key it printed instead.</p>
+    <button class="primary">Connect</button>
+  </form>
+  {% endif %}
+
+  <h3 class="top-gap">Sites</h3>
+  <table class="items"><thead><tr><th>Site</th><th>Published here</th><th></th></tr></thead><tbody>
   {% for site in sites %}
-  <tr><td>{{ site.name }} <span class="muted">({{ site.id }})</span></td>
-    <td>{% if site.server == s.id %}yes{% else %}<span class="muted">no</span>{% endif %}</td>
-    <td>{% if connected[(s.id, site.id)] %}<span class="ok">connected</span>{% else %}<span class="muted">not connected</span>{% endif %}</td>
+  <tr><td>{{ site.name }}</td>
+    <td>{% if site.server == s.id %}<span class="ok">yes</span>{% if not linked[s.id] and not connected[(s.id, site.id)] %} <span class="muted small">(connect this computer to publish)</span>{% endif %}{% elif site.server %}<span class="muted">on {{ site.server }}</span>{% else %}<span class="muted">no</span>{% endif %}</td>
     <td class="actions">
-      <details><summary>connect</summary>
-        <form method="post" action="/servers/{{ s.id }}/connect" class="grid small">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="site_id" value="{{ site.id }}">
-          <label>Admin token (shown once by <code>server install</code>; never stored) <input type="password" name="admin_token" required></label>
-          <button class="primary">Mint a publish token and assign</button>
-        </form>
-      </details>
-      {% if connected[(s.id, site.id)] %}<form method="post" action="/servers/{{ s.id }}/forget" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="site_id" value="{{ site.id }}"><button class="link danger">forget token</button></form>{% endif %}
+      <form method="post" action="/servers/{{ s.id }}/assign" class="inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="site_id" value="{{ site.id }}">
+        {% if site.server == s.id %}<input type="hidden" name="on" value=""><button class="link">stop publishing here</button>{% else %}<input type="hidden" name="on" value="1"><button>Publish here</button>{% endif %}
+      </form>
     </td></tr>
   {% endfor %}
   </tbody></table>
-  <details class="top-gap"><summary>Administer (certificates, settings)</summary>
-    <form hx-post="/servers/{{ s.id }}/admin" hx-target="#admin-{{ s.id }}" hx-swap="innerHTML" class="row">
-      <input type="hidden" name="action" value="status">
-      <input type="password" name="admin_token" placeholder="admin token" required><button>Open</button>
-    </form>
+
+  <details class="top-gap"><summary>More</summary>
+    {% if linked[s.id] %}
+    <p><button type="button" hx-post="/servers/{{ s.id }}/admin" hx-vals='{"action": "status"}' hx-target="#admin-{{ s.id }}" hx-swap="innerHTML">Server status and certificates</button></p>
     <div id="admin-{{ s.id }}"></div>
+    <form method="post" action="/servers/{{ s.id }}/disconnect-computer" class="inline" data-confirm="Forget this computer's connection to {{ s.name }}? You can connect again with a new pairing code."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link danger">Disconnect this computer</button></form>
+    {% endif %}
+    <form method="post" action="/servers" class="inline top-gap" data-confirm="Remove {{ s.name }} from your list? Sites published there stay online; they just won't be published there from here.">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ s.id }}"><input type="hidden" name="admin_url" value="https://-"><input type="hidden" name="delete" value="{{ s.id }}"><button class="link danger">Remove this server from the list</button>
+    </form>
   </details>
-  <form method="post" action="/servers" class="inline top-gap" data-confirm="Remove this server from the registry? Sites assigned to it become export-only.">
-    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="id" value="{{ s.id }}"><input type="hidden" name="admin_url" value="https://-"><input type="hidden" name="delete" value="{{ s.id }}"><button class="link danger">remove server</button>
-  </form>
 </section>
-{% else %}<p class="empty">No servers yet. The <a href="/guide">setup guide</a> walks through preparing a VPS, then add it below.</p>{% endfor %}
+{% else %}<p class="empty">No servers yet. Add one below, or follow the <a href="/guide">server guide</a> to set one up.</p>{% endfor %}
 <section class="card">
   <h2>Add a server</h2>
   <form method="post" action="/servers" class="grid">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Id <input name="id" required placeholder="vps-1"></label>
-    <label>Name <input name="name" placeholder="First VPS"></label>
-    <label>Admin address <input name="admin_url" required placeholder="https://vps1.example.org"></label>
+    <label>Name <input name="name" required placeholder="My server"></label>
+    <label>Address <input name="admin_url" required placeholder="https://cms.example.org" inputmode="url"></label>
+    <label>Pairing code or installation key <input name="secret" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH"></label>
     <button class="primary">Add</button>
   </form>
+  <p class="muted small">The pairing code comes from a computer already connected to the server (Servers → Add another computer); for a brand-new server, use the installation key it printed.</p>
 </section>
 {% endblock %}

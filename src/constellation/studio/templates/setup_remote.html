@@ -3,7 +3,7 @@
 {% block content %}
 <section class="card setup">
   <h1>Set up this studio</h1>
-  <p>This studio runs on a server, so it is protected by a password <strong>and</strong> a code from an authenticator app on your phone. Both are set here, once. The setup link you were given already has the setup code in it.</p>
+  <p>This studio runs on a server, so anyone on the internet could reach its sign-in page. Choose a long password (at least 12 characters; a short sentence works well). The setup link you were given already has the setup code in it.</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="post" action="/setup">
     <input type="hidden" name="secret" value="{{ secret }}">
@@ -12,15 +12,17 @@
       <label>Password <input type="password" name="password" minlength="10" required autocomplete="new-password" {% if setup_code %}autofocus{% endif %}></label>
       <label>Again <input type="password" name="confirm" minlength="10" required autocomplete="new-password"></label>
     </div>
-    <div class="setup-totp">
-      <div>
-        <h2 class="small">Authenticator</h2>
-        <p class="small">Scan this with an authenticator app (Aegis, 2FAS, Google Authenticator, or your password manager), then type the 6-digit code it shows.</p>
-        <div class="qr">{{ qr | safe }}</div>
-        <p class="small muted">Or enter this key by hand: <code>{{ secret }}</code></p>
+    <details class="setup-totp-box"{% if error and 'authenticator' in error %} open{% endif %}>
+      <summary>Extra safety: an authenticator app (recommended, optional)</summary>
+      <div class="setup-totp">
+        <div>
+          <p class="small">Scan this with an authenticator app (Aegis, 2FAS, Google Authenticator, or your password manager), then type the 6-digit code it shows. Signing in will then ask for a code from the app too.</p>
+          <div class="qr">{{ qr | safe }}</div>
+          <p class="small muted">Or enter this key by hand: <code>{{ secret }}</code></p>
+        </div>
+        <label>Code from the app <input name="otp" inputmode="numeric" pattern="[0-9 ]{6,7}" autocomplete="one-time-code" placeholder="123456"></label>
       </div>
-      <label>Code from the app <input name="otp" inputmode="numeric" pattern="[0-9 ]{6,7}" required autocomplete="one-time-code" placeholder="123456"></label>
-    </div>
+    </details>
     {% set chosen_mode = mode %}
     {% include "partials/look_picker.html" %}
     <button class="primary">Create studio</button>

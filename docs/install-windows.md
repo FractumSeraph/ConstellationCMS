@@ -97,10 +97,15 @@ Leave the PowerShell window open while you work; close it (or press Ctrl+C) to s
 
 ## 6. Let this computer publish
 
-Publish keys stay on each computer, so connect this one to your server once: in the studio, open
-**Servers**, choose **connect** next to each site, and paste the server's admin token (it was
-printed when the server was installed; keep it in a password manager). The studio keeps a
-publish key for that site and forgets the admin token.
+Connect this computer to your server once. On a computer that is already connected, open
+**Servers** and choose **Add another computer**: it shows a short pairing code, good for ten
+minutes. On this computer, open **Servers**, and either enter the code in the server's
+**Connect this computer** box (when the server is already listed, because your sites folder
+synced it), or use **Add a server** with the server's address and the code. That's all: sites
+that publish to that server get their publish keys by themselves.
+
+Each computer gets its own connection, listed under **Connected computers** on the Servers page,
+where any of them can be removed (a lost laptop, say) without affecting the others.
 
 If a site also publishes to GitHub Pages, step 2 already took care of that.
 

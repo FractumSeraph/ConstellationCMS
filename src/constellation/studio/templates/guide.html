@@ -46,7 +46,7 @@ uv pip install --python /opt/constellation constellationcms{% endset %}
       <h3>Create the server's settings</h3>
       {% set cmd %}sudo /opt/constellation/bin/constellation server install --admin-hostname {{ g.host_or }} --tls-mode {{ 'acme' if g.proxy == 'none' else 'behind-proxy' }}{% if g.proxy != 'none' %} --plain-port {{ g.port }}{% endif %}{% if g.gopher %} --gopher{% endif %}{% if g.studio %} --with-studio {{ g.studio }}{% endif %}{% endset %}
       {% include "partials/guide_cmd.html" %}
-      <p>It prints an <strong>admin token</strong> once. Copy it somewhere safe, such as a password manager. You'll paste it into this studio to connect each site, and the studio never stores it.</p>
+      <p>It prints an <strong>installation key</strong> once. You'll paste it into this studio in a moment to connect this computer; after that, other computers connect with short pairing codes, so you don't need to keep it (a password manager is a good place if you want to).</p>
       {% if g.studio %}<p>It also prints the <strong>studio's setup link</strong>, <code>https://{{ g.studio }}/setup?code=…</code>. You don't need to keep it: this studio shows it again on the Servers page once you connect a site to the server.</p>{% endif %}
     </li>
     {% if g.proxy != 'none' %}
@@ -92,7 +92,7 @@ sudo systemctl enable --now constellation{% if g.studio %} constellation-studio{
     </li>
     <li>
       <h3>Add the server to this studio</h3>
-      <p>On the <a href="/servers">Servers</a> page, under "Add a server", give it a short id and enter <code>https://{{ g.host_or }}</code> as its address.</p>
+      <p>On the <a href="/servers">Servers</a> page, under "Add a server", give it a name, enter <code>https://{{ g.host_or }}</code> as its address, and paste the installation key. This computer is then connected.</p>
     </li>
     {% if g.studio %}
     <li>
@@ -122,8 +122,8 @@ sudo systemctl enable --now constellation{% if g.studio %} constellation-studio{
     </li>
     {% endif %}
     <li>
-      <h3>Connect the site to the server</h3>
-      <p>On the <a href="/servers">Servers</a> page, find the site in the server's table, open <strong>connect</strong>, and paste the admin token. The studio keeps a publish key for this site only and forgets the admin token.</p>
+      <h3>Publish the site to the server</h3>
+      <p>On the <a href="/servers">Servers</a> page, press <strong>Publish here</strong> next to the site. Its publish key is made the first time you publish.</p>
     </li>
     <li>
       <h3>Publish</h3>

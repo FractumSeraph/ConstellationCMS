@@ -1,0 +1,13 @@
+{% if error %}<p class="error">{{ error }}</p>{% else %}
+<table class="items small top-gap"><thead><tr><th>Computer</th><th>Connected</th><th>Last used</th><th></th></tr></thead><tbody>
+{% for d in devices %}
+<tr><td>{{ d.label }}{% if d.id == you %} <span class="pill published">this one</span>{% endif %}</td>
+  <td>{{ d.created | when }}</td><td>{{ d.last_used | when if d.last_used else '—' }}</td>
+  <td class="actions">{% if d.id != you %}<form method="post" action="/servers/{{ server.id }}/computers/{{ d.id }}/remove" class="inline" data-confirm="Remove {{ d.label }}? It will no longer be able to publish to {{ server.name }}."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link danger">remove</button></form>{% endif %}</td></tr>
+{% endfor %}
+{% if install_key %}
+<tr><td>Installation key <span class="muted small">(printed when the server was installed)</span></td><td>—</td><td>—</td>
+  <td class="actions"><form method="post" action="/servers/{{ server.id }}/computers/install/remove" class="inline" data-confirm="Retire the installation key? Computers that are already connected keep working."><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link danger">retire</button></form></td></tr>
+{% endif %}
+</tbody></table>
+{% endif %}

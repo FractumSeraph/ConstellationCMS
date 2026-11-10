@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from constellation.studio import totp
 from constellation.studio.app import create_app
+from constellation.studio.auth import hash_password
 from constellation.studio.state import State
 from constellation.studio.workspace import SiteEntry, load_workspace, save_workspace
 
@@ -58,11 +59,6 @@ def studio(tmp_path: Path):
 
 def test_enable_totp_then_remote_mode_then_login(studio) -> None:
     client, csrf, state = studio
-    # Remote mode refuses without a second factor.
-    r = client.post(
-        "/account/remote", data={"csrf": csrf, "enable": "on", "password": "correct horse battery"}
-    )
-    assert "enable it first" in r.text and not state.settings.remote_mode
     # Set up TOTP: begin shows a QR, a wrong code is refused, the right code enables it.
     r = client.post("/account/totp/begin", data={"csrf": csrf})
     assert "<svg" in r.text
@@ -105,6 +101,39 @@ def test_enable_totp_then_remote_mode_then_login(studio) -> None:
         "/account/totp/disable", data={"csrf": csrf2, "password": "correct horse battery"}
     )
     assert "Turn remote mode off" in r.text and state.settings.totp_secret
+
+
+def test_remote_mode_with_a_long_password_and_no_authenticator(studio) -> None:
+    """The owner's choice: an authenticator is recommended, not required, with 12+ characters."""
+    client, csrf, state = studio
+    # A short password (the studio allows 10 for local use) is not enough without an authenticator.
+    state.settings.password_hash = hash_password("short pass")
+    state.save_settings()
+    r = client.post(
+        "/account/remote", data={"csrf": csrf, "enable": "on", "password": "short pass"}
+    )
+    assert "at least 12 characters" in r.text and not state.settings.remote_mode
+    # A long one is.
+    state.settings.password_hash = hash_password("correct horse battery")
+    state.save_settings()
+    r = client.post(
+        "/account/remote",
+        data={"csrf": csrf, "enable": "on", "password": "correct horse battery"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and state.settings.remote_mode and not state.settings.totp_secret
+    # Sign-in then asks for the password only, still with lockout after wrong guesses.
+    client.cookies.clear()
+    assert client.get("/", follow_redirects=False).status_code == 307
+    r = client.post(
+        "/login", data={"password": "correct horse battery", "next": "/"}, follow_redirects=False
+    )
+    assert r.status_code == 303
+    client.cookies.clear()
+    for _ in range(12):
+        client.post("/login", data={"password": "wrong password", "next": "/"})
+    r = client.post("/login", data={"password": "correct horse battery", "next": "/"})
+    assert "Too many failures" in r.text
 
 
 def test_studio_cli_refuses_public_bind_in_local_mode(tmp_path: Path, capsys, monkeypatch) -> None:
