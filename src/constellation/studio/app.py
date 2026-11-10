@@ -227,6 +227,29 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 )
             return response
 
+    class LocalUntilRemote(BaseHTTPMiddleware):
+        """Until remote mode is on, answer only requests addressed to this machine.
+
+        A studio behind a public proxy (or reached by a DNS name) before its owner turned on
+        remote mode would otherwise offer first-run setup to whoever arrives first, and sign-in
+        with a password alone. Remote mode needs the authenticator second factor, so it is the
+        point where the studio may face the internet. Setup on a server is done through an SSH
+        tunnel, which arrives as ``localhost``.
+        """
+
+        async def dispatch(self, request: Request, call_next: Any) -> Response:
+            s = studio.state.settings
+            if not s.remote_mode and not host_is_loopback(request.headers.get("host")):
+                return Response(
+                    "This studio only answers on its own computer until remote mode is turned on "
+                    "(Account page, with the authenticator second factor). On a server, open it "
+                    "through an SSH tunnel to finish setting it up.\n",
+                    status_code=403,
+                    media_type="text/plain; charset=utf-8",
+                )
+            return cast(Response, await call_next(request))
+
+    app.add_middleware(LocalUntilRemote)
     app.add_middleware(SecurityHeaders)
 
     def render(request: Request, name: str, **ctx: Any) -> HTMLResponse:

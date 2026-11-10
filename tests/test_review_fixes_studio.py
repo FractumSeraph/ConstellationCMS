@@ -40,8 +40,39 @@ def test_auto_login_needs_a_loopback_host_header(studio) -> None:  # noqa: F811
     _setup(client)
     client.cookies.clear()
     r = client.get("/", headers={"host": "attacker.example:8787"}, follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"].startswith("/login")
+    # Stricter than a login redirect: until remote mode is on, other hostnames get nothing.
+    assert r.status_code == 403 and "set-cookie" not in r.headers
+    assert "Demo" not in r.text
     assert client.get("/", headers={"host": "localhost:8787"}).status_code == 200
+
+
+def test_until_remote_mode_only_this_machine_is_answered(studio) -> None:  # noqa: F811
+    client, state, _ws = studio
+    # A fresh studio behind a public proxy must not offer first-run setup to strangers.
+    proxied = {"host": "studio.example.org", "x-forwarded-for": "203.0.113.9"}
+    r = client.get("/setup", headers=proxied, follow_redirects=False)
+    assert r.status_code == 403 and "SSH tunnel" in r.text
+    r = client.post(
+        "/setup",
+        data={"password": "attacker password", "confirm": "attacker password"},
+        headers={**proxied, "origin": "http://studio.example.org"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403 and not state.settings.password_hash
+    # Through an SSH tunnel the request names localhost, so setup works.
+    _setup(client)
+    assert state.settings.password_hash
+    # Password-only sign-in from outside is refused too, until remote mode (with TOTP) is on.
+    assert (
+        client.post(
+            "/login", data={"password": "correct horse battery"}, headers=proxied
+        ).status_code
+        == 403
+    )
+    state.settings.remote_mode = True
+    client.cookies.clear()
+    r = client.get("/", headers=proxied, follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"].startswith("/login")
 
 
 def test_cross_origin_posts_are_refused(studio) -> None:  # noqa: F811
