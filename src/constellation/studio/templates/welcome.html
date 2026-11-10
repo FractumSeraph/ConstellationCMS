@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Make your first site{% endblock %}
+{% block content %}
+<section class="card wizard welcome">
+  <ol class="wizard-steps" aria-label="Steps"><li class="current" aria-current="step">Your site</li><li>Where it goes</li><li>First post</li></ol>
+  <h1>Make your first site</h1>
+  <p class="muted">Three quick questions. You can change all of this later.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/welcome">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="timezone" value="UTC" data-detect-tz>
+    <label>What is it called? <input name="name" required autofocus value="{{ form.name }}" placeholder="My Garden Diary"></label>
+    <label>Your name, as it appears on posts <span class="muted small">(optional)</span> <input name="author" value="{{ form.author }}" placeholder="Sam"></label>
+    <fieldset class="look-choices theme-choices">
+      <legend>Pick a look</legend>
+      {% for t in themes %}
+      <label class="look-choice">
+        <input type="radio" name="theme" value="{{ t.id }}" {% if t.id == form.theme %}checked{% endif %}>
+        {% if t.picture %}<img src="{{ t.picture }}" alt="" width="520" height="359" loading="lazy">{% else %}<span class="theme-blank" aria-hidden="true">{{ t.name }}</span>{% endif %}
+        <span class="look-name">{{ t.name }}</span>
+        <span class="look-blurb">{{ t.blurb }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+    <label>Web address <span class="muted small">(optional: leave it empty if you don't have a domain yet)</span>
+      <input name="web_url" value="{{ form.web_url }}" placeholder="example.com" inputmode="url" autocapitalize="off" spellcheck="false"></label>
+    <div class="wizard-actions">
+      <button class="primary">Next</button>
+      <a href="/" class="muted">Skip for now</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

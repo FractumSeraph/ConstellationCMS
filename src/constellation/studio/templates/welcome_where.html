@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Where should it go?{% endblock %}
+{% block content %}
+<section class="card wizard welcome">
+  <ol class="wizard-steps" aria-label="Steps"><li>Your site</li><li class="current" aria-current="step">Where it goes</li><li>First post</li></ol>
+  <h1>Where should {{ site_name }} go?</h1>
+  <p class="muted">This is where people will read it. Pick "This computer" if you're not sure: you can put it online whenever you're ready.</p>
+  <form method="post" action="/welcome/{{ wizard_site }}/where">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset class="place-choices">
+      <legend class="visually-hidden">Where it goes</legend>
+      <label class="place-choice">
+        <input type="radio" name="place" value="local" checked>
+        <span class="look-name">This computer only, for now</span>
+        <span class="look-blurb">Write and preview your site here. Nobody else sees it until you choose to put it online.</span>
+      </label>
+      <label class="place-choice">
+        <input type="radio" name="place" value="server" {% if not servers %}disabled{% endif %}>
+        <span class="look-name">My server</span>
+        {% if servers %}
+        <span class="look-blurb">Publish to a server you've connected:
+          <select name="server_id" aria-label="Server">{% for s in servers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></span>
+        {% else %}
+        <span class="look-blurb">A small rented server (a "VPS", about $5 a month) that the studio sets up for you. <a href="/servers/setup">Set up a server</a>, then come back to <a href="/servers">Servers</a> and press "Publish here".</span>
+        {% endif %}
+      </label>
+      <label class="place-choice">
+        <input type="radio" name="place" value="github" disabled>
+        <span class="look-name">GitHub Pages <span class="muted small">(coming soon)</span></span>
+        <span class="look-blurb">Free hosting from GitHub, with a "Sign in with GitHub" button. Coming in the next version.</span>
+      </label>
+    </fieldset>
+    <div class="wizard-actions"><button class="primary">Next</button></div>
+  </form>
+</section>
+{% endblock %}

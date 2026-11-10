@@ -8,7 +8,7 @@
 {% for s in workspace.sites if not s.archived %}
   <li><a class="site-card" href="/sites/{{ s.id }}"><strong>{{ s.name }}</strong><span class="muted">{{ s.id }}{% if s.server %} · {{ s.server }}{% endif %}</span>{{ site_stars(s.id) }}</a></li>
 {% else %}
-  <li class="empty">No sites yet. Create one below to place your first star.</li>
+  <li class="empty first-site"><p>No sites yet.</p><a class="button primary" href="/welcome">Make your first site</a></li>
 {% endfor %}
 </ul>
 <section class="card">

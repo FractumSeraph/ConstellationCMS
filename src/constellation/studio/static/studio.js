@@ -80,3 +80,8 @@ if (navToggle) {
     navToggle.textContent = open ? "Close" : "Menu";
   });
 }
+
+// Forms that want this computer's time zone (the first-run wizard) get it from the browser.
+document.querySelectorAll("input[data-detect-tz]").forEach((input) => {
+  try { input.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) { /* keep UTC */ }
+});

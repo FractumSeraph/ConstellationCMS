@@ -1,5 +1,7 @@
 # Install the studio on Linux
 
+> **Most people want [the desktop app](desktop-app.md) instead:** one download for Linux, nothing else to install, no terminal. This guide installs with Python and the terminal, which suits servers, developers and people who already use these tools.
+
 These steps put the studio on a Linux desktop or laptop (Ubuntu, Debian, Fedora, Arch and others)
 so you can write and publish from it. It takes about ten minutes. If you only want to write in a
 browser, a [studio on your server](studio-on-a-server.md) needs nothing installed at all.

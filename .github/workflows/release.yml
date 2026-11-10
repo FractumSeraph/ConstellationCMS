@@ -1,0 +1,41 @@
+name: Release
+
+# Push a tag like v0.2.0 (matching __version__ in src/constellation/__init__.py) to build the
+# wheel, the Windows installer and the Linux AppImage and .deb, and publish them as a GitHub
+# release. The studio's update check and the server setup read from that release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag matches the version
+        run: |
+          v=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/constellation/__init__.py)
+          test "v$v" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME but __version__ is $v"; exit 1; }
+
+  desktop:
+    needs: version
+    uses: ./.github/workflows/desktop.yml
+
+  publish:
+    needs: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l assets
+          gh release create "$GITHUB_REF_NAME" assets/* --title "ConstellationCMS ${GITHUB_REF_NAME#v}" --generate-notes

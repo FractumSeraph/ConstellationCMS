@@ -16,6 +16,11 @@ from constellation.core.models import Site
 
 
 def main(argv: list[str] | None = None) -> int:
+    args_in = sys.argv[1:] if argv is None else argv
+    if args_in[:1] == ["app"]:  # the desktop app has its own options
+        from constellation.desktop import main as app_main
+
+        return app_main(args_in[1:])
     parser = argparse.ArgumentParser(prog="constellation", description="ConstellationCMS")
     parser.add_argument("--version", action="version", version=f"constellation {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -76,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
         "--state-dir", type=Path, help="machine-local state folder (default: the OS user data dir)"
     )
     s.set_defaults(func=cmd_studio)
+
+    # Handled before parsing (see above); listed here so it shows in --help.
+    sub.add_parser("app", help="the desktop app: the studio in the background with a tray icon")
 
     sv = sub.add_parser("server", help="the VPS server")
     svs = sv.add_subparsers(dest="server_command", required=True)
@@ -187,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     ib.add_argument("--dry-run", action="store_true", help="list what would be added")
     ib.set_defaults(func=cmd_import_publii_backup)
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_in)
     result = args.func(args)
     return int(result or 0)
 
@@ -358,6 +366,9 @@ def cmd_studio(args: argparse.Namespace) -> int:
             print(f"from another computer, open <this studio's address>/setup?code={code}")
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    from constellation.studio import updates
+
+    updates.start_background(state)
     uvicorn.run(app, host=bind, port=port, log_level="warning")
     return 0
 

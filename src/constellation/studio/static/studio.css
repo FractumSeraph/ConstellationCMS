@@ -145,6 +145,7 @@ form.inline { display: inline; }
 .warn { color: var(--warn); }
 .banner { padding: 0.6rem 1rem; }
 .banner.warn { background: color-mix(in srgb, var(--warn) 14%, var(--bg)); color: var(--warn); }
+.banner.update { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; }
 .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.78rem; background: color-mix(in srgb, var(--fg) 12%, transparent); }
 .pill.draft { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .pill.published { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
@@ -249,6 +250,7 @@ main.editor-main { flex: 1; display: flex; padding: 0; background: var(--bg); }
 .visual-bar button { padding: 0.15rem 0.5rem; min-width: 2rem; font-size: 0.85rem; }
 .visual-bar .sep { width: 1px; align-self: stretch; background: var(--rule); margin: 0 0.25rem; }
 .visual-bar .visual-note { margin-left: auto; }
+.visual-host[contenteditable="true"] > p:only-child:empty::before { content: "Start writing here…"; color: var(--muted); pointer-events: none; }
 .visual-host { flex: 1; min-height: 0; overflow: auto; padding: 1rem 1.5rem; color: var(--strong); font-family: var(--font-ui); line-height: 1.6; outline: none; }
 .visual-host:focus-visible { box-shadow: inset 0 0 0 1px var(--rule-strong); }
 .visual-host img { max-width: 100%; height: auto; }
@@ -409,4 +411,22 @@ a.button.primary { background: var(--primary-bg); border-color: transparent; col
 .wizard-steps li + li::before { content: " → " counter(wstep) ". "; }
 .wizard-steps li.current { color: var(--strong); font-weight: 600; }
 .plan-steps li { margin: 0.25rem 0; }
+
+/* ---- first-run wizard ----------------------------------------------------------------------- */
+.welcome { max-width: 52rem; }
+.welcome form > label { display: grid; gap: 0.3rem; margin: 0 0 1rem; }
+.theme-choices img { width: 100%; height: auto; border-radius: var(--radius-sm); border: 1px solid var(--rule); display: block; }
+.theme-blank { display: grid; place-items: center; aspect-ratio: 520 / 359; border: 1px dashed var(--rule-strong); border-radius: var(--radius-sm); color: var(--muted); }
+.place-choices { display: grid; gap: 0.75rem; border: 0; padding: 0; margin: 0.5rem 0 1rem; }
+.place-choice { display: grid; gap: 0.35rem; margin: 0; padding: 0.8rem 0.9rem; border: 1px solid var(--rule); border-radius: var(--radius); cursor: pointer; }
+.place-choice:has(input:checked) { border-color: var(--magenta); box-shadow: 0 0 0 1px var(--magenta); }
+.place-choice:has(input:disabled) { cursor: default; opacity: 0.75; }
+.place-choice:has(input:focus-visible) { outline: 2px solid var(--ice); outline-offset: 2px; }
+.place-choice input[type=radio] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.place-choice .look-name { color: var(--strong); font-weight: 600; }
+.place-choice .look-blurb { font-size: 0.9rem; color: var(--muted); }
+.place-choice select { margin-top: 0.35rem; max-width: 100%; }
+.wizard-actions { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; margin-top: 1rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.first-site { text-align: center; padding: 2rem 1rem; }
 .notice.warn { border-color: var(--warn); }

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- The desktop app (stage C of `docs/plan/11-easy-for-everyone.md`): a Windows installer
+  (`ConstellationCMS-<version>-Setup.exe`, per user, no administrator password, optional start
+  with Windows) and a Linux AppImage and `.deb`, with Python and everything else inside. Opening
+  it starts the studio on this computer, opens the browser and shows a tray icon (*Open studio*,
+  *Quit*); opening it again just opens the browser; the studio gains a **Quit** button for
+  desktops without a tray. Sites go in `Documents/Constellation Sites`. Built and tested (a
+  self-test of the frozen app) by GitHub Actions on every push, and attached to the GitHub
+  release for every `v…` tag (`.github/workflows/release.yml`, `packaging/build.py`). From a
+  Python install it is `constellation app`. See `docs/desktop-app.md` and `docs/releasing.md`.
+- Update check: once a day the studio asks GitHub for the newest release and, when there is a
+  newer version, shows a note with the download for this computer (installer, AppImage, .deb or
+  the release page). **Account → Updates** turns it off or checks now. Nothing installs itself.
+- First run that makes a site (stage D): after choosing a password, a three-step wizard asks
+  for the site's name, a look picked from pictures of the built-in themes, and its web address
+  (optional), then where it goes (this computer for now, or a connected server; GitHub Pages
+  comes with stage E), then the first post's title, and opens the editor in Visual mode. The
+  Sites page offers it whenever there are no sites. The time zone comes from the browser.
+- The guided server setup works from the desktop app: the installer build carries the wheel it
+  was built from and uploads that to the server.
+
 - Guided server setup (stage B of `docs/plan/11-easy-for-everyone.md`): **Servers → Set up a new
   server** takes a fresh VPS's IP address and root password, checks the system (Ubuntu 22.04+ or
   Debian 11+, memory, disk, ports, an existing Caddy, the firewall), lists what it will do in

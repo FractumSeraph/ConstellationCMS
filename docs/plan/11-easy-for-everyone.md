@@ -54,7 +54,7 @@ A wizard in the studio, **Add a server**:
 
 The same domain check lives on each site's Settings page.
 
-### C · Desktop app
+### C · Desktop app (done 2026-11-10)
 
 - **Windows:** an installer (`ConstellationCMS-Setup.exe`, built with PyInstaller and Inno Setup)
   that adds a Start-menu entry and, optionally, starts with Windows. Opening it starts the studio
@@ -64,7 +64,7 @@ The same domain check lives on each site's Settings page.
   for a newer release once a day and offers to download it.
 - The app bundles everything (Python included); nothing else to install.
 
-### D · First run that makes a site
+### D · First run that makes a site (done 2026-11-10)
 
 The first-run screen becomes a short wizard: password, then *Make your first site* (name, a theme
 picked from pictures, web address), then *Where should it go?* (**This computer only for now**,

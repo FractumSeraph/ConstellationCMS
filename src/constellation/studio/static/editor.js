@@ -433,7 +433,10 @@ function savedMode() {
 document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
   try { localStorage.setItem("cms-editor-mode", r.value); } catch (e) { /* private window */ }
 }));
-const startMode = savedMode() || (window.matchMedia("(max-width: 48rem)").matches ? "visual" : "markdown");
+// ?mode=visual (the first-run wizard) wins over the remembered choice, for this visit only.
+const askedMode = new URLSearchParams(location.search).get("mode");
+const startMode = (askedMode === "visual" || askedMode === "markdown" ? askedMode : null)
+  || savedMode() || (window.matchMedia("(max-width: 48rem)").matches ? "visual" : "markdown");
 if (startMode === "visual") {
   const radio = document.querySelector('input[name="mode"][value="visual"]');
   if (radio) { radio.checked = true; setMode("visual"); }

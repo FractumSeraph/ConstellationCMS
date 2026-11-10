@@ -32,7 +32,7 @@ from constellation.core.render.html import HtmlRenderer
 from constellation.core.routes import RefResolver, url_for
 from constellation.core.themes import BUILTIN_DIR, load_theme, theme_chain
 from constellation.publish.export import is_git_target, parse_git_spec
-from constellation.studio import content_ops, locks, looks, setup_code
+from constellation.studio import content_ops, locks, looks, setup_code, updates
 from constellation.studio.auth import (
     hash_password,
     host_is_loopback,
@@ -131,6 +131,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         openapi_url=None,
     )
     app.state.studio = studio
+    # Set by the desktop app: called when someone presses Quit in the studio.
+    app.state.on_quit = None
     if studio.needs_setup():
         setup_code.ensure(state.dir)
     with contextlib.suppress(Exception):
@@ -286,6 +288,9 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         ctx.setdefault("settings", studio.state.settings)
         ctx.setdefault("look", looks.effective_look(str(studio.state.settings.look)))
         ctx.setdefault("mode", looks.effective_mode(str(studio.state.settings.mode)))
+        ctx.setdefault("update", updates.available(studio.state) if ctx["csrf"] else None)
+        ctx.setdefault("desktop", app.state.on_quit is not None)
+        ctx.setdefault("update_check", updates.enabled(studio.state))
         return cast(HTMLResponse, templates.TemplateResponse(request, name, ctx))
 
     # ---- setup, login, logout -------------------------------------------------------------
@@ -346,7 +351,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         studio.state.save_settings()
         setup_code.clear(studio.state.dir)
         studio.state.audit("setup", remote=client_host(request))
-        return _login_response(studio, request, "/")
+        return _login_response(studio, request, _after_setup(studio))
 
     def _remote_setup_submit(
         request: Request,
@@ -409,7 +414,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             studio.state.kv_set("totp_last_counter", counter)
         setup_code.clear(studio.state.dir)
         studio.state.audit("setup_remote", remote=host)
-        return _login_response(studio, request, "/")
+        return _login_response(studio, request, _after_setup(studio))
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_form(request: Request, next: str = "/") -> Response:
@@ -510,6 +515,137 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             return render(request, "sites.html", error=str(e))
         studio.state.audit("site_created", entry.id, client_host(request))
         return RedirectResponse(f"/sites/{entry.id}", 303)
+
+    # ---- first run: make a site, choose where it goes, write the first post ---------------
+    def _theme_cards() -> list[dict[str, str]]:
+        names = sorted(
+            {p.name for p in BUILTIN_DIR.iterdir() if (p / "theme.toml").is_file()}
+            | {
+                p.name
+                for p in (studio.workspace_root / "themes").glob("*")
+                if (p / "theme.toml").is_file()
+            }
+        )
+        order = {name: i for i, name in enumerate(THEME_BLURBS)}
+        cards = []
+        for name in sorted(names, key=lambda n: (order.get(n, len(order)), n)):
+            label, blurb = THEME_BLURBS.get(name, ("", ""))
+            if not blurb:
+                with contextlib.suppress(Exception):
+                    blurb = load_theme(name, search=[studio.workspace_root / "themes"]).description
+            picture = HERE / "static" / "themes" / f"{name}.webp"
+            cards.append(
+                {
+                    "id": name,
+                    "name": label or name.replace("-", " ").title(),
+                    "blurb": blurb,
+                    "picture": f"/static/themes/{name}.webp" if picture.is_file() else "",
+                }
+            )
+        return cards
+
+    @app.get("/welcome", response_class=HTMLResponse)
+    async def welcome(
+        request: Request, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        form = {"name": "", "author": "", "theme": "base", "web_url": ""}
+        return render(request, "welcome.html", error="", themes=_theme_cards(), form=form)
+
+    @app.post("/welcome")
+    async def welcome_submit(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        name: str = Form(""),
+        author: str = Form(""),
+        theme: str = Form("base"),
+        web_url: str = Form(""),
+        timezone: str = Form("UTC"),
+    ) -> Response:
+        form = {"name": name, "author": author, "theme": theme, "web_url": web_url}
+        cards = _theme_cards()
+        if theme not in {c["id"] for c in cards}:
+            theme = "base"
+        error = ""
+        url = web_url.strip()
+        if url and "://" not in url:
+            url = "https://" + url
+        if url and not re.fullmatch(r"https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(:\d+)?/?", url):
+            error = "That web address doesn't look right. Use just the domain, like example.com, or leave it empty."
+        if not name.strip():
+            error = "Give your site a name."
+        if not error:
+            try:
+                entry = create_site(
+                    studio.workspace,
+                    name.strip(),
+                    site_id=_free_site_id(studio, name.strip()),
+                    web_url=url.rstrip("/").lower(),
+                    timezone=_valid_timezone(timezone),
+                    author=author.strip(),
+                    theme=theme,
+                )
+            except ValueError as e:
+                error = str(e)
+            else:
+                studio.state.audit("site_created", entry.id, client_host(request))
+                return RedirectResponse(f"/welcome/{entry.id}/where", 303)
+        resp = render(request, "welcome.html", error=error, themes=cards, form=form)
+        resp.status_code = 400
+        return resp
+
+    @app.get("/welcome/{site_id}/where", response_class=HTMLResponse)
+    async def welcome_where(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        if entry is None:
+            raise HTTPException(404, f"no site {site_id!r}")
+        return render(
+            request,
+            "welcome_where.html",
+            wizard_site=site_id,
+            site_name=entry.name,
+            servers=ws.servers,
+        )
+
+    @app.post("/welcome/{site_id}/where")
+    async def welcome_where_submit(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        place: str = Form("local"),
+        server_id: str = Form(""),
+    ) -> Response:
+        ws = studio.workspace
+        entry = ws.site(site_id)
+        if entry is None:
+            raise HTTPException(404, f"no site {site_id!r}")
+        if place == "server" and ws.server(server_id) is not None:
+            entry.server = server_id
+            save_workspace(ws)
+            studio.state.audit("site_assigned", f"{site_id}->{server_id}", client_host(request))
+        return RedirectResponse(f"/welcome/{site_id}/write", 303)
+
+    @app.get("/welcome/{site_id}/write", response_class=HTMLResponse)
+    async def welcome_write(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        studio.site_root(site_id)
+        return render(request, "welcome_write.html", wizard_site=site_id)
+
+    @app.post("/welcome/{site_id}/write")
+    async def welcome_write_submit(
+        request: Request,
+        site_id: str,
+        sess: dict[str, Any] = Depends(require_csrf),
+        title: str = Form("Hello, world"),
+    ) -> Response:
+        root = studio.site_root(site_id)
+        _check_writable(studio, site_id)
+        rel = content_ops.create_item(root, "post", title.strip() or "Hello, world")
+        studio.state.audit("created", rel, client_host(request))
+        return RedirectResponse(f"/sites/{site_id}/edit?rel={quote(rel)}&mode=visual", 303)
 
     @app.get("/sites/{site_id}", response_class=HTMLResponse)
     async def dashboard(
@@ -2239,7 +2375,46 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+        return {"status": "ok", "version": __version__, "app": studio.state.settings.machine_id}
+
+    # ---- updates and the desktop app ---------------------------------------------------------
+    @app.post("/updates/dismiss")
+    async def updates_dismiss(
+        request: Request, sess: dict[str, Any] = Depends(require_csrf), version: str = Form("")
+    ) -> Response:
+        studio.state.kv_set(updates.KV_DISMISSED, version)
+        back = urlsplit(request.headers.get("referer", "/"))
+        return RedirectResponse(
+            safe_next(back.path + (f"?{back.query}" if back.query else "")), 303
+        )
+
+    @app.post("/updates/settings")
+    async def updates_settings(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        check: str = Form(""),
+        now: str = Form(""),
+    ) -> Response:
+        studio.state.kv_set(updates.KV_OFF, check != "on")
+        saved = "updates"
+        if now and check == "on":
+            latest = await asyncio.to_thread(updates.check, studio.state, force=True)
+            saved = "update-found" if updates.available(studio.state) else "up-to-date"
+            if latest is None:
+                saved = "update-unknown"
+        return RedirectResponse(f"/account?saved={saved}#updates", 303)
+
+    @app.post("/app/quit", response_class=HTMLResponse)
+    async def app_quit(request: Request, sess: dict[str, Any] = Depends(require_csrf)) -> Response:
+        on_quit = app.state.on_quit
+        if on_quit is None:
+            raise HTTPException(404)
+        asyncio.get_running_loop().call_later(0.5, on_quit)
+        return HTMLResponse(
+            "<!DOCTYPE html><meta charset=utf-8><title>Closed</title>"
+            "<p style='font:1.1rem system-ui;margin:3rem'>ConstellationCMS has closed. "
+            "Open it again from the Start menu or your applications.</p>"
+        )
 
     return app
 
@@ -2269,6 +2444,44 @@ def _local_csrf(studio: Studio) -> str:
         token = secrets.token_urlsafe(24)
         studio.state.kv_set("local_csrf", token)
     return str(token)
+
+
+# Plain descriptions of the built-in themes for the first-run wizard, in the order shown.
+THEME_BLURBS: dict[str, tuple[str, str]] = {
+    "base": ("Simple", "Clean and easy to read on any screen."),
+    "paper": ("Paper", "Warm paper colours and classic book type."),
+    "fractum": ("Terminal", "Dark and typewriter-like, like an old computer screen."),
+    "nebula": ("Neon", "Bright magenta on black, with a soft glow."),
+}
+
+
+def _free_site_id(studio: Studio, name: str) -> str:
+    """A folder name for a new site: from its name, with a number added if it's taken."""
+    from slugify import slugify
+
+    base = slugify(name)[:40].strip("-") or "site"
+    if not re.match(r"^[a-z0-9]", base):
+        base = "site-" + base
+    ws = studio.workspace
+    sid, n = base, 2
+    while ws.site(sid) is not None or ws.site_dir(sid).exists():
+        sid, n = f"{base}-{n}", n + 1
+    return sid
+
+
+def _valid_timezone(name: str) -> str:
+    from zoneinfo import ZoneInfo
+
+    try:
+        ZoneInfo(name)
+    except (ValueError, KeyError, OSError):
+        return "UTC"
+    return name or "UTC"
+
+
+def _after_setup(studio: Studio) -> str:
+    """Straight into making a first site, unless the sites folder already has some."""
+    return "/" if any(not s.archived for s in studio.workspace.sites) else "/welcome"
 
 
 def _login_response(studio: Studio, request: Request, next_url: str) -> Response:

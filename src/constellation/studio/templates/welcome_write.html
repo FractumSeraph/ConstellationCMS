@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Your first post{% endblock %}
+{% block content %}
+<section class="card wizard welcome">
+  <ol class="wizard-steps" aria-label="Steps"><li>Your site</li><li>Where it goes</li><li class="current" aria-current="step">First post</li></ol>
+  <h1>Write your first post</h1>
+  <p class="muted">Give it a title, and the editor opens. Type as you would in an email: buttons above the text make headings, lists, links and pictures.</p>
+  <form method="post" action="/welcome/{{ wizard_site }}/write">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Title <input name="title" required autofocus value="Hello, world"></label>
+    <div class="wizard-actions">
+      <button class="primary">Start writing</button>
+      <a href="/sites/{{ wizard_site }}" class="muted">Go to the site's dashboard instead</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

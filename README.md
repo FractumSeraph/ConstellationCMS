@@ -22,7 +22,12 @@ one Publish button. A static site manager for the small web and the big one.
 
 ## Install
 
-Step-by-step guides for putting the studio on a computer, including keeping your sites in step
+**The easy way:** download the desktop app for Windows or Linux from the
+**[releases page](https://github.com/FractumSeraph/ConstellationCMS/releases/latest)** and
+open it. Nothing else to install; the first run walks you through making a site. See
+[the desktop app](docs/desktop-app.md).
+
+Step-by-step guides for installing with Python instead, including keeping your sites in step
 between machines:
 
 - **[Install on Windows](docs/install-windows.md)**
@@ -95,6 +100,8 @@ and adding each new site, with your own names filled into every command.
   featured posts, share links and comments.
 - [`docs/visual-editor.md`](docs/visual-editor.md): the editor's visual mode.
 - [`docs/plugins.md`](docs/plugins.md): installing and writing Python plugins.
+- [`docs/desktop-app.md`](docs/desktop-app.md): the Windows and Linux desktop app.
+- [`docs/releasing.md`](docs/releasing.md): making a release (installers built by GitHub Actions).
 - [`docs/UPGRADING.md`](docs/UPGRADING.md): upgrades and backups.
 - [`CHANGELOG.md`](CHANGELOG.md).
 

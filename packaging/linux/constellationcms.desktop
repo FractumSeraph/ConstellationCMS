@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ConstellationCMS
+GenericName=Website studio
+Comment=Write a blog or website and publish it to the web and Gemini
+Exec=constellationcms
+Icon=constellationcms
+Terminal=false
+Categories=Network;WebDevelopment;Office;
+Keywords=blog;website;cms;gemini;
+StartupNotify=false

@@ -129,6 +129,7 @@ def create_site(
     gemini_url: str = "",
     timezone: str = "UTC",
     author: str = "",
+    theme: str = "base",
 ) -> SiteEntry:
     sid = site_id or slugify(name)
     if not SITE_ID_RX.match(sid):
@@ -154,7 +155,7 @@ def create_site(
     site["tagline"] = ""
     site["language"] = "en"
     site["timezone"] = timezone
-    site["theme"] = "base"
+    site["theme"] = theme or "base"
     site["author"] = slugify(author) if author else ""
     doc["site"] = site
     if author:

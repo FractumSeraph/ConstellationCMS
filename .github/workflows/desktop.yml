@@ -1,0 +1,36 @@
+name: Desktop app
+
+# Builds the Windows installer and the Linux AppImage and .deb, and runs the frozen app's
+# self-test. CI calls this on every push; release.yml calls it for every v… tag.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: desktop / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ubuntu 22.04 so the Linux app also runs on older systems (it needs glibc 2.35+).
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --extra build --python 3.13
+      - name: Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Build and test
+        run: uv run python packaging/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          path: build/desktop/out/*
+          if-no-files-found: error

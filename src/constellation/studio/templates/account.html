@@ -64,6 +64,16 @@
   </form>
   <form method="post" action="/account/signout-everywhere" class="top-gap"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Sign out everywhere</button></form>
 </section>
+<section class="card" id="updates"><h2>Updates</h2>
+  {% set msg = {"up-to-date": "You have the newest version.", "update-found": "A new version is ready: see the note at the top of the page.", "update-unknown": "Couldn't reach GitHub just now. The studio tries again later.", "updates": "Saved."} %}
+  {% if saved in msg %}<p class="ok">{{ msg[saved] }}</p>{% endif %}
+  <p class="muted small">This is version {{ version }}. Once a day the studio asks GitHub whether there is a newer one, and if there is, shows a note with a download link. Nothing is installed by itself.</p>
+  <form method="post" action="/updates/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="check"><input type="checkbox" name="check" {% if update_check %}checked{% endif %}> Check for new versions</label>
+    <button>Save</button> <button name="now" value="1">Check now</button>
+  </form>
+</section>
 <section class="card"><h2>Recent activity</h2>
   <table class="items small"><tbody>{% for ts, event, detail, remote in audit %}<tr><td>{{ ts | int }}</td><td>{{ event }}</td><td>{{ detail }}</td><td>{{ remote }}</td></tr>{% endfor %}</tbody></table>
 </section>

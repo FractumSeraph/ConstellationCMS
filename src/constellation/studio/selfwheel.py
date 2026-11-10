@@ -28,6 +28,11 @@ def build_wheel() -> tuple[str, bytes]:
     """(file name, wheel bytes) for the installed ConstellationCMS."""
     import constellation
 
+    # The desktop app's installer build ships the wheel it was built from (its own Python files
+    # are compiled into the program, so they can't be packed up again).
+    bundled = sorted((Path(constellation.__file__).resolve().parent / "_bundled").glob("*.whl"))
+    if bundled:
+        return bundled[-1].name, bundled[-1].read_bytes()
     dist = metadata.distribution(DIST)
     version = dist.version
     package = Path(constellation.__file__).resolve().parent
