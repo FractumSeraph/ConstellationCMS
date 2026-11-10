@@ -87,7 +87,7 @@ studio says so in the settings screen.
 ### Studio on the VPS (chosen)
 
 The owner wants to post without the main PC (decision 45), so a second studio instance runs on a
-VPS, behind our own server's HTTPS at a dedicated hostname such as `studio.fractumseraph.net`,
+VPS, behind our own server's HTTPS at a dedicated hostname such as `studio.example.org`,
 with the workspace synced to the VPS by Syncthing. This gives remote access with proper TLS and
 no open ports at home. Two studios may then edit the same workspace; the sync-safety rules below
 exist for exactly that case. `constellation server install --with-studio` sets up the second

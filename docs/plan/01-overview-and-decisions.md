@@ -126,7 +126,7 @@ Each of these is a judgment call the owner can overturn. They are stated so the 
   the server it publishes to by id. The server's address is shared through the synced workspace;
   the tokens for it live only on the machines that have been connected to it.
 - **A10. Each server has its own admin hostname**, set at install time (for example
-  `vps1.fractumseraph.net`), separate from any site's hostnames, so moving or retiring a site never
+  `vps1.example.org`), separate from any site's hostnames, so moving or retiring a site never
   cuts off the studio's access to the server.
 
 ## Resolved questions

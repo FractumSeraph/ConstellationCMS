@@ -59,12 +59,12 @@ version = 1
 [[servers]]                   # every VPS running `constellation server` (decision 36)
 id = "vps-1"
 name = "First VPS"
-admin_url = "https://vps1.fractumseraph.net/_constellation"   # the server's own admin hostname
+admin_url = "https://vps1.example.org/_constellation"   # the server's own admin hostname
 
 [[servers]]
 id = "vps-2"
 name = "Second VPS"
-admin_url = "https://vps2.fractumseraph.net/_constellation"
+admin_url = "https://vps2.example.org/_constellation"
 
 [[sites]]
 id = "fractumseraph"          # folder name under sites/
@@ -151,7 +151,7 @@ twitter = "@..."
 image = "media/og-default.png"
 
 [custom_html]                         # injected verbatim on the web platform only
-head = """<script defer src="https://websites.fractumseraph.net/script.js" data-website-id="..."></script>"""
+head = """<script defer src="https://analytics.example.org/script.js" data-website-id="..."></script>"""
 body_start = ""
 body_end = ""
 
@@ -165,7 +165,7 @@ display = ["gregorian", "discordian"] # which calendars themes may show; order =
 numerals = "arabic"                   # arabic | cistercian | roman
 
 [analytics]
-forward_to_umami = { enabled = false, endpoint = "https://websites.fractumseraph.net/api/send", website_id = "..." }
+forward_to_umami = { enabled = false, endpoint = "https://analytics.example.org/api/send", website_id = "..." }
 ```
 
 Theme settings (colors, header style, whether to show the Discordian date) live in
