@@ -103,8 +103,9 @@ Downloads without signing in need the repository to be public.
 ## What the owner needs to provide
 
 - **The repository public**, so release downloads work for everyone.
-- **A GitHub OAuth app** for stage E (two minutes in GitHub's settings), unless stage E is
-  dropped.
+- **A GitHub OAuth app** for stage E (decided 2026-11-10: yes). Registered once in GitHub's
+  developer settings with *Device Flow* enabled; only its public client ID goes in the code, no
+  secret and no server.
 - **Code signing for Windows** (optional): an unsigned installer shows a SmartScreen warning the
   first time ("More info → Run anyway"). A certificate removes it but costs money.
 
