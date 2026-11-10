@@ -340,6 +340,13 @@ def cmd_studio(args: argparse.Namespace) -> int:
     app = create_app(state, workspace)
     url = f"http://{'localhost' if bind == '127.0.0.1' else bind}:{port}/"
     print(f"studio: {url}  workspace: {workspace}")
+    if not state.settings.password_hash:
+        from constellation.studio import setup_code
+
+        code = setup_code.read(state.dir)
+        print(f"first run: open {url} on this computer to choose a password.")
+        if code:
+            print(f"from another computer, open <this studio's address>/setup?code={code}")
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host=bind, port=port, log_level="warning")
@@ -370,16 +377,22 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         create_user=not args.no_unit and hasattr(os, "geteuid") and os.geteuid() == 0,
         gopher=args.gopher,
     )
-    if args.with_studio:
-        print(
-            f"studio on this server: https://{args.with_studio}/ (turn on remote mode with 'trust proxy headers' in its Account page)"
-        )
     print(f"wrote {config_path}")
     print("admin token (shown once; paste it into the studio's Servers page):")
     print(f"  {token}")
     if not args.no_unit:
         print(
             "enable the service with: systemctl daemon-reload && systemctl enable --now constellation"
+        )
+    if args.with_studio:
+        from constellation.studio import setup_code
+
+        code = setup_code.read(args.data_dir / "studio-state")
+        print("studio on this server; once it is running, set it up by opening:")
+        print(f"  {setup_code.setup_link('https://' + args.with_studio, code)}")
+        print(
+            "enable it with: systemctl enable --now constellation-studio "
+            "(your desktop studio also shows this link after you connect a site to this server)"
         )
     ports = ["1965 (gemini)"] + (["70 (gopher)"] if args.gopher else [])
     ports += (
@@ -397,7 +410,10 @@ def cmd_server_proxy(args: argparse.Namespace) -> int:
 
     cfg = load_server_config(args.config)
     make = caddy_snippet if args.caddy else proxy_snippet
-    print(make(list(args.hostnames), cfg.https.plain_port, cfg.admin.hostname), end="")
+    names = list(args.hostnames)
+    if cfg.studio.enabled and cfg.studio.hostname:
+        names.append(cfg.studio.hostname)  # the server passes the studio's requests on to it
+    print(make(names, cfg.https.plain_port, cfg.admin.hostname), end="")
     return 0
 
 

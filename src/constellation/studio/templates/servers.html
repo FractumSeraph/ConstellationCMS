@@ -8,6 +8,12 @@
 {% for s in servers %}
 <section class="card">
   <h2>{{ s.name }} <span class="muted small">{{ s.id }} · <code>{{ s.admin_url }}</code></span></h2>
+  {% if studio_links[s.id] %}
+  <div class="notice">
+    <p><strong>This server has a studio waiting to be set up.</strong> Open <a href="{{ studio_links[s.id] }}" target="_blank" rel="noopener">its setup page</a> to choose its password and authenticator; after that you can write and publish from any browser.</p>
+    <form method="post" action="/servers/{{ s.id }}/studio-link/hide" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">It's set up; hide this</button></form>
+  </div>
+  {% endif %}
   <table class="items"><thead><tr><th>Site</th><th>Assigned</th><th>Token on this machine</th><th></th></tr></thead><tbody>
   {% for site in sites %}
   <tr><td>{{ site.name }} <span class="muted">({{ site.id }})</span></td>

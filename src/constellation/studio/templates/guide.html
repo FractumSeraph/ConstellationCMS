@@ -17,6 +17,7 @@
       </select></label>
     <label>Local port for the proxy to use <input name="port" type="number" min="1024" max="65535" value="{{ g.port }}"></label>
     <label class="check"><input type="checkbox" name="gopher" {% if g.gopher %}checked{% endif %}> Serve Gopher too (port 70)</label>
+    <label>Studio on the server, to write from any browser (optional) <input name="studio_host" value="{{ g.studio }}" placeholder="studio.example.org"></label>
   </div>
   <button class="primary">Fill in the commands</button>
 </form>
@@ -30,7 +31,7 @@
     </li>
     <li>
       <h3>Point the server's address at it</h3>
-      <p>At your DNS provider, add an <strong>A record</strong> for <code>{{ g.host_or }}</code> pointing to <code>{{ g.ip_or }}</code>. If you use Cloudflare, set it to <em>DNS only</em> (grey cloud) so Gemini and Gopher can reach the server.</p>
+      <p>At your DNS provider, add an <strong>A record</strong> for <code>{{ g.host_or }}</code>{% if g.studio %} and one for <code>{{ g.studio }}</code>{% endif %} pointing to <code>{{ g.ip_or }}</code>. If you use Cloudflare, set {{ 'them' if g.studio else 'it' }} to <em>DNS only</em> (grey cloud) so Gemini and Gopher can reach the server.</p>
     </li>
     <li>
       <h3>Install ConstellationCMS</h3>
@@ -43,9 +44,10 @@ uv pip install --python /opt/constellation constellationcms{% endset %}
     </li>
     <li>
       <h3>Create the server's settings</h3>
-      {% set cmd %}sudo /opt/constellation/bin/constellation server install --admin-hostname {{ g.host_or }} --tls-mode {{ 'acme' if g.proxy == 'none' else 'behind-proxy' }}{% if g.proxy != 'none' %} --plain-port {{ g.port }}{% endif %}{% if g.gopher %} --gopher{% endif %}{% endset %}
+      {% set cmd %}sudo /opt/constellation/bin/constellation server install --admin-hostname {{ g.host_or }} --tls-mode {{ 'acme' if g.proxy == 'none' else 'behind-proxy' }}{% if g.proxy != 'none' %} --plain-port {{ g.port }}{% endif %}{% if g.gopher %} --gopher{% endif %}{% if g.studio %} --with-studio {{ g.studio }}{% endif %}{% endset %}
       {% include "partials/guide_cmd.html" %}
       <p>It prints an <strong>admin token</strong> once. Copy it somewhere safe, such as a password manager. You'll paste it into this studio to connect each site, and the studio never stores it.</p>
+      {% if g.studio %}<p>It also prints the <strong>studio's setup link</strong>, <code>https://{{ g.studio }}/setup?code=…</code>. You don't need to keep it: this studio shows it again on the Servers page once you connect a site to the server.</p>{% endif %}
     </li>
     {% if g.proxy != 'none' %}
     <li>
@@ -82,7 +84,7 @@ sudo ufw allow 443/tcp{% endif %}{% endset %}
     <li>
       <h3>Start it</h3>
       {% set cmd %}sudo systemctl daemon-reload
-sudo systemctl enable --now constellation{% endset %}
+sudo systemctl enable --now constellation{% if g.studio %} constellation-studio{% endif %}{% endset %}
       {% include "partials/guide_cmd.html" %}
       <p>Check it from your computer. It should answer <code>ok</code>:</p>
       {% set cmd %}curl https://{{ g.host_or }}/_constellation/healthz{% endset %}
@@ -92,6 +94,13 @@ sudo systemctl enable --now constellation{% endset %}
       <h3>Add the server to this studio</h3>
       <p>On the <a href="/servers">Servers</a> page, under "Add a server", give it a short id and enter <code>https://{{ g.host_or }}</code> as its address.</p>
     </li>
+    {% if g.studio %}
+    <li>
+      <h3>Set up the studio on the server</h3>
+      <p>Open the setup link (from the install command, or from the Servers page here after you connect a site). Choose a password, scan the QR code with an authenticator app on your phone, and type the code it shows. That's all: from then on, sign in at <code>https://{{ g.studio }}</code> from any browser with your password and a code from the app.</p>
+      <p class="muted small">The studio on the server keeps its own copy of your sites. To work on the same sites from this computer too, keep the two in step with <a href="https://syncthing.net/">Syncthing</a> (see <code>docs/studio-on-a-server.md</code>).</p>
+    </li>
+    {% endif %}
   </ol>
 </section>
 

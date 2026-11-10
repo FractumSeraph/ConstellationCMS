@@ -46,33 +46,92 @@ def test_auto_login_needs_a_loopback_host_header(studio) -> None:  # noqa: F811
     assert client.get("/", headers={"host": "localhost:8787"}).status_code == 200
 
 
-def test_until_remote_mode_only_this_machine_is_answered(studio) -> None:  # noqa: F811
-    client, state, _ws = studio
-    # A fresh studio behind a public proxy must not offer first-run setup to strangers.
-    proxied = {"host": "studio.example.org", "x-forwarded-for": "203.0.113.9"}
-    r = client.get("/setup", headers=proxied, follow_redirects=False)
-    assert r.status_code == 403 and "SSH tunnel" in r.text
-    r = client.post(
+PROXIED = {"host": "studio.example.org", "x-forwarded-for": "203.0.113.9"}
+ORIGIN = {**PROXIED, "origin": "https://studio.example.org"}
+
+
+def _remote_setup(client, state, *, code=None, otp=None, password="a long password", secret=None):  # noqa: ANN001, ANN202
+    from constellation.studio import setup_code
+
+    page = client.get("/setup", headers=PROXIED)
+    secret = secret or page.text.split('name="secret" value="', 1)[1].split('"', 1)[0]
+    return client.post(
         "/setup",
-        data={"password": "attacker password", "confirm": "attacker password"},
-        headers={**proxied, "origin": "http://studio.example.org"},
+        data={
+            "setup_code": setup_code.read(state.dir) if code is None else code,
+            "password": password,
+            "confirm": password,
+            "secret": secret,
+            "otp": totp.totp(secret) if otp is None else otp,
+        },
+        headers=ORIGIN,
         follow_redirects=False,
     )
-    assert r.status_code == 403 and not state.settings.password_hash
-    # Through an SSH tunnel the request names localhost, so setup works.
+
+
+def test_until_remote_mode_only_this_machine_is_answered(studio) -> None:  # noqa: F811
+    client, state, _ws = studio
+    # Password-only sign-in and every other page stay on this machine before remote mode.
     _setup(client)
     assert state.settings.password_hash
-    # Password-only sign-in from outside is refused too, until remote mode (with TOTP) is on.
-    assert (
-        client.post(
-            "/login", data={"password": "correct horse battery"}, headers=proxied
-        ).status_code
-        == 403
-    )
+    assert client.get("/setup", headers=PROXIED, follow_redirects=False).status_code == 403
+    assert client.get("/sites", headers=PROXIED, follow_redirects=False).status_code == 403
+    login = client.post("/login", data={"password": "correct horse battery"}, headers=PROXIED)
+    assert login.status_code == 403
     state.settings.remote_mode = True
     client.cookies.clear()
-    r = client.get("/", headers=proxied, follow_redirects=False)
+    r = client.get("/", headers=PROXIED, follow_redirects=False)
     assert r.status_code == 307 and r.headers["location"].startswith("/login")
+
+
+def test_a_server_studio_is_set_up_from_its_link(studio) -> None:  # noqa: F811
+    from constellation.studio import setup_code
+
+    client, state, _ws = studio
+    code = setup_code.read(state.dir)
+    assert len(setup_code.normalise(code)) == 12  # created as soon as the studio starts
+    # Strangers get the setup page (asking for the code), but nothing else.
+    r = client.get("/", headers=PROXIED, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/setup"
+    page = client.get(f"/setup?code={code}", headers=PROXIED)
+    assert page.status_code == 200 and 'name="setup_code" value="' + code + '"' in page.text
+    assert "<svg" in page.text  # the authenticator QR code
+    assert client.get("/sites", headers=PROXIED, follow_redirects=False).status_code == 403
+    # Without the code, or with a wrong one, nobody can claim it.
+    assert _remote_setup(client, state, code="").status_code == 403
+    assert _remote_setup(client, state, code="AAAA-BBBB-CCCC").status_code == 403
+    assert not state.settings.password_hash
+    # The right code but a wrong authenticator code: refused, nothing saved.
+    r = _remote_setup(client, state, otp="000000")
+    assert "authenticator code" in r.text and not state.settings.password_hash
+    # The code typed in lower case with spaces still works; setup turns remote mode on at once.
+    r = _remote_setup(client, state, code=code.lower().replace("-", " "))
+    assert r.status_code == 303 and "constellation_session" in r.headers.get("set-cookie", "")
+    s = state.settings
+    assert s.password_hash and s.totp_secret and s.remote_mode and s.trust_proxy
+    assert setup_code.read(state.dir) == ""  # used up
+    assert client.get("/servers", headers=PROXIED).status_code == 200
+    # A second visit to the setup page goes nowhere.
+    client.cookies.clear()
+    r = client.get("/setup", headers=PROXIED, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/"
+
+
+def test_wrong_setup_codes_lock_out(studio) -> None:  # noqa: F811
+    client, state, _ws = studio
+    for _ in range(12):
+        _remote_setup(client, state, code="WRONG-CODE-0000")
+    r = _remote_setup(client, state)  # even the right code, while locked out
+    assert r.status_code == 429 and not state.settings.password_hash
+
+
+def test_local_setup_needs_no_code_and_clears_it(studio) -> None:  # noqa: F811
+    from constellation.studio import setup_code
+
+    client, state, _ws = studio
+    assert setup_code.read(state.dir)
+    _setup(client)
+    assert setup_code.read(state.dir) == "" and not state.settings.remote_mode
 
 
 def test_cross_origin_posts_are_refused(studio) -> None:  # noqa: F811

@@ -57,6 +57,9 @@ class StudioProxyConfig(Strict):
     enabled: bool = False
     hostname: str = ""
     upstream: str = "http://127.0.0.1:8787"
+    # The studio's state folder, so the server can hand its setup link to a desktop studio that
+    # connects with the admin token. Empty when the studio runs as another user.
+    state_dir: str = ""
 
 
 class Limits(Strict):

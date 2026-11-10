@@ -239,6 +239,11 @@ main.editor-main { flex: 1; display: flex; padding: 0; background: var(--bg); }
 .editor-toolbar .toggle input { width: auto; margin: 0; }
 .cm-host { flex: 1; min-height: 0; overflow: auto; }
 .cm-host[hidden], .visual-host[hidden], .visual-bar[hidden] { display: none; }
+.notice { border: 1px var(--rule-style) var(--label); border-radius: var(--radius-sm); padding: 0.6rem 0.9rem; margin: 0.5rem 0 1rem; }
+.notice p { margin: 0 0 0.35rem; }
+.setup-totp { display: grid; grid-template-columns: minmax(0, 1fr) 14rem; gap: 1rem; align-items: end; margin: 1rem 0; }
+.setup-totp .qr svg { width: 11rem; height: auto; background: #fff; padding: 0.4rem; border-radius: var(--radius-sm); }
+@media (max-width: 40rem) { .setup-totp { grid-template-columns: 1fr; } }
 .mode-switch { display: inline-flex; gap: 0.6rem; padding-left: 0.75rem; border-left: 1px var(--rule-style) var(--rule); }
 .visual-bar { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; padding: 0.35rem 0.75rem; border-bottom: 1px var(--rule-style) var(--rule); background: var(--panel); }
 .visual-bar button { padding: 0.15rem 0.5rem; min-width: 2rem; font-size: 0.85rem; }

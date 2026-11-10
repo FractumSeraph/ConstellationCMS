@@ -437,6 +437,7 @@ class HttpApp:
         "studio.enabled": bool,
         "studio.hostname": str,
         "studio.upstream": str,
+        "studio.state_dir": str,
         "http.port": int,
         "https.port": int,
     }
@@ -598,8 +599,23 @@ class HttpApp:
                     "hostnames": s.site_config().get("hostnames", {}),
                 }
             )
+        studio: dict[str, Any] = {}
+        if self.cfg.studio.enabled and self.cfg.studio.hostname:
+            from constellation.studio import setup_code
+
+            url = f"https://{self.cfg.studio.hostname}"
+            studio = {"url": url, "setup_link": ""}
+            if self.cfg.studio.state_dir:
+                code = setup_code.read(Path(self.cfg.studio.state_dir))
+                if code:
+                    studio["setup_link"] = setup_code.setup_link(url, code)
         return JSONResponse(
-            {"version": __version__, "tls_mode": self.cfg.https.tls_mode, "sites": sites}
+            {
+                "version": __version__,
+                "tls_mode": self.cfg.https.tls_mode,
+                "sites": sites,
+                "studio": studio,
+            }
         )
 
     async def sites(self, request: Request) -> Response:

@@ -40,7 +40,11 @@ uv venv /opt/constellation && uv pip install --python /opt/constellation constel
 systemctl daemon-reload && systemctl enable --now constellation
 ```
 
-Paste the printed admin token into the studio's Servers page, connect a site, and publish. Behind
+Paste the printed admin token into the studio's Servers page, connect a site, and publish. Add
+`--with-studio studio.example.org` to also run a studio on the server, so you can write from any
+browser; the command prints a one-time setup link for it (see
+[`docs/studio-on-a-server.md`](docs/studio-on-a-server.md), which also explains which program is
+which). Behind
 an existing web server, `constellation server proxy-snippet --caddy example.org` (or without
 `--caddy` for nginx) prints the block to add. Use `--tls-mode acme` instead when nothing else
 holds ports 80 and 443.

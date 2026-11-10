@@ -31,7 +31,7 @@ from constellation.core.render.html import HtmlRenderer
 from constellation.core.routes import RefResolver, url_for
 from constellation.core.themes import BUILTIN_DIR, load_theme, theme_chain
 from constellation.publish.export import is_git_target, parse_git_spec
-from constellation.studio import content_ops, locks, looks
+from constellation.studio import content_ops, locks, looks, setup_code
 from constellation.studio.auth import (
     hash_password,
     host_is_loopback,
@@ -128,6 +128,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         openapi_url=None,
     )
     app.state.studio = studio
+    if studio.needs_setup():
+        setup_code.ensure(state.dir)
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.globals.update(
@@ -150,6 +152,14 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 # The proxy appends the address it saw; anything to the left is client-supplied.
                 return fwd.split(",")[-1].strip()
         return request.client.host if request.client else ""
+
+    def is_local(request: Request) -> bool:
+        """A request from this machine, addressed to it, not forwarded by a proxy."""
+        return (
+            host_is_loopback(request.headers.get("host"))
+            and is_loopback(request.client.host if request.client else None)
+            and "x-forwarded-for" not in request.headers
+        )
 
     def same_origin(request: Request) -> bool:
         """Browsers send Origin on every POST; it must name this studio."""
@@ -230,20 +240,24 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
     class LocalUntilRemote(BaseHTTPMiddleware):
         """Until remote mode is on, answer only requests addressed to this machine.
 
-        A studio behind a public proxy (or reached by a DNS name) before its owner turned on
-        remote mode would otherwise offer first-run setup to whoever arrives first, and sign-in
-        with a password alone. Remote mode needs the authenticator second factor, so it is the
-        point where the studio may face the internet. Setup on a server is done through an SSH
-        tunnel, which arrives as ``localhost``.
+        Remote mode needs the authenticator second factor, so it is the point where the studio
+        may face the internet; before it, sign-in with a password alone stays on this machine.
+        The one exception is first-run setup of a studio on a server, which other computers
+        reach through the setup page, protected by the one-time setup code.
         """
 
         async def dispatch(self, request: Request, call_next: Any) -> Response:
             s = studio.state.settings
             if not s.remote_mode and not host_is_loopback(request.headers.get("host")):
+                path = request.url.path
+                if studio.needs_setup() and (path == "/setup" or path.startswith("/static/")):
+                    return cast(Response, await call_next(request))
+                if studio.needs_setup() and path == "/":
+                    return RedirectResponse("/setup", 303)
                 return Response(
-                    "This studio only answers on its own computer until remote mode is turned on "
-                    "(Account page, with the authenticator second factor). On a server, open it "
-                    "through an SSH tunnel to finish setting it up.\n",
+                    "This studio is not open to other computers. Its owner can turn that on in "
+                    "Account (remote mode, with an authenticator code). A new studio on a server "
+                    "is set up with the setup link printed when the server was installed.\n",
                     status_code=403,
                     media_type="text/plain; charset=utf-8",
                 )
@@ -263,10 +277,31 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
 
     # ---- setup, login, logout -------------------------------------------------------------
     @app.get("/setup", response_class=HTMLResponse)
-    async def setup_form(request: Request) -> Response:
+    async def setup_form(request: Request, code: str = "") -> Response:
         if not studio.needs_setup():
             return RedirectResponse("/", 303)
+        if not is_local(request):
+            return _remote_setup_page(request, "", code)
         return render(request, "setup.html", error="", chosen=looks.DEFAULT_LOOK)
+
+    def _remote_setup_page(
+        request: Request, error: str, code: str, secret: str = "", status: int = 200
+    ) -> Response:
+        from constellation.studio import totp as _totp
+
+        secret = secret or _totp.new_secret()
+        uri = _totp.provisioning_uri(secret, request.headers.get("host", "studio"))
+        resp = render(
+            request,
+            "setup_remote.html",
+            error=error,
+            setup_code=code,
+            secret=secret,
+            qr=_totp.qr_svg(uri),
+            chosen=looks.DEFAULT_LOOK,
+        )
+        resp.status_code = status
+        return resp
 
     @app.post("/setup")
     async def setup_submit(
@@ -275,11 +310,18 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         confirm: str = Form(...),
         look: str = Form(looks.DEFAULT_LOOK),
         mode: str = Form(looks.DEFAULT_MODE),
+        setup_code_value: str = Form("", alias="setup_code"),
+        secret: str = Form(""),
+        otp: str = Form(""),
     ) -> Response:
         if not studio.needs_setup():
             return RedirectResponse("/", 303)
         if not same_origin(request):
             raise HTTPException(403, "cross-origin request refused")
+        if not is_local(request):
+            return _remote_setup_submit(
+                request, password, confirm, look, mode, setup_code_value, secret, otp
+            )
         chosen = looks.effective_look(look)
         if len(password) < 10:
             return render(request, "setup.html", error="Use at least 10 characters.", chosen=chosen)
@@ -289,7 +331,66 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         studio.state.settings.look = chosen
         studio.state.settings.mode = looks.effective_mode(mode)
         studio.state.save_settings()
+        setup_code.clear(studio.state.dir)
         studio.state.audit("setup", remote=client_host(request))
+        return _login_response(studio, request, "/")
+
+    def _remote_setup_submit(
+        request: Request,
+        password: str,
+        confirm: str,
+        look: str,
+        mode: str,
+        code: str,
+        secret: str,
+        otp: str,
+    ) -> Response:
+        from constellation.studio import totp as _totp
+
+        host = request.headers.get("x-forwarded-for", "").split(",")[-1].strip() or (
+            request.client.host if request.client else ""
+        )
+        if studio.state.login_locked(host):
+            return _remote_setup_page(
+                request, "Too many wrong setup codes; try again later.", code, secret, 429
+            )
+        if not setup_code.matches(studio.state.dir, code):
+            studio.state.login_failed(host)
+            studio.state.audit("setup_bad_code", remote=host)
+            return _remote_setup_page(
+                request,
+                "That setup code is not right. Use the link printed when the server was installed.",
+                code,
+                secret,
+                403,
+            )
+        if len(password) < 10:
+            return _remote_setup_page(
+                request, "Use at least 10 characters for the password.", code, secret
+            )
+        if password != confirm:
+            return _remote_setup_page(request, "The two passwords differ.", code, secret)
+        if not secret or not _totp.verify(secret, otp.replace(" ", "")):
+            return _remote_setup_page(
+                request,
+                "That authenticator code didn't match. Scan the QR code again and type the current code.",
+                code,
+                secret,
+            )
+        s = studio.state.settings
+        s.password_hash = hash_password(password)
+        s.totp_secret = secret
+        s.remote_mode = True
+        # Reached through a proxy (Caddy, nginx or the server program): trust its client address.
+        s.trust_proxy = "x-forwarded-for" in request.headers
+        s.look = looks.effective_look(look)
+        s.mode = looks.effective_mode(mode)
+        studio.state.save_settings()
+        counter = _totp.match(secret, otp.replace(" ", ""))
+        if counter is not None:
+            studio.state.kv_set("totp_last_counter", counter)
+        setup_code.clear(studio.state.dir)
+        studio.state.audit("setup_remote", remote=host)
         return _login_response(studio, request, "/")
 
     @app.get("/login", response_class=HTMLResponse)
@@ -1262,15 +1363,27 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             for s in ws.servers
             for site in ws.sites
         }
+        studio_links = {
+            s.id: str(studio.state.kv_get(f"studio_setup_link:{s.id}", "") or "")
+            for s in ws.servers
+        }
         return render(
             request,
             "servers.html",
             servers=ws.servers,
             sites=ws.sites,
             connected=connected,
+            studio_links=studio_links,
             error=error,
             ok=ok,
         )
+
+    @app.post("/servers/{server_id}/studio-link/hide")
+    async def servers_studio_link_hide(
+        request: Request, server_id: str, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        studio.state.kv_set(f"studio_setup_link:{server_id}", "")
+        return RedirectResponse("/servers", 303)
 
     @app.post("/servers")
     async def servers_add(
@@ -1328,6 +1441,12 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
 
             return RedirectResponse(f"/servers?error={quote(str(e))}", 303)
         studio.state.audit("server_connected", f"{server_id}:{site_id}", client_host(request))
+        link = ""
+        with contextlib.suppress(Exception):
+            info = srv.server_status(server, admin_token.strip()).get("studio") or {}
+            link = str(info.get("setup_link") or "")
+        if link.startswith("https://"):
+            studio.state.kv_set(f"studio_setup_link:{server_id}", link)
         return RedirectResponse("/servers?ok=1", 303)
 
     @app.post("/servers/{server_id}/forget")
@@ -1711,6 +1830,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         proxy: str = "caddy",
         port: int = 8180,
         gopher: str = "",
+        studio_host: str = "",
     ) -> Response:
         """Step-by-step server setup and adding a site, with the user's names filled in."""
 
@@ -1726,6 +1846,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             "proxy": proxy if proxy in ("caddy", "nginx", "none") else "caddy",
             "port": port if 1024 <= port <= 65535 else 8180,
             "gopher": gopher == "on" or not request.query_params,
+            "studio": clean(studio_host),
         }
         g["host_or"] = g["host"] or "cms.example.org"
         g["ip_or"] = g["ip"] or "your server's IP address"

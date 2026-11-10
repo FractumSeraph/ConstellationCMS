@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Studio on a server, set up from one link: `server install --with-studio HOST` creates a
+  one-time setup code and prints `https://HOST/setup?code=…`; the server's admin status reports
+  the link, and a desktop studio shows it on its Servers page after connecting a site. The setup
+  page sets the password and the authenticator and turns on remote mode (trusting the proxy) in
+  one step; wrong codes lock out. `proxy-snippet` includes the studio's address. No SSH tunnel.
+- Studio security: until remote mode is on, a studio answers only requests addressed to its own
+  computer (password-only sign-in never faces the internet); the setup page, guarded by the
+  setup code, is the one exception.
+- Docs: `docs/studio-on-a-server.md` explains the studio, the server and the admin address.
 - Import: `constellation import publii-backup BACKUP SITE` reads a Publii backup `.tar` (or
   site folder) including its database, and adds every post and page the site lacks, drafts as
   drafts, with dates, tags, authors, SEO fields, images, featured images and internal links

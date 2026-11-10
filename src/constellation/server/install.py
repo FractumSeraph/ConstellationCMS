@@ -90,9 +90,13 @@ def install(
     cfg.https.plain_port = plain_port
     cfg.gopher.enabled = gopher
     if studio_hostname:
+        from constellation.studio import setup_code
+
         cfg.studio.enabled = True
         cfg.studio.hostname = studio_hostname.lower()
         cfg.studio.upstream = f"http://127.0.0.1:{studio_port}"
+        cfg.studio.state_dir = str(data_dir / "studio-state")
+        setup_code.ensure(data_dir / "studio-state")
     config_path = data_dir / "server.toml"
     save_server_config(config_path, cfg)
     with contextlib.suppress(OSError):
