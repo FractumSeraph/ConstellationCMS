@@ -8,6 +8,7 @@ import mimetypes
 import posixpath
 import re
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,7 +18,8 @@ from urllib.parse import urlsplit
 from markupsafe import Markup
 from slugify import slugify
 
-from constellation.core import feeds, umami
+from constellation.core import feeds, plugins, umami
+from constellation.core.build import features
 from constellation.core.build.images import ImageSet, make_variants
 from constellation.core.markdown.document import Document, Ref, Severity, Warning
 from constellation.core.markdown.parse import parse_markdown
@@ -201,7 +203,14 @@ def build_site(
     resolver = RefResolver(
         cfg, post_slugs={p.slug for p in site.posts}, page_slugs={p.slug for p in site.pages}
     )
-    docs = _parse_all(visible, pages, resolver)
+    loaded = plugins.load(site)
+    plugin_warnings = list(loaded.warnings)
+    docs = _parse_all(
+        visible,
+        pages,
+        resolver,
+        lambda item: plugins.expand(item.body, loaded, site, item, warnings=plugin_warnings),
+    )
     link_problems = _check_links(site, docs, visible, pages, now)
 
     image_sets = _image_sets(visible, pages, site) if "web" in wanted else {}
@@ -211,10 +220,12 @@ def build_site(
             continue
         pb = PlatformBuild(platform)
         pb.warnings.extend(link_problems)
+        pb.warnings.extend(plugin_warnings)
         env = make_environment(chain, platform, overrides=overrides if overrides.is_dir() else None)
         ctx = _Context(
             site, platform, env, chain, build, listed, docs, image_sets if platform == "web" else {}
         )
+        plugins.install_templates(env, loaded)
         for post in visible:
             ctx.render_post(post, pb)
         for page in pages:
@@ -227,12 +238,46 @@ def build_site(
         if platform == "web":
             ctx.copy_static(pb)
             ctx.render_404(pb)
+            ctx.render_search(pb)
+            _add_feature_assets(pb, cfg)
             for iset in image_sets.values():
                 for v in iset.variants:
                     pb.add(v.path.lstrip("/"), v.data, v.media_type)
             _add_umami(pb, cfg)
         build.platforms[platform] = pb
+    plugins.after_build(build, loaded, site)
     return build
+
+
+FEATURE_ASSETS = Path(__file__).resolve().parent.parent / "assets"
+
+
+def _add_feature_assets(pb: PlatformBuild, cfg: Any) -> None:
+    """Galleries, the image viewer, copy-link buttons, Mastodon comments and search, in any theme.
+
+    The stylesheet uses low-specificity selectors so a theme's own rules win; it is linked
+    before the theme's stylesheet when the page has one.
+    """
+    for name in ("features.css", "features.js"):
+        pb.add(
+            features.ASSET_PREFIX + name, b"", media_type_for(name), source=FEATURE_ASSETS / name
+        )
+    css = f'<link rel="stylesheet" href="/{features.ASSET_PREFIX}features.css">'.encode()
+    zoom = "" if cfg.features.lightbox else ' data-lightbox="off"'
+    js = f'<script defer src="/{features.ASSET_PREFIX}features.js"{zoom}></script>'.encode()
+    for f in pb.files.values():
+        if f.source is not None or not f.media_type.startswith("text/html"):
+            continue
+        lower = f.data.lower()
+        head = lower.find(b"<head>")
+        end = lower.find(b"</head>")
+        if head == -1 or end == -1:
+            continue  # forwarding pages and fragments
+        sheet = lower.find(b'<link rel="stylesheet"', head, end)
+        at = sheet if sheet != -1 else end
+        f.data = f.data[:at] + css + b"\n" + f.data[at:]
+        end = f.data.lower().find(b"</head>")
+        f.data = f.data[:end] + js + b"\n" + f.data[end:]
 
 
 def _add_umami(pb: PlatformBuild, cfg: Any) -> None:
@@ -296,14 +341,20 @@ def _image_sets(posts: list[Post], pages: list[Page], site: Site) -> dict[str, I
     return sets
 
 
-def _parse_all(posts: list[Post], pages: list[Page], resolver: RefResolver) -> dict[str, Document]:
+def _parse_all(
+    posts: list[Post],
+    pages: list[Page],
+    resolver: RefResolver,
+    source: Callable[[Any], str] | None = None,
+) -> dict[str, Document]:
     docs: dict[str, Document] = {}
 
     def resolve(href: str, is_image: bool) -> Ref:
         return resolver.resolve(href, is_image=is_image)
 
     for item in [*posts, *pages]:
-        docs[f"{item.kind}:{item.slug}"] = parse_markdown(item.body, resolve=resolve)
+        text = source(item) if source is not None else item.body
+        docs[f"{item.kind}:{item.slug}"] = parse_markdown(text, resolve=resolve)
     return docs
 
 
@@ -395,6 +446,7 @@ class _Context:
         self.site = site
         self.image_sets = image_sets
         self.bodies: dict[str, str] = {}
+        self.headings: dict[str, list[tuple[int, str, str]]] = {}
         self._gopher_text = ""
         self.summaries: dict[str, str] = {}
         self.cfg = site.config
@@ -464,6 +516,12 @@ class _Context:
                     "",
                 ),
                 "now": self.build.now,
+                "features": cfg.features,
+                "search_url": "/search/"
+                if platform == "web"
+                and cfg.features.search
+                and not any(p.slug == "search" for p in self.site.pages)
+                else "",
                 "hr": cfg.render.gemini.hr,
                 "gopher_item": self._gopher_item,
                 "gopher_info": lambda text: info_line(
@@ -508,7 +566,9 @@ class _Context:
             srcsets = {
                 path: iset.srcset() for path, iset in self.image_sets.items() if iset.srcset()
             }
-            res = HtmlRenderer(u, image_srcset=srcsets).render(doc)
+            html_renderer = HtmlRenderer(u, image_srcset=srcsets)
+            res = html_renderer.render(doc)
+            self.headings[f"{item.kind}:{item.slug}"] = html_renderer.headings
         summary = item.meta.summary or summary_text(doc, words=self.cfg.render.summary_words)
         if item.kind == "post":
             # Feeds carry readable text; on Gopher the body is a gophermap, so use the text file.
@@ -527,6 +587,10 @@ class _Context:
         )
         gem = self.cfg.platform("gemini")
         gem_path = platform_path(self.cfg, "gemini", item.kind, item.slug) if gem.enabled else ""
+        page_url = absolute_url(
+            self.cfg, self.platform, platform_path(self.cfg, self.platform, item.kind, item.slug)
+        )
+        on_web = self.platform == "web"
         return {
             "item": item,
             "body": rendered.body,
@@ -534,6 +598,17 @@ class _Context:
             "author": author,
             "web_url": web_url,
             "gemini_path": gem_path,
+            "page_url": page_url,
+            "toc": features.toc_entries(
+                self.headings.get(f"{item.kind}:{item.slug}", []), self.cfg, item.meta.toc
+            )
+            if on_web
+            else [],
+            "share_links": features.share_links(
+                self.cfg.features.share, web_url or page_url, item.meta.title
+            )
+            if on_web and item.kind == "post"
+            else [],
         }
 
     def render_post(self, post: Post, pb: PlatformBuild) -> None:
@@ -547,6 +622,21 @@ class _Context:
             self.listed[idx + 1] if idx is not None and idx + 1 < len(self.listed) else None
         )
         ctx["next_post"] = self.listed[idx - 1] if idx is not None and idx > 0 else None
+        ctx["related"] = features.related_posts(post, self.listed, self.cfg.features.related_posts)
+        ctx["comments"] = features.comments_context(
+            self.cfg, post, ctx["page_url"], platform_path(self.cfg, "web", "post", post.slug)
+        )
+        if post.meta.mastodon and features.mastodon_toot(post.meta.mastodon) is None:
+            pb.warnings.append(
+                Warning(
+                    "COMMENTS-MASTODON-URL",
+                    "warn",
+                    self.platform,
+                    0,
+                    f"post:{post.slug}: mastodon should be the toot's address, such as "
+                    "https://mastodon.social/@you/112233445566",
+                )
+            )
         ctx["featured_image"] = (
             url_for(
                 RefResolver(self.cfg).resolve(post.meta.image, is_image=True),
@@ -813,22 +903,23 @@ class _Context:
 
     def render_home(self, pb: PlatformBuild) -> None:
         summaries = self._summaries()
+        home_posts = features.pin_featured(self.listed, self.cfg)
         if self.platform == "gemini":
             text = self.env.get_template("home.gmi").render(
-                posts=self.listed, summaries=summaries, gemini_path="/"
+                posts=home_posts, summaries=summaries, gemini_path="/"
             )
             pb.add("index.gmi", _tidy(text, "gemini"))
             return
         if self.platform == "gopher":
             text = self.env.get_template("home.map").render(
-                posts=self.listed, summaries=summaries, gemini_path="/"
+                posts=home_posts, summaries=summaries, gemini_path="/"
             )
             pb.add("gophermap", _tidy(text, "gopher"))
             return
         per_page = max(1, self.cfg.platform("web").pagination)
-        pages = max(1, -(-len(self.listed) // per_page))
+        pages = max(1, -(-len(home_posts) // per_page))
         for n in range(1, pages + 1):
-            chunk = self.listed[(n - 1) * per_page : n * per_page]
+            chunk = home_posts[(n - 1) * per_page : n * per_page]
             pagination = {
                 "current": n,
                 "pages": pages,
@@ -839,6 +930,36 @@ class _Context:
                 posts=chunk, summaries=summaries, pagination=pagination, gemini_path="/"
             )
             pb.add("index.html" if n == 1 else f"page/{n}/index.html", _tidy(text, "web"))
+
+    def render_search(self, pb: PlatformBuild) -> None:
+        """A search page and its index, when [features] search is on."""
+        if not self.cfg.features.search:
+            return
+        if features.SEARCH_PATH in pb.files or any(p.slug == "search" for p in self.site.pages):
+            pb.warnings.append(
+                Warning(
+                    "SEARCH-PATH-TAKEN",
+                    "warn",
+                    "web",
+                    0,
+                    "A page already uses /search/, so the search page was not made. Rename the "
+                    "page or turn search off under [features].",
+                )
+            )
+            return
+        entries: list[tuple[Post | Page, str, Document, str]] = []
+        summaries = self._summaries()
+        for p in self.listed:
+            path = platform_path(self.cfg, "web", "post", p.slug)
+            entries.append((p, path, self.docs[f"post:{p.slug}"], summaries.get(p.slug, "")))
+        for pg in self.site.pages:
+            key = f"page:{pg.slug}"
+            if pg.meta.status == "published" and not pg.meta.seo.noindex and key in self.docs:
+                path = platform_path(self.cfg, "web", "page", pg.slug)
+                entries.append((pg, path, self.docs[key], pg.meta.summary))
+        pb.add("search.json", features.search_index(entries), "application/json")
+        text = self.env.get_template("search.html").render(gemini_path="/")
+        pb.add(features.SEARCH_PATH, _tidy(text, "web"))
 
     def render_404(self, pb: PlatformBuild) -> None:
         text = self.env.get_template("404.html").render(gemini_path="/")

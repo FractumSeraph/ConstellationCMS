@@ -26,10 +26,12 @@
     {% if series %}<p class="post-series">Part {{ series.part }} of <a href="{{ url_for('series', series.slug) }}">{{ series.title }}</a></p>{% endif %}
   </header>
   {% if featured_image %}<figure class="featured"><img src="{{ featured_image }}" alt="{{ item.meta.image_alt }}"{% if featured_srcset %} srcset="{{ featured_srcset }}" sizes="(max-width: 64rem) 100vw, 64rem"{% endif %}></figure>{% endif %}
+  {% include "partials/toc.html" %}
   <div class="post-body">
 {{ body | safe }}
   </div>
   <footer class="post-footer">
+    {% include "partials/share.html" %}
     {% if theme.show_updated and item.updated and item.updated.date() != item.date.date() %}<p class="post-updated">This article was updated on <time datetime="{{ item.updated | isoformat }}">{{ item.updated | date('long') }}</time></p>{% endif %}
     {% if prev_post or next_post %}
     <nav class="post-nav" aria-labelledby="post-nav-title">
@@ -40,6 +42,8 @@
       </div>
     </nav>
     {% endif %}
+    {% include "partials/related.html" %}
   </footer>
+  {% include "partials/comments.html" %}
 </article>
 {% endblock %}

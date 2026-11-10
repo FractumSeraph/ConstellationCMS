@@ -1,0 +1,4 @@
+{% if related %}<section class="related-posts" aria-labelledby="related-title">
+  <h2 id="related-title">Related posts</h2>
+  <ul>{% for p in related %}<li><a href="{{ url_for('post', p.slug) }}">{{ p.meta.title }}</a> <time datetime="{{ p.date | isoformat }}">{{ p.date | date('long') }}</time></li>{% endfor %}</ul>
+</section>{% endif %}

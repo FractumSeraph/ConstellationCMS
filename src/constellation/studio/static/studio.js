@@ -58,3 +58,15 @@ document.addEventListener("click", async (e) => {
   }
   setTimeout(() => { btn.textContent = "Copy"; }, 1500);
 });
+
+// Show only the settings group that matches a select's value (comments provider, for example).
+function syncGroups(select) {
+  const group = select.dataset.showGroup;
+  document.querySelectorAll(`[data-group="${group}"]`).forEach((el) => {
+    el.hidden = el.dataset.when !== select.value;
+  });
+}
+document.querySelectorAll("select[data-show-group]").forEach((select) => {
+  syncGroups(select);
+  select.addEventListener("change", () => syncGroups(select));
+});

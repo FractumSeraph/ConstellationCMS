@@ -1,7 +1,8 @@
 {# One post in a list: the title with its dotted rule, date :: author, tags, summary, read more.
    Included by home.html and list.html with `post` set. #}
-<article class="entry">
+<article class="entry{% if post.meta.featured %} entry--featured{% endif %}">
   <header>
+    {% include "partials/featured_label.html" %}
     <h2 class="entry__title"><a href="{{ url_for('post', post.slug) }}">{{ post.meta.title }}</a></h2>
     <p class="entry__meta"><time datetime="{{ post.date | isoformat }}">{{ post.date | date('long') }}</time>
     {%- if theme.list_tags %}{% set a = site.config.author_by_id(post.meta.author or site.config.site.author) %}{% if a %}<span class="entry__author"><a href="{{ url_for('author', a.id) }}">{{ a.name }}</a></span>{% endif %}{% endif %}</p>

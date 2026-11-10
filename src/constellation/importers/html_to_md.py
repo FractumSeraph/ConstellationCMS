@@ -27,6 +27,17 @@ class _Raw:
         self.parts: list[str] = []
 
 
+class _Gallery:
+    """A Publii-style gallery: figures holding a link to the full image and a thumbnail."""
+
+    def __init__(self, cols: str) -> None:
+        self.cols = cols if cols.isdigit() else ""
+        self.depth = 0
+        self.href = ""
+        self.caption = False
+        self.items: list[list[str]] = []  # [src, alt, caption]
+
+
 class _Converter(HTMLParser):
     def __init__(self, url: Callable[[str, bool], str]) -> None:
         super().__init__(convert_charrefs=True)
@@ -41,6 +52,7 @@ class _Converter(HTMLParser):
         self.table: list[list[str]] | None = None
         self.cell: list[str] | None = None
         self.header_rows = 0
+        self.gallery: _Gallery | None = None
 
     # -- output helpers -------------------------------------------------------------------------
     def w(self, text: str) -> None:
@@ -86,6 +98,21 @@ class _Converter(HTMLParser):
         if self.skip or tag in _SKIP:
             if tag not in _VOID:
                 self.skip += 1
+            return
+        if self.gallery is not None:
+            g = self.gallery
+            if tag == "div":
+                g.depth += 1
+            elif tag == "a":
+                g.href = a.get("href", "")
+            elif tag == "img":
+                src = g.href or a.get("src", "")
+                g.items.append([self.url(src, True), a.get("alt", "").replace("]", ""), ""])
+            elif tag == "figcaption":
+                g.caption = True
+            return
+        if tag == "div" and "gallery" in a.get("class", "").split():
+            self.gallery = _Gallery(a.get("data-columns", ""))
             return
         if tag in _BLOCK_RAW:
             self.raw = _Raw(tag)
@@ -184,6 +211,19 @@ class _Converter(HTMLParser):
             if tag not in _VOID:
                 self.skip -= 1
             return
+        if self.gallery is not None:
+            g = self.gallery
+            if tag == "figcaption":
+                g.caption = False
+            elif tag == "a":
+                g.href = ""
+            elif tag == "div":
+                if g.depth:
+                    g.depth -= 1
+                else:
+                    self.gallery = None
+                    self.write_gallery(g)
+            return
         if self.table is not None:
             if tag in ("td", "th") and self.cell is not None:
                 text = re.sub(r"\s+", " ", "".join(self.cell)).strip().replace("|", "\\|")
@@ -236,6 +276,11 @@ class _Converter(HTMLParser):
             return
         if self.skip:
             return
+        if self.gallery is not None:
+            if self.gallery.caption and self.gallery.items:
+                item = self.gallery.items[-1]
+                item[2] = (item[2] + re.sub(r"\s+", " ", data)).replace('"', "'")
+            return
         if self.pre:
             self.w(data)
             return
@@ -247,6 +292,18 @@ class _Converter(HTMLParser):
             if text:
                 self.w("> " * self.quote)
         self.w(text)
+
+    def write_gallery(self, g: _Gallery) -> None:
+        if not g.items:
+            return
+        self.block()
+        lines = [f"::: gallery {g.cols}".rstrip()]
+        for src, alt, caption in g.items:
+            cap = caption.strip()
+            lines.append(f"![{alt}]({src}" + (f' "{cap}"' if cap else "") + ")")
+        lines.append(":::")
+        self.w("\n".join(lines))
+        self.block()
 
     def write_table(self, rows: list[list[str]]) -> None:
         rows = [r for r in rows if r]

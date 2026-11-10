@@ -18,11 +18,15 @@
     <label>Categories <input id="m-categories" value="{{ item.meta.categories | join(', ') if item.meta.categories else '' }}"></label>
     <label>Series <input id="m-series" value="{{ item.meta.series or '' }}"></label>
     <label>Part <input id="m-series_part" type="number" min="1" value="{{ item.meta.series_part or '' }}"></label>
+    <label class="check"><input type="checkbox" id="m-featured" {% if item.meta.featured %}checked{% endif %}> Featured (pinned to the top of the home page)</label>
+    <label class="check"><input type="checkbox" id="m-comments" {% if item.meta.comments is not sameas false %}checked{% endif %}> Show comments</label>
+    <label>Mastodon toot for comments <input id="m-mastodon" type="url" value="{{ item.meta.mastodon or '' }}" placeholder="https://mastodon.social/@you/1122334455"></label>
     {% else %}
     <label>Menu order <input id="m-menu_order" type="number" value="{{ item.meta.menu_order or '' }}"></label>
     <label>Template <input id="m-template" value="{{ item.meta.template or '' }}" placeholder="page"></label>
     {% endif %}
     <label>Author <input id="m-author" list="authors" value="{{ item.meta.author or '' }}"><datalist id="authors">{% for a in authors %}<option value="{{ a }}">{% endfor %}</datalist></label>
+    <label>Table of contents <select id="m-toc">{% for v, label in [('', 'Site setting'), ('true', 'Always'), ('false', 'Never')] %}<option value="{{ v }}" {% if (item.meta.toc is sameas true and v == 'true') or (item.meta.toc is sameas false and v == 'false') or (item.meta.toc is none and v == '') %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
     <label>Summary <textarea id="m-summary" rows="3">{{ item.meta.summary or '' }}</textarea></label>
     <label>Featured image <select id="m-image"><option value="">none</option>{% if item.meta.image and item.meta.image not in item.media %}<option value="{{ item.meta.image }}" selected>{{ item.meta.image }}</option>{% endif %}{% for m in item.media %}<option value="{{ m }}" {% if item.meta.image == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
     <label>Image alt <input id="m-image_alt" value="{{ item.meta.image_alt or '' }}"></label>
@@ -42,12 +46,36 @@
     <div class="editor-toolbar">
       <span id="save-state" class="muted">loaded</span>
       <button id="save-now" class="primary" {% if read_only %}disabled{% endif %}>Save</button>
+      <span class="mode-switch" role="radiogroup" aria-label="Editing mode">
+        <label class="toggle"><input type="radio" name="mode" value="markdown" checked> Markdown</label>
+        <label class="toggle"><input type="radio" name="mode" value="visual"> Visual</label>
+      </span>
       <span class="spacer"></span>
       <label class="toggle"><input type="radio" name="pv" value="web" checked> Web</label>
       {% if gemini_enabled %}<label class="toggle"><input type="radio" name="pv" value="gemini"> Gemini</label>{% endif %}
       {% if gopher_enabled %}<label class="toggle"><input type="radio" name="pv" value="gopher"> Gopher</label>{% endif %}
     </div>
     <div id="cm" class="cm-host"></div>
+    <div id="visual-bar" class="visual-bar" role="toolbar" aria-label="Formatting" hidden>
+      <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><strong>B</strong></button>
+      <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><em>I</em></button>
+      <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+      <button type="button" data-cmd="code" title="Inline code"><code>&lt;/&gt;</code></button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="h2" title="Heading">H2</button>
+      <button type="button" data-cmd="h3" title="Smaller heading">H3</button>
+      <button type="button" data-cmd="p" title="Normal text">¶</button>
+      <button type="button" data-cmd="quote" title="Quote">“ ”</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="ul" title="Bulleted list">• List</button>
+      <button type="button" data-cmd="ol" title="Numbered list">1. List</button>
+      <button type="button" data-cmd="hr" title="Divider">―</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="link" title="Link (Ctrl+K)">Link</button>
+      <button type="button" data-cmd="unlink" title="Remove link">Unlink</button>
+      <span class="muted small visual-note">Grey blocks keep their Markdown; edit them in Markdown mode.</span>
+    </div>
+    <div id="visual" class="visual-host prose" hidden spellcheck="true" aria-label="Visual editor"></div>
   </section>
   <section class="preview-column">
     <div id="preview-web" class="preview-pane"><iframe id="preview-frame" title="Web preview" src="about:blank" sandbox="allow-same-origin"></iframe></div>

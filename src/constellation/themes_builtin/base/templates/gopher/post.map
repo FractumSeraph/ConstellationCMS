@@ -3,7 +3,11 @@
 {{ gopher_item("0", "Plain text version", text_selector) }}
 {{ gopher_info("") }}
 {{ body }}{{ gopher_info("- - -") }}
-{% if prev_post %}{{ gopher_item("1", "Previous: " ~ prev_post.meta.title, url_for('post', prev_post.slug)) }}
+{% if related %}{{ gopher_info("Related posts:") }}
+{% for p in related %}{{ gopher_item("1", p.meta.title, url_for('post', p.slug)) }}
+{% endfor %}{{ gopher_info("") }}
+{% endif %}{% if comments and comments.provider == 'mastodon' %}{{ gopher_item("h", "Comments on Mastodon", "URL:" ~ comments.toot) }}
+{% endif %}{% if prev_post %}{{ gopher_item("1", "Previous: " ~ prev_post.meta.title, url_for('post', prev_post.slug)) }}
 {% endif %}{% if next_post %}{{ gopher_item("1", "Next: " ~ next_post.meta.title, url_for('post', next_post.slug)) }}
 {% endif %}{% if web_url %}{{ gopher_item("h", "Read this post on the web", "URL:" ~ web_url) }}
 {% endif %}{{ gopher_item("1", "Home", "/") }}

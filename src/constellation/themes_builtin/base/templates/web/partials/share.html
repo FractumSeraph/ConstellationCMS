@@ -1,0 +1,4 @@
+{% if share_links %}<ul class="share-links" aria-label="Share this post">
+  <li class="share-title">Share:</li>
+  {% for s in share_links %}<li class="share-{{ s.network }}">{% if s.network == 'copy' %}<button type="button" data-copy-url="{{ s.url }}">{{ s.label }}</button>{% else %}<a href="{{ s.url }}" rel="noopener nofollow" target="_blank">{{ s.label }}</a>{% endif %}</li>{% endfor %}
+</ul>{% endif %}

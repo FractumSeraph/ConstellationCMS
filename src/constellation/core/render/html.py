@@ -6,7 +6,14 @@ from html import escape
 
 from slugify import slugify
 
-from constellation.core.markdown.document import Block, Document, Inline, inline_text
+from constellation.core.markdown.document import (
+    Block,
+    Document,
+    Inline,
+    gallery_extras,
+    gallery_images,
+    inline_text,
+)
 from constellation.core.render.base import RenderResult, UrlFor, WarningSink
 
 
@@ -16,12 +23,15 @@ class HtmlRenderer:
     def __init__(self, url_for: UrlFor, *, image_srcset: dict[str, str] | None = None) -> None:
         self.url_for = url_for
         self.image_srcset = image_srcset or {}
+        self.headings: list[tuple[int, str, str]] = []
 
     def render(self, doc: Document) -> RenderResult:
         st = _State(self, doc)
         out = st.blocks(doc.blocks)
         if doc.footnote_order:
             out += st.footnotes()
+        # Headings in order, for a table of contents: (level as shown, text, id).
+        self.headings = st.headings
         return RenderResult(out, st.warn.items)
 
 
@@ -31,6 +41,8 @@ class _State:
         self.doc = doc
         self.warn = WarningSink("web")
         self.heading_ids: set[str] = set()
+        self.headings: list[tuple[int, str, str]] = []
+        self.galleries = 0
 
     def blocks(self, blocks: list[Block]) -> str:
         return "".join(self.block(b) for b in blocks)
@@ -52,7 +64,9 @@ class _State:
                 )
                 level = 2
             text = self.inlines(b.inlines)
-            hid = self._heading_id(inline_text(b.inlines))
+            plain = inline_text(b.inlines)
+            hid = self._heading_id(plain)
+            self.headings.append((level, plain.strip(), hid))
             return f'<h{level} id="{hid}">{text}</h{level}>\n'
         if k == "list":
             tag = "ol" if b.ordered else "ul"
@@ -73,6 +87,8 @@ class _State:
             return b.text if b.text.endswith("\n") else b.text + "\n"
         if k == "container":
             return self.blocks(b.children) if b.info == "web" else ""
+        if k == "gallery":
+            return self.gallery(b)
         if k == "deflist":
             parts = ["<dl>\n"]
             for c in b.children:
@@ -132,6 +148,45 @@ class _State:
         if not img.text.strip():
             self.warn.add("IMG-NO-ALT", "warn", 0, "Image has no alt text.")
         return f'<figure><img src="{escape(src, quote=True)}" alt="{alt}" loading="lazy"{extra}>{cap}</figure>\n'
+
+    def gallery(self, b: Block) -> str:
+        """A grid of images; each links to the full-size file, which the lightbox opens."""
+        images = gallery_images(b)
+        if gallery_extras(b):
+            self.warn.add(
+                "GALLERY-NOT-IMAGE",
+                "warn",
+                b.line[0],
+                "A gallery holds something other than images; only the images are shown.",
+            )
+        if not images:
+            return ""
+        self.galleries += 1
+        group = f"gallery-{self.galleries}"
+        cols = f' style="--gallery-cols:{int(b.info)}"' if b.info.isdigit() else ""
+        parts = [f'<div class="gallery"{cols}>\n']
+        for img in images:
+            assert img.ref is not None
+            src = self.r.url_for(img.ref)
+            srcset = self.r.image_srcset.get(src)
+            extra = (
+                f' srcset="{escape(srcset, quote=True)}" sizes="(max-width: 48rem) 50vw, 20rem"'
+                if srcset
+                else ""
+            )
+            if not img.text.strip():
+                self.warn.add("IMG-NO-ALT", "warn", b.line[0], "Image has no alt text.")
+            cap = escape(img.title) if img.title else ""
+            title = f' data-caption="{escape(img.title, quote=True)}"' if img.title else ""
+            parts.append(
+                f'<figure class="gallery-item"><a href="{escape(src, quote=True)}" '
+                f'data-lightbox="{group}"{title}><img src="{escape(src, quote=True)}" '
+                f'alt="{escape(img.text, quote=True)}" loading="lazy"{extra}></a>'
+                + (f"<figcaption>{cap}</figcaption>" if cap else "")
+                + "</figure>\n"
+            )
+        parts.append("</div>\n")
+        return "".join(parts)
 
     def inlines(self, inlines: list[Inline]) -> str:
         out: list[str] = []

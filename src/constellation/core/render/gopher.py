@@ -8,7 +8,14 @@ import unicodedata
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from constellation.core.markdown.document import Alternative, Block, Document, Inline, inline_text
+from constellation.core.markdown.document import (
+    Alternative,
+    Block,
+    Document,
+    Inline,
+    gallery_images,
+    inline_text,
+)
 from constellation.core.models import RenderGopher
 from constellation.core.render.base import (
     RenderResult,
@@ -324,6 +331,9 @@ class _State:
                 )
                 self.para(text)
                 self.blank()
+        elif k == "gallery":
+            for img in gallery_images(b):
+                self.block(Block("paragraph", b.line, inlines=[img]))
         elif k == "container":
             if b.info == "gopher":
                 for raw in b.text.split("\n"):

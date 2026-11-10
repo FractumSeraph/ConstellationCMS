@@ -76,6 +76,7 @@ class Block:
         "hr",
         "html",
         "container",
+        "gallery",
         "deflist",
         "def_term",
         "def_desc",
@@ -163,3 +164,25 @@ def walk_blocks(blocks: list[Block]) -> list[Block]:
         out.append(b)
         out.extend(walk_blocks(b.children))
     return out
+
+
+def gallery_images(block: Block) -> list[Inline]:
+    """The images inside a ``gallery`` block, in order."""
+    out: list[Inline] = []
+    for b in walk_blocks(block.children):
+        out.extend(i for i in walk_inlines(b.inlines) if i.kind == "image")
+    return out
+
+
+def gallery_extras(block: Block) -> bool:
+    """True when a gallery holds something other than images (it is dropped on every platform)."""
+    for b in walk_blocks(block.children):
+        for i in b.inlines:
+            if i.kind == "image" or (
+                i.kind in ("text", "soft_break", "hard_break") and not i.text.strip()
+            ):
+                continue
+            return True
+        if b.kind != "paragraph":
+            return True
+    return False

@@ -1,0 +1,4 @@
+{% if toc %}<nav class="toc" aria-labelledby="toc-title">
+  <p class="toc-title" id="toc-title">Contents</p>
+  <ol>{% for h in toc %}<li class="toc-{{ h.level }}"><a href="#{{ h.id }}">{{ h.text }}</a></li>{% endfor %}</ol>
+</nav>{% endif %}

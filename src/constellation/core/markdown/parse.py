@@ -26,7 +26,7 @@ TASK_RX = re.compile(r"^\[( |x|X)\]\s+")
 
 def make_parser() -> MarkdownIt:
     md = MarkdownIt("gfm-like").use(footnote_plugin).use(deflist_plugin)
-    for name in CONTAINERS:
+    for name in (*CONTAINERS, "gallery"):
         md.use(container_plugin, name)
     md.enable("table")
     return md
@@ -113,6 +113,11 @@ class _Builder:
             return [self.table(node)]
         if t == "dl":
             return [self.deflist(node)]
+        if t == "container_gallery":
+            # ``::: gallery`` or ``::: gallery 3`` (columns); the images inside, one per line.
+            words = (node.info or "").split()
+            cols = words[1] if len(words) > 1 and words[1].isdigit() else ""
+            return [Block("gallery", line, info=cols, children=self.blocks(node.children))]
         if t.startswith("container_"):
             platform = t[len("container_only-") :]
             raw = "\n".join(self.lines[line[0] : line[1]]) if line[1] > line[0] else ""

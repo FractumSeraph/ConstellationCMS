@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Reader features, in every theme and on any host (see `docs/features.md`):
+  - Galleries: images between `::: gallery [columns]` and `:::` form a grid; on Gemini and
+    Gopher each becomes a link. Publii galleries import as gallery blocks.
+  - An image viewer: gallery images and (with `[features] lightbox`) any post image open full
+    size, with keyboard, swipe and arrow navigation.
+  - Search: `/search/` and a search box, reading a `search.json` the build writes; no server
+    needed.
+  - A table of contents (`[features] toc`, `toc_min_headings`, or `toc:` per post).
+  - Related posts by shared tags (`related_posts`), on web, Gemini and Gopher.
+  - Featured posts (`featured: true`) pinned to the top of the home page and labelled.
+  - Share links without scripts (`[features] share`): Mastodon, Bluesky, Facebook, X, Reddit,
+    LinkedIn, Hacker News, Telegram, WhatsApp, email and Copy link.
+  - Comments (`[comments]`): giscus, Disqus, Mastodon replies (the post's `mastodon:` toot; a
+    link on Gemini and Gopher), or any embed code. `comments: false` turns them off per post.
+  - Theme partials for each (`partials/toc.html` and so on) and one shared script and
+    stylesheet (`/assets/constellation/`) whose rules every theme overrides.
+- Studio: a visual editing mode beside Markdown. The file stays Markdown; untouched blocks are
+  written back exactly, and blocks visual mode cannot represent are kept locked. See
+  `docs/visual-editor.md`.
+- Studio: Settings has Reader features, Comments and Plugins sections; the editor's Details tab
+  has Featured, Show comments, Mastodon toot and Table of contents.
+- Plugins: Python plugins from the workspace's `plugins` folder or installed packages, turned on
+  per site, with shortcodes (per-platform output), transforms, template filters and globals,
+  after-build hooks and settings shown in the studio. A broken plugin is an error that blocks
+  publishing. Example: `examples/plugins/youtube.py`; see `docs/plugins.md`.
 - Publishing: GitHub Pages (or any git repository) as an export target, `github:owner/repo`
   or `git:URL`, with an optional `#branch`. Each publish commits the web build and pushes it
   with git's own sign-in, adds `CNAME` and `.nojekyll`, and keeps the repository's README,

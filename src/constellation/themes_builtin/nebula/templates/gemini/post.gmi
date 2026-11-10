@@ -6,6 +6,7 @@
 {% endfor %}{% if series %}=> {{ url_for('series', series.slug) }} Part {{ series.part }} of "{{ series.title }}"
 {% endif %}
 {{ body }}
+{% include "partials/after_post.gmi" %}
 ```ornament
  ✦ · ✦ · ✦
 ```

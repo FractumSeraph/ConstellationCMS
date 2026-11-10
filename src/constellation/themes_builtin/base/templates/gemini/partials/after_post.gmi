@@ -1,0 +1,6 @@
+{% if related %}
+### Related posts
+{% for p in related %}=> {{ url_for('post', p.slug) }} {{ p.meta.title }}
+{% endfor %}{% endif %}{% if comments and comments.provider == 'mastodon' %}
+=> {{ comments.toot }} Comments on Mastodon
+{% endif %}

@@ -3,7 +3,8 @@
 {% block content %}
 <section class="post-list">
 {% for post in posts %}
-  <article class="post-summary">
+  <article class="post-summary{% if post.meta.featured %} featured{% endif %}">
+    {% include "partials/featured_label.html" %}
     <h2><a href="{{ url_for('post', post.slug) }}">{{ post.meta.title }}</a></h2>
     <p class="post-meta"><time datetime="{{ post.date | isoformat }}">{{ post.date | date('long') }}</time></p>
     {% if summaries[post.slug] %}<p>{{ summaries[post.slug] }}</p>{% endif %}

@@ -159,4 +159,22 @@ gh auth setup-git{% endset %}
     </li>
   </ol>
 </section>
+<section class="card guide" id="plugins">
+  <h2>Optional · Add a plugin</h2>
+  <p>Plugins are small Python files that add shortcodes (such as <code>{{ '{{< youtube VIDEO-ID >}}' }}</code>), template filters and build steps. They run on this computer when a site is built, never on the server, so only use plugins you trust.</p>
+  <ol class="steps">
+    <li>
+      <h3>Put the file in the plugins folder</h3>
+      <p>Copy the plugin (a <code>.py</code> file, or a folder with <code>__init__.py</code>) into the <code>plugins</code> folder next to <code>sites</code> in your workspace. ConstellationCMS includes an example, <code>examples/plugins/youtube.py</code>.</p>
+    </li>
+    <li>
+      <h3>Turn it on for a site</h3>
+      <p>Open the site's <strong>Settings</strong>, scroll to <strong>Plugins</strong>, tick it, fill in its settings and save. The editor's previews use it straight away.</p>
+    </li>
+    <li>
+      <h3>Write your own</h3>
+      <p>A plugin defines <code>plugin = Plugin("name", "What it does")</code> and decorates functions with <code>@plugin.shortcode("name")</code>, <code>@plugin.transform</code>, <code>@plugin.filter("name")</code> or <code>@plugin.after_build</code>. <code>docs/plugins.md</code> in ConstellationCMS describes each one.</p>
+    </li>
+  </ol>
+</section>
 {% endblock %}

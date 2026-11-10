@@ -88,6 +88,8 @@ def _block(b: Block) -> list[str]:
         from constellation.core.render.base import collapse_ws, strip_tags
 
         return [collapse_ws(strip_tags(b.text))]
+    if k == "gallery":
+        return []
     if k == "container":
         return [t for c in b.children for t in _block(c)] if b.info == "web" else []
     if k == "deflist":

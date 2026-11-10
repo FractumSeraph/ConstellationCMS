@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -126,6 +127,90 @@ class RenderConfig(Strict):
     gopher: RenderGopher = Field(default_factory=RenderGopher)
 
 
+SHARE_NETWORKS = (
+    "mastodon",
+    "bluesky",
+    "facebook",
+    "x",
+    "reddit",
+    "linkedin",
+    "hackernews",
+    "telegram",
+    "whatsapp",
+    "email",
+    "copy",
+)
+
+
+class Features(Strict):
+    """Reader-facing extras on the web version (and, where it makes sense, Gemini and Gopher)."""
+
+    # A table of contents above posts with at least ``toc_min_headings`` headings. A post's
+    # ``toc: true`` or ``toc: false`` front matter overrides this either way.
+    toc: bool = False
+    toc_min_headings: int = Field(default=3, ge=1, le=50)
+    # Posts sharing the most tags, shown under each post; 0 turns it off.
+    related_posts: int = Field(default=3, ge=0, le=12)
+    # Click an image to see it full size; galleries always open in the viewer.
+    lightbox: bool = True
+    # A search page at /search/ that works without a server (it reads search.json).
+    search: bool = True
+    # Plain share links (no scripts or trackers), in this order.
+    share: list[str] = Field(default_factory=list)
+    # Pin posts marked ``featured: true`` to the top of the first home page.
+    pin_featured: bool = True
+
+    @field_validator("share")
+    @classmethod
+    def _known_networks(cls, v: list[str]) -> list[str]:
+        unknown = [n for n in v if n not in SHARE_NETWORKS]
+        if unknown:
+            raise ValueError(
+                f"unknown share network {unknown[0]!r}; choose from {', '.join(SHARE_NETWORKS)}"
+            )
+        return list(dict.fromkeys(v))
+
+
+class Comments(Strict):
+    """Comments under posts on the web. Pages and lists never show them."""
+
+    provider: Literal["", "giscus", "disqus", "mastodon", "custom"] = ""
+    # giscus (https://giscus.app): copy these from the configuration it generates.
+    repo: str = ""
+    repo_id: str = ""
+    category: str = ""
+    category_id: str = ""
+    mapping: str = "pathname"
+    giscus_theme: str = "preferred_color_scheme"
+    # Disqus: the site's shortname.
+    shortname: str = ""
+    # Mastodon: each post names its toot with ``mastodon: https://instance/@you/123``.
+    # custom: any embed code, shown under every post.
+    html: str = ""
+
+    @field_validator("repo")
+    @classmethod
+    def _repo(cls, v: str) -> str:
+        if v and not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", v):
+            raise ValueError("giscus repo must look like owner/repository")
+        return v
+
+    @field_validator("shortname")
+    @classmethod
+    def _shortname(cls, v: str) -> str:
+        if v and not re.fullmatch(r"[A-Za-z0-9-]+", v):
+            raise ValueError("a Disqus shortname is letters, digits and dashes")
+        return v
+
+
+class PluginsConfig(Strict):
+    """Python plugins (see ``constellation.core.plugins``) turned on for this site."""
+
+    enabled: list[str] = Field(default_factory=list)
+    # Settings per plugin: [plugins.settings.<name>] key = value
+    settings: dict[str, dict[str, object]] = Field(default_factory=dict)
+
+
 class CalendarConfig(Strict):
     display: list[str] = Field(default_factory=lambda: ["gregorian"])
     numerals: str = "arabic"
@@ -189,6 +274,9 @@ class SiteConfig(Strict):
     render: RenderConfig = Field(default_factory=RenderConfig)
     calendar: CalendarConfig = Field(default_factory=CalendarConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    features: Features = Field(default_factory=Features)
+    comments: Comments = Field(default_factory=Comments)
+    plugins: PluginsConfig = Field(default_factory=PluginsConfig)
     theme: dict[str, object] = Field(default_factory=dict)
 
     def enabled_platforms(self) -> list[str]:
@@ -232,10 +320,18 @@ class ItemMeta(BaseModel):
     seo: SeoMeta = Field(default_factory=SeoMeta)
     platforms: dict[str, PlatformMeta] = Field(default_factory=dict)
     template: str = ""
+    # None follows the site's [features] toc setting.
+    toc: bool | None = None
 
 
 class PostMeta(ItemMeta):
     tags: list[str] = Field(default_factory=list)
+    # Pinned to the top of the home page and marked as featured in lists.
+    featured: bool = False
+    # Show comments under this post (when the site has a comments provider).
+    comments: bool = True
+    # The toot whose replies are this post's comments, for the Mastodon provider.
+    mastodon: str = ""
     categories: list[str] = Field(default_factory=list)
     series: str = ""
     series_part: int | None = None

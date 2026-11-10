@@ -1,0 +1,21 @@
+{% if comments %}<section class="comments" id="comments" aria-labelledby="comments-title">
+  <h2 id="comments-title">Comments</h2>
+  {% if comments.provider == 'giscus' %}
+  <script src="https://giscus.app/client.js" data-repo="{{ comments.repo }}" data-repo-id="{{ comments.repo_id }}" data-category="{{ comments.category }}" data-category-id="{{ comments.category_id }}" data-mapping="{{ comments.mapping }}" data-strict="0" data-reactions-enabled="1" data-emit-metadata="0" data-input-position="bottom" data-theme="{{ comments.theme }}" data-lang="{{ comments.lang }}" data-loading="lazy" crossorigin="anonymous" async></script>
+  {% elif comments.provider == 'disqus' %}
+  <div id="disqus_thread"></div>
+  <script>
+  var disqus_config = function () { this.page.url = {{ comments.url | tojson }}; this.page.identifier = {{ comments.identifier | tojson }}; };
+  (function () { var d = document, s = d.createElement("script"); s.src = "https://" + {{ comments.shortname | tojson }} + ".disqus.com/embed.js"; s.setAttribute("data-timestamp", +new Date()); (d.head || d.body).appendChild(s); })();
+  </script>
+  <noscript>Comments are shown with Disqus, which needs JavaScript.</noscript>
+  {% elif comments.provider == 'mastodon' %}
+  <div class="cms-mastodon-comments" data-host="{{ comments.host }}" data-id="{{ comments.id }}">
+    <p>Reply to <a href="{{ comments.toot }}" rel="noopener">this post on Mastodon</a> (or anywhere on the fediverse) and your reply shows up here.</p>
+    <p class="cms-mastodon-status" aria-live="polite">Loading replies…</p>
+    <div class="cms-mastodon-list"></div>
+  </div>
+  {% elif comments.provider == 'custom' %}
+  {{ comments.html | safe }}
+  {% endif %}
+</section>{% endif %}

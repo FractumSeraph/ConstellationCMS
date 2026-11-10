@@ -94,6 +94,14 @@ If the Publii site was published to GitHub Pages, ConstellationCMS can keep publ
 version there, to the same repository, while your server serves Gemini and Gopher under a name
 of their own. See [`github-pages.md`](github-pages.md).
 
+## Publii features
+
+Publii's galleries, lightbox, search, table of contents, related posts, featured posts, share
+buttons and comments all have counterparts: see [`features.md`](features.md). Galleries come
+across in the import; the rest are switched on under Settings → Reader features and Comments.
+Publii's visual editor corresponds to the editor's [visual mode](visual-editor.md), and its
+plugins to [Python plugins](plugins.md).
+
 ## Known differences
 
 - Author pages list every post on one page instead of six at a time.

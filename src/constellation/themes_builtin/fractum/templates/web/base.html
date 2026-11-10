@@ -27,10 +27,10 @@
 <header class="site-header">
   <div class="site-brand{% if theme.title_label %} site-brand--label{% endif %}">
     <a class="site-title" href="/">{{ site.config.site.title }}</a>
-    {% if site.config.menu.items %}<button class="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false">Menu</button>{% endif %}
+    {% if site.config.menu.items or search_url %}<button class="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false">Menu</button>{% endif %}
   </div>
   {% if site.config.site.tagline %}<p class="site-tagline">{{ site.config.site.tagline }}</p>{% endif %}
-  {% if site.config.menu.items %}
+  {% if site.config.menu.items or search_url %}
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <ul class="menu">
     {% for item in site.config.menu.items %}
@@ -42,6 +42,7 @@
       <li><a href="{{ menu_url(item) }}">{{ item.label }}</a></li>
       {% endif %}
     {% endfor %}
+    {% if search_url %}<li class="menu-search"><a href="{{ search_url }}">Search</a></li>{% endif %}
     </ul>
   </nav>
   {% endif %}

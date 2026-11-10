@@ -238,6 +238,22 @@ main.editor-main { flex: 1; display: flex; padding: 0; background: var(--bg); }
 .editor-toolbar .toggle { display: inline-flex; gap: 0.3rem; margin: 0; color: var(--fg); }
 .editor-toolbar .toggle input { width: auto; margin: 0; }
 .cm-host { flex: 1; min-height: 0; overflow: auto; }
+.cm-host[hidden], .visual-host[hidden], .visual-bar[hidden] { display: none; }
+.mode-switch { display: inline-flex; gap: 0.6rem; padding-left: 0.75rem; border-left: 1px var(--rule-style) var(--rule); }
+.visual-bar { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; padding: 0.35rem 0.75rem; border-bottom: 1px var(--rule-style) var(--rule); background: var(--panel); }
+.visual-bar button { padding: 0.15rem 0.5rem; min-width: 2rem; font-size: 0.85rem; }
+.visual-bar .sep { width: 1px; align-self: stretch; background: var(--rule); margin: 0 0.25rem; }
+.visual-bar .visual-note { margin-left: auto; }
+.visual-host { flex: 1; min-height: 0; overflow: auto; padding: 1rem 1.5rem; color: var(--strong); font-family: var(--font-ui); line-height: 1.6; outline: none; }
+.visual-host:focus-visible { box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.visual-host img { max-width: 100%; height: auto; }
+.visual-host figure { margin: 1rem 0; }
+.visual-host blockquote { border-left: 3px solid var(--rule-strong); margin: 1rem 0; padding-left: 1rem; color: var(--fg); }
+.visual-host table { border-collapse: collapse; }
+.visual-host td, .visual-host th { border: 1px solid var(--rule-strong); padding: 0.25rem 0.5rem; }
+.visual-host code { font-family: var(--font-code); font-size: 0.9em; }
+.vblock-locked { margin: 0.75rem 0; padding: 0.5rem 0.75rem; border: 1px dashed var(--rule-strong); border-radius: var(--radius-sm); background: var(--field); color: var(--muted); cursor: default; user-select: text; }
+.vblock-locked pre { margin: 0; white-space: pre-wrap; font-family: var(--font-code); font-size: 0.82rem; }
 .cm-host .cm-editor { height: 100%; font-size: 0.95rem; }
 .cm-host .cm-scroller { font-family: var(--font-code); }
 .preview-column { display: flex; flex-direction: column; min-width: 0; }

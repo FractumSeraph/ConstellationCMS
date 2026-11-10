@@ -1,0 +1,65 @@
+/* ConstellationCMS reader features. Every selector is wrapped in :where() so it has no
+   specificity: any rule in a theme's stylesheet wins. Colours follow the theme through
+   currentColor and --accent. */
+
+/* Galleries */
+:where(.gallery) { display: grid; grid-template-columns: repeat(var(--gallery-cols, 3), minmax(0, 1fr)); gap: 0.5rem; margin: 1.5rem 0; }
+:where(.gallery-item) { margin: 0; }
+:where(.gallery-item a) { display: block; }
+:where(.gallery-item img) { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; height: auto; }
+:where(.gallery-item figcaption) { font-size: 0.85em; opacity: 0.8; margin-top: 0.25rem; }
+@media (max-width: 40rem) { :where(.gallery) { grid-template-columns: repeat(min(var(--gallery-cols, 3), 2), minmax(0, 1fr)); } }
+
+/* Image viewer */
+:where(.cms-zoomable) { cursor: zoom-in; }
+:where(.cms-lightbox) { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / 0.9); display: grid; place-items: center; padding: 3rem 3.5rem; color: #fff; }
+:where(.cms-lightbox[hidden]) { display: none; }
+:where(.cms-lightbox figure) { margin: 0; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+:where(.cms-lightbox img) { max-width: 100%; max-height: calc(100vh - 8rem); object-fit: contain; }
+:where(.cms-lightbox figcaption) { text-align: center; font-size: 0.95rem; }
+:where(.cms-lightbox button) { position: absolute; background: none; border: 0; color: #fff; font-size: 2.5rem; line-height: 1; padding: 0.5rem 0.75rem; cursor: pointer; }
+:where(.cms-lightbox button:focus-visible) { outline: 2px solid var(--accent, #fff); }
+:where(.cms-lightbox-close) { top: 0.5rem; right: 0.5rem; }
+:where(.cms-lightbox-prev) { left: 0.25rem; top: 50%; transform: translateY(-50%); }
+:where(.cms-lightbox-next) { right: 0.25rem; top: 50%; transform: translateY(-50%); }
+:where(html.cms-lightbox-open) { overflow: hidden; }
+
+/* Table of contents */
+:where(.toc) { margin: 1.5rem 0; padding: 0.75rem 1rem; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+:where(.toc-title) { font-weight: bold; margin: 0 0 0.5rem; }
+:where(.toc ol) { margin: 0; padding-left: 1.25rem; }
+:where(.toc .toc-2) { margin-left: 1rem; }
+:where(.toc .toc-3) { margin-left: 2rem; }
+:where(.toc .toc-4), :where(.toc .toc-5) { margin-left: 3rem; }
+
+/* Related posts */
+:where(.related-posts) { margin: 2rem 0 1rem; }
+:where(.related-posts ul) { padding-left: 1.25rem; }
+
+/* Share links */
+:where(.share-links) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin: 1.5rem 0; padding: 0; list-style: none; }
+:where(.share-links button) { font: inherit; color: inherit; background: none; border: 1px solid currentColor; padding: 0.1rem 0.6rem; cursor: pointer; }
+
+/* Featured posts */
+:where(.featured-label) { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent, inherit); }
+
+/* Comments */
+:where(.comments) { margin-top: 2.5rem; }
+:where(.cms-mastodon-reply) { margin: 1rem 0 1rem calc(var(--depth, 0) * 1.5rem); padding-left: 0.75rem; border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent); }
+:where(.cms-mastodon-reply header) { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.9em; }
+:where(.cms-mastodon-reply header img) { border-radius: 50%; }
+:where(.cms-mastodon-reply header span) { opacity: 0.7; }
+:where(.cms-mastodon-date) { margin-left: auto; opacity: 0.7; }
+:where(.cms-mastodon-content p) { margin: 0.4rem 0; }
+
+/* Search */
+:where(.cms-search-form) { display: flex; gap: 0.5rem; margin: 1rem 0; }
+:where(.cms-search-form input) { flex: 1; min-width: 0; font: inherit; padding: 0.4rem 0.6rem; }
+:where(.cms-search-form button) { font: inherit; }
+:where(.cms-search-results) { list-style: none; padding: 0; }
+:where(.cms-search-hit) { margin: 1.25rem 0; }
+:where(.cms-search-hit h2) { font-size: 1.15em; margin: 0; }
+:where(.cms-search-date) { font-size: 0.85em; opacity: 0.7; margin: 0.15rem 0; }
+:where(.cms-search-hit mark) { background: color-mix(in srgb, var(--accent, #ff0) 35%, transparent); color: inherit; }
+:where(.site-search) { display: inline-flex; }
+:where(.site-search input) { font: inherit; width: 10rem; max-width: 100%; }

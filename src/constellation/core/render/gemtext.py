@@ -15,6 +15,7 @@ from constellation.core.markdown.document import (
     Document,
     Inline,
     Ref,
+    gallery_images,
     inline_text,
 )
 from constellation.core.models import RenderGemini
@@ -320,6 +321,9 @@ class _State:
                 self.blank()
         elif kind == "html":
             self.html_block(b)
+        elif kind == "gallery":
+            for img in gallery_images(b):
+                self.image_block(img, line_no)
         elif kind == "container":
             if b.info == "gemini":
                 for raw in b.text.split("\n"):

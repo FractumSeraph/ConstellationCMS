@@ -14,6 +14,11 @@ one Publish button. A static site manager for the small web and the big one.
   third-party Gemini or Gopher servers.
 - **Many sites, many servers, many themes.** Sites live in one workspace, each assigned to a
   server; themes are swappable packages covering every platform.
+- **For readers:** galleries with a full-size image viewer, search, a table of contents,
+  related and featured posts, plain share links, and comments with giscus, Disqus or Mastodon
+  replies, in every theme and on any host.
+- **For writers:** a Markdown editor with a visual mode that keeps the file as Markdown, and
+  Python plugins for shortcodes, filters and build steps.
 
 ## Install
 
@@ -65,6 +70,10 @@ and adding each new site, with your own names filled into every command.
 - [`docs/analytics.md`](docs/analytics.md): built-in analytics and connecting Umami.
 - [`docs/migrating-from-publii.md`](docs/migrating-from-publii.md): moving a Publii site over.
 - [`docs/github-pages.md`](docs/github-pages.md): serving the web version from GitHub Pages.
+- [`docs/features.md`](docs/features.md): galleries, search, table of contents, related and
+  featured posts, share links and comments.
+- [`docs/visual-editor.md`](docs/visual-editor.md): the editor's visual mode.
+- [`docs/plugins.md`](docs/plugins.md): installing and writing Python plugins.
 - [`docs/UPGRADING.md`](docs/UPGRADING.md): upgrades and backups.
 - [`CHANGELOG.md`](CHANGELOG.md).
 

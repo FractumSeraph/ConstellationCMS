@@ -6,6 +6,7 @@
 {% endfor %}{% if series %}=> {{ url_for('series', series.slug) }} Part {{ series.part }} of "{{ series.title }}"
 {% endif %}
 {{ body | prefix_headings(theme.heading_prefix) }}
+{% filter prefix_headings(theme.heading_prefix) %}{% include "partials/after_post.gmi" %}{% endfilter %}
 {{ hr }}
 {% if prev_post %}=> {{ url_for('post', prev_post.slug) }} ← Previous: {{ prev_post.meta.title }}
 {% endif %}{% if next_post %}=> {{ url_for('post', next_post.slug) }} → Next: {{ next_post.meta.title }}

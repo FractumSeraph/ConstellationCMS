@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Search · {{ site.config.site.title }}{% endblock %}
+{% block meta %}<meta name="robots" content="noindex">{% endblock %}
+{% block body_class %}search{% endblock %}
+{% block content %}
+<section class="search-page">
+  <h1>Search</h1>
+  <form id="cms-search" class="cms-search-form" role="search" action="{{ search_url }}" method="get">
+    <input type="search" name="q" aria-label="Search for" placeholder="Words to look for" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
+  <p id="cms-search-status" class="cms-search-status" aria-live="polite"></p>
+  <ol id="cms-search-results" class="cms-search-results"></ol>
+  <noscript><p>Search needs JavaScript. The <a href="/archive/">archive</a> lists every post.</p></noscript>
+</section>
+{% endblock %}

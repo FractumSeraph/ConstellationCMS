@@ -68,8 +68,73 @@
     <label>After &lt;body&gt; opens <textarea name="f.custom_html.body_start" rows="3">{{ ch.get('body_start', '') }}</textarea></label>
     <label>Before &lt;/body&gt; <textarea name="f.custom_html.body_end" rows="3">{{ ch.get('body_end', '') }}</textarea></label>
   </section>
+  {% set ft = doc.get('features', {}) %}
+  <section class="card" id="features"><h2>Reader features</h2>
+    <div class="grid">
+      <input type="hidden" name="f.features.search" value="off"><label class="check"><input type="checkbox" name="f.features.search" {% if ft.get('search', True) %}checked{% endif %}> Search page at /search/ (works on any host, even GitHub Pages)</label>
+      <input type="hidden" name="f.features.lightbox" value="off"><label class="check"><input type="checkbox" name="f.features.lightbox" {% if ft.get('lightbox', True) %}checked{% endif %}> Click an image to see it full size</label>
+      <input type="hidden" name="f.features.pin_featured" value="off"><label class="check"><input type="checkbox" name="f.features.pin_featured" {% if ft.get('pin_featured', True) %}checked{% endif %}> Pin featured posts to the top of the home page</label>
+      <input type="hidden" name="f.features.toc" value="off"><label class="check"><input type="checkbox" name="f.features.toc" {% if ft.get('toc', False) %}checked{% endif %}> Table of contents on long posts and pages</label>
+      <label>…when they have at least this many headings <input type="number" min="1" name="f.features.toc_min_headings" value="{{ ft.get('toc_min_headings', 3) }}"></label>
+      <label>Related posts under each post (0 for none) <input type="number" min="0" max="12" name="f.features.related_posts" value="{{ ft.get('related_posts', 3) }}"></label>
+    </div>
+    <p class="muted small">A post can override the table of contents with <code>toc: true</code> or <code>toc: false</code>, and becomes featured with <code>featured: true</code> (both on the editor's Details tab). Galleries: put images between <code>::: gallery</code> and <code>:::</code> lines.</p>
+    <fieldset class="share-picker"><legend>Share links under posts (plain links, no tracking scripts)</legend>
+      <input type="hidden" name="share_present" value="1">
+      {% for n, label in share_networks %}<label class="check"><input type="checkbox" name="f.features.share" value="{{ n }}" {% if n in ft.get('share', []) %}checked{% endif %}> {{ label }}</label>{% endfor %}
+    </fieldset>
+  </section>
+  {% set cm = doc.get('comments', {}) %}
+  <section class="card" id="comments"><h2>Comments (web, under posts)</h2>
+    <label>Service <select name="f.comments.provider" data-show-group="comments">
+      {% for v, label in [('', 'None'), ('giscus', 'giscus (GitHub Discussions)'), ('disqus', 'Disqus'), ('mastodon', 'Mastodon replies'), ('custom', 'Paste embed code')] %}<option value="{{ v }}" {% if cm.get('provider', '') == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></label>
+    <div class="grid" data-group="comments" data-when="giscus">
+      <p class="muted small span-all">Set up the repository at <a href="https://giscus.app" target="_blank" rel="noopener">giscus.app</a> and copy the values it shows.</p>
+      <label>Repository (owner/name) <input name="f.comments.repo" value="{{ cm.get('repo', '') }}"></label>
+      <label>Repository ID <input name="f.comments.repo_id" value="{{ cm.get('repo_id', '') }}"></label>
+      <label>Category <input name="f.comments.category" value="{{ cm.get('category', '') }}"></label>
+      <label>Category ID <input name="f.comments.category_id" value="{{ cm.get('category_id', '') }}"></label>
+      <label>Page ↔ discussion mapping <select name="f.comments.mapping">{% for v in ['pathname', 'url', 'title', 'og:title'] %}<option {% if cm.get('mapping', 'pathname') == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+      <label>Theme <input name="f.comments.giscus_theme" value="{{ cm.get('giscus_theme', 'preferred_color_scheme') }}"></label>
+    </div>
+    <div class="grid" data-group="comments" data-when="disqus">
+      <label>Disqus shortname <input name="f.comments.shortname" value="{{ cm.get('shortname', '') }}"></label>
+      <p class="muted small">Disqus shows ads and tracks readers on its free plan.</p>
+    </div>
+    <div data-group="comments" data-when="mastodon">
+      <p class="muted small">Toot about a post, then put the toot's address in the post's <strong>Mastodon toot</strong> field (Details tab). Replies to it show under the post; Gemini and Gopher get a link to them.</p>
+    </div>
+    <div data-group="comments" data-when="custom">
+      <label>Embed code, shown under every post <textarea name="f.comments.html" rows="4" class="mono">{{ cm.get('html', '') }}</textarea></label>
+    </div>
+    <p class="muted small">A single post can turn comments off with <code>comments: false</code>.</p>
+  </section>
   <button class="primary" {% if read_only %}disabled{% endif %}>Save settings</button>
 </form>
+<section class="card" id="plugins"><h2>Plugins</h2>
+  <p class="muted">Plugins are Python files in your workspace's <code>plugins</code> folder (or installed packages). They run on this computer when the site is built, so only turn on plugins you trust. <a href="/guide#plugins">How to write one</a>.</p>
+  {% if plugins_available %}
+  <form method="post" action="/sites/{{ site_id }}/plugins">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for p in plugins_available %}
+    <fieldset class="plugin">
+      <legend><label class="check"><input type="checkbox" name="enabled" value="{{ p.name }}" {% if p.name in plugins_enabled %}checked{% endif %} {% if p.error %}disabled{% endif %}> <strong>{{ p.name }}</strong></label></legend>
+      {% if p.error %}<p class="error small">Could not load: {{ p.error }}</p>{% else %}<p class="small">{{ p.description }}</p>{% endif %}
+      <p class="muted small"><code>{{ p.origin }}</code></p>
+      {% if p.settings %}<div class="grid">{% for s in p.settings %}{% set cur = plugin_settings.get(p.name, {}).get(s.key, s.default) %}
+        {% if s.type == 'bool' %}<input type="hidden" name="s.{{ p.name }}.{{ s.key }}" value="off"><label class="check"><input type="checkbox" name="s.{{ p.name }}.{{ s.key }}" value="on" {% if cur %}checked{% endif %}> {{ s.label or s.key }}</label>
+        {% elif s.type == 'choice' %}<label>{{ s.label or s.key }} <select name="s.{{ p.name }}.{{ s.key }}">{% for c in s.choices %}<option {% if c == cur %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+        {% elif s.type == 'text' %}<label>{{ s.label or s.key }} <textarea name="s.{{ p.name }}.{{ s.key }}" rows="3">{{ cur }}</textarea></label>
+        {% else %}<label>{{ s.label or s.key }} <input {% if s.type == 'int' %}type="number"{% elif s.type == 'color' %}type="color"{% endif %} name="s.{{ p.name }}.{{ s.key }}" value="{{ cur }}"></label>{% endif %}
+        {% if s.help %}<p class="muted small">{{ s.help }}</p>{% endif %}
+      {% endfor %}</div>{% endif %}
+    </fieldset>
+    {% endfor %}
+    <button class="primary" {% if read_only %}disabled{% endif %}>Save plugins</button>
+  </form>
+  {% else %}<p class="empty">No plugins found. Put a plugin file in <code>{{ plugins_folder }}</code> and reload this page.</p>{% endif %}
+</section>
 {% set um = doc.get('analytics', {}).get('umami', {}) %}
 <section class="card" id="umami"><h2>Umami analytics</h2>
   <p class="muted">The server already counts every visit on its own, on web, Gemini and Gopher, with no script (see Analytics). Add Umami if you also want its dashboard.</p>

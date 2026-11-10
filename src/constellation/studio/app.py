@@ -540,6 +540,49 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             return JSONResponse({"error": str(e)}, status_code=400)
         return JSONResponse({"ok": True, "sha": item.sha256, "rel": item.rel, "slug": item.slug})
 
+    @app.post("/sites/{site_id}/visual/blocks")
+    async def visual_blocks(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        """Markdown → blocks for the editor's visual mode (editable HTML or locked source)."""
+        from constellation.core.markdown.document import Ref
+        from constellation.studio import visual
+
+        root = studio.site_root(site_id)
+        payload = await request.json()
+        body = str(payload.get("body", ""))
+        slug = str(payload.get("slug") or "preview")
+        rel_path = str(payload.get("rel", "")).replace("\\", "/")
+        item_kind = "page" if "content/pages/" in rel_path else "post"
+        site = _try_load_site(root, site_id)
+        from constellation.core.models import SiteConfig, SiteInfo
+
+        cfg = site.config if site else SiteConfig(site=SiteInfo(title="Preview"))
+
+        def media_url(ref: Ref) -> str:
+            if ref.kind == "external":
+                return ref.target
+            path = url_for(ref, "web", cfg, item_slug=slug, item_kind=item_kind)
+            return f"/sites/{quote(site_id)}/preview/web{path}" if path.startswith("/") else path
+
+        return JSONResponse(visual.to_blocks(body, media_url))
+
+    @app.post("/sites/{site_id}/visual/markdown")
+    async def visual_markdown(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        """Edited visual blocks → Markdown."""
+        from constellation.studio import visual
+
+        studio.site_root(site_id)
+        payload = await request.json()
+        items = payload.get("items", [])
+        if not isinstance(items, list) or len(items) > 5000:
+            raise HTTPException(400, "bad items")
+        clean = [i for i in items if isinstance(i, dict)]
+        lead, tail = str(payload.get("lead", "")), str(payload.get("tail", "\n"))
+        return JSONResponse({"body": visual.to_markdown(clean, lead=lead, tail=tail)})
+
     @app.post("/sites/{site_id}/render")
     async def render_preview(
         request: Request, site_id: str, sess: dict[str, Any] = Depends(require_csrf)
@@ -560,6 +603,10 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             post_slugs={p.slug for p in site.posts} if site else set(),
             page_slugs={p.slug for p in site.pages} if site else set(),
         )
+        if site is not None and site.config.plugins.enabled:
+            from constellation.core import plugins
+
+            body = plugins.expand(body, plugins.load(site), site)
         doc = parse_markdown(body, resolve=lambda h, i: resolver.resolve(h, is_image=i))
         media_warnings = _missing_media_warnings(root, str(payload.get("rel", "")), doc, platform)
         from constellation.core.models import SiteConfig, SiteInfo
@@ -812,6 +859,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         return render(
             request,
             "settings.html",
+            **_settings_extras(root),
             site_id=site_id,
             doc=doc,
             toml_text=tomlkit.dumps(doc),
@@ -840,6 +888,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 return render(
                     request,
                     "settings.html",
+                    **_settings_extras(root),
                     site_id=site_id,
                     doc=doc,
                     toml_text=str(form["toml_text"]),
@@ -851,15 +900,19 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         else:
             try:
                 for key, value in form.multi_items():
-                    if key in ("csrf",) or not key.startswith("f."):
+                    if key in ("csrf", "f.features.share") or not key.startswith("f."):
                         continue
                     dotted = key[2:]
                     set_path(doc, dotted, _coerce(dotted, str(value)))
+                if "share_present" in form:
+                    shares = [str(v) for v in form.getlist("f.features.share") if str(v)]
+                    set_path(doc, "features.share", shares)
                 _validate_site_doc(doc)
             except ValueError as e:
                 return render(
                     request,
                     "settings.html",
+                    **_settings_extras(root),
                     site_id=site_id,
                     doc=read_site_toml(root),
                     toml_text=tomlkit.dumps(read_site_toml(root)),
@@ -870,6 +923,57 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             write_site_toml(root, doc)
         studio.state.audit("settings", site_id, client_host(request))
         return RedirectResponse(f"/sites/{site_id}/settings?saved=1", 303)
+
+    @app.post("/sites/{site_id}/plugins")
+    async def plugins_save(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_csrf)
+    ) -> Response:
+        from constellation.core import plugins
+
+        root = studio.site_root(site_id)
+        _check_writable(studio, site_id)
+        form = await request.form()
+        found = {p.name: p for p in plugins.available(root) if not p.error}
+        enabled = [str(v) for v in form.getlist("enabled") if str(v) in found]
+        doc = read_site_toml(root)
+        table = doc.get("plugins")
+        if table is None:
+            table = tomlkit.table()
+            doc["plugins"] = table
+        table["enabled"] = enabled
+        settings = table.get("settings")
+        if settings is None:
+            settings = tomlkit.table()
+            table["settings"] = settings
+        for name, avail in found.items():
+            values: dict[str, Any] = {}
+            for st in avail.settings:
+                raw = form.getlist(f"s.{name}.{st.key}")
+                if not raw:
+                    continue
+                value = str(raw[-1])
+                if st.type == "bool":
+                    values[st.key] = value == "on"
+                elif st.type == "int":
+                    try:
+                        values[st.key] = int(value)
+                    except ValueError:
+                        raise HTTPException(
+                            400, f"{name}: {st.label or st.key} must be a whole number"
+                        ) from None
+                elif st.type == "choice" and st.choices and value not in st.choices:
+                    raise HTTPException(400, f"{name}: {value!r} is not one of the choices")
+                else:
+                    values[st.key] = value
+            if values:
+                t = tomlkit.table()
+                for k, v in values.items():
+                    t[k] = v
+                settings[name] = t
+        _validate_site_doc(doc)
+        write_site_toml(root, doc)
+        studio.state.audit("plugins", f"{site_id}:{','.join(enabled)}", client_host(request))
+        return RedirectResponse(f"/sites/{site_id}/settings?saved=1#plugins", 303)
 
     @app.post("/sites/{site_id}/umami")
     async def umami_save(
@@ -900,6 +1004,7 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             return render(
                 request,
                 "settings.html",
+                **_settings_extras(root),
                 site_id=site_id,
                 doc=doc,
                 toml_text=tomlkit.dumps(doc),
@@ -1849,6 +1954,24 @@ def _merge_meta(original: dict[str, Any], form: dict[str, Any], tz: Any) -> dict
                 out[k] = int(v)
             except (TypeError, ValueError):
                 continue
+        elif k == "featured":
+            # Written only when on, so ordinary posts keep a short front matter.
+            if v is True:
+                out[k] = True
+            else:
+                out.pop(k, None)
+        elif k == "comments":
+            if v is False:
+                out[k] = False
+            else:
+                out.pop(k, None)
+        elif k == "toc":
+            if v in ("true", True):
+                out[k] = True
+            elif v in ("false", False):
+                out[k] = False
+            else:
+                out.pop(k, None)
         elif v == "":
             out.pop(k, None)
         else:
@@ -1879,6 +2002,11 @@ def _meta_from_form(form: dict[str, Any]) -> dict[str, Any]:
             continue
         if k in META_LIST_KEYS:
             meta[k] = [x.strip() for x in str(v).split(",") if x.strip()]
+        elif k == "toc":
+            if v in ("true", "false", True, False):
+                meta[k] = v in ("true", True)
+        elif k in ("featured", "comments"):
+            meta[k] = bool(v)
         elif k == "series_part" or k == "menu_order":
             try:
                 meta[k] = int(v)
@@ -1893,9 +2021,28 @@ def _meta_from_form(form: dict[str, Any]) -> dict[str, Any]:
     return meta
 
 
+def _settings_extras(root: Path) -> dict[str, Any]:
+    """Share networks and plugins for the settings page."""
+    from constellation.core import plugins
+    from constellation.core.build.features import SHARE_LABELS
+    from constellation.core.models import SHARE_NETWORKS
+
+    doc = read_site_toml(root)
+    pl = doc.get("plugins", {})
+    settings = pl.get("settings", {}) if hasattr(pl, "get") else {}
+    folder = root.parent.parent / "plugins" if root.parent.name == "sites" else root / "plugins"
+    return {
+        "share_networks": [(n, SHARE_LABELS[n]) for n in SHARE_NETWORKS],
+        "plugins_available": plugins.available(root),
+        "plugins_enabled": list(pl.get("enabled", [])) if hasattr(pl, "get") else [],
+        "plugin_settings": {k: dict(v) for k, v in settings.items()},
+        "plugins_folder": str(folder),
+    }
+
+
 def _coerce(dotted: str, value: str) -> Any:
     key = dotted.rsplit(".", 1)[-1]
-    if key in ("enabled", "image_link"):
+    if key in ("enabled", "image_link", "toc", "lightbox", "search", "pin_featured"):
         return value == "on"
     if key in (
         "pagination",
@@ -1904,13 +2051,15 @@ def _coerce(dotted: str, value: str) -> Any:
         "wide_table_cols",
         "width_map",
         "width_text",
+        "toc_min_headings",
+        "related_posts",
     ):
         try:
             number = int(value)
         except ValueError:
             raise ValueError(f"{dotted} must be a whole number, not {value!r}") from None
-        if number < 1:
-            raise ValueError(f"{dotted} must be at least 1")
+        if number < (0 if key == "related_posts" else 1):
+            raise ValueError(f"{dotted} must be at least {0 if key == 'related_posts' else 1}")
         return number
     if key in ("hostnames", "feeds", "display"):
         return [x.strip() for x in value.split(",") if x.strip()]

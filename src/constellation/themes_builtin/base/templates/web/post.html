@@ -26,14 +26,18 @@
     {% if series %}<p class="post-series">Part {{ series.part }} of <a href="{{ url_for('series', series.slug) }}">{{ series.title }}</a></p>{% endif %}
   </header>
   {% if featured_image %}<figure class="featured"><img src="{{ featured_image }}" alt="{{ item.meta.image_alt }}"{% if featured_srcset %} srcset="{{ featured_srcset }}" sizes="(max-width: 48rem) 100vw, 48rem"{% endif %}></figure>{% endif %}
+  {% include "partials/toc.html" %}
   <div class="post-body">
 {{ body | safe }}
   </div>
   <footer class="post-footer">
+    {% include "partials/share.html" %}
     <nav class="post-nav" aria-label="Neighbouring posts">
       {% if prev_post %}<a rel="prev" href="{{ url_for('post', prev_post.slug) }}">← {{ prev_post.meta.title }}</a>{% endif %}
       {% if next_post %}<a rel="next" href="{{ url_for('post', next_post.slug) }}">{{ next_post.meta.title }} →</a>{% endif %}
     </nav>
+    {% include "partials/related.html" %}
   </footer>
+  {% include "partials/comments.html" %}
 </article>
 {% endblock %}
