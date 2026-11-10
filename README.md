@@ -27,6 +27,7 @@ between machines:
 
 - **[Install on Windows](docs/install-windows.md)**
 - **[Install on Linux](docs/install-linux.md)**
+- **[Set up a server from the studio](docs/set-up-a-server.md)**: a fresh VPS, no terminal
 - **[A studio on your server](docs/studio-on-a-server.md)**, to write from any browser
 
 In short:
@@ -41,6 +42,10 @@ your sites in the workspace folder you choose (put it in Dropbox, OneDrive or Sy
 it from several machines).
 
 ## On the server
+
+**The easy way:** in the studio, **Servers → Set up a new server**, then enter a fresh VPS's IP
+address and root password. The studio installs and configures everything over SSH (see
+[`docs/set-up-a-server.md`](docs/set-up-a-server.md)). By hand:
 
 ```
 curl -LsSf https://astral.sh/uv/install.sh | sh

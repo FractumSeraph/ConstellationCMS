@@ -3,4 +3,10 @@
   {{ publish_sky(job) }}
   <pre class="log">{% for line in job.log %}{{ line }}
 {% endfor %}</pre>
+  {% if job.status == 'done' and job.result is mapping and job.result.get('server_id') %}
+  <p class="ok">The server is ready. <a href="/servers#server-{{ job.result['server_id'] }}">Go to Servers</a> to choose which sites to publish there.</p>
+  {% if job.result.get('studio_link') %}<p>Its studio is waiting for you: <a href="{{ job.result['studio_link'] }}" target="_blank" rel="noopener">set it up</a> (choose its password).</p>{% endif %}
+  {% elif job.status == 'failed' and job.kind == 'server setup' %}
+  <p>Nothing is lost: fix what the message says and <a href="/servers/setup">run the setup again</a>; it continues where it stopped.</p>
+  {% endif %}
 </div>

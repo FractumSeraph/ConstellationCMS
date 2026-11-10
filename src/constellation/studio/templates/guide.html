@@ -24,6 +24,7 @@
 
 <section class="card guide">
   <h2>Part 1 · Set up the server (once)</h2>
+  <div class="notice"><p><strong>The easy way:</strong> if your VPS is fresh (Ubuntu or Debian), let the studio do all of Part 1 for you: <a href="/servers/setup">Set up a server</a> asks for its IP address and root password and does the rest. The steps below are for doing it by hand, or on a server that already runs other things.</p></div>
   <ol class="steps">
     <li>
       <h3>Get a VPS</h3>
@@ -106,6 +107,7 @@ sudo systemctl enable --now constellation{% if g.studio %} constellation-studio{
 
 <section class="card guide">
   <h2>Part 2 · Add a site</h2>
+  <p class="muted">Each site's <strong>Domain</strong> page (in the site's menu) lists the exact DNS records to add and ticks each one when it works.</p>
   <ol class="steps">
     <li>
       <h3>Create the site here</h3>

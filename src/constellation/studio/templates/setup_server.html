@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Set up a server{% endblock %}
+{% block content %}
+<h1>Set up a server</h1>
+<ol class="wizard-steps" aria-label="Steps">
+  <li{% if step == 1 %} class="current"{% endif %}>Where is it?</li>
+  <li{% if step == 2 %} class="current"{% endif %}>What will happen</li>
+  <li{% if step == 3 %} class="current"{% endif %}>Setting up</li>
+</ol>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if step == 1 %}
+<section class="card">
+  <p>You need a VPS: a small rented server, around $5 a month. When you create one, choose <strong>Ubuntu 24.04</strong>; the provider then shows (or emails) its <strong>IP address</strong> and <strong>root password</strong>. Good choices for beginners: <a href="https://www.hetzner.com/cloud" target="_blank" rel="noopener">Hetzner</a>, <a href="https://www.digitalocean.com/products/droplets" target="_blank" rel="noopener">DigitalOcean</a>, <a href="https://www.vultr.com/products/cloud-compute/" target="_blank" rel="noopener">Vultr</a>; the smallest size is plenty.</p>
+  <form method="post" action="/servers/setup/check">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid">
+      <label>IP address <input name="host" value="{{ host }}" required inputmode="url" autocomplete="off" spellcheck="false" placeholder="203.0.113.10"></label>
+      <label>Root password <input type="password" name="password" autocomplete="off"></label>
+    </div>
+    <p class="muted small">The password is used once to set up the server and is never saved: the studio puts its own key on the server instead.</p>
+    <details><summary>More options</summary>
+      <div class="grid">
+        <label>User name <input name="user" value="{{ user or 'root' }}"></label>
+        <label>SSH port <input name="port" type="number" min="1" max="65535" value="{{ port or 22 }}"></label>
+      </div>
+      <p class="muted small">Leave the password empty to use an SSH key this computer already has.</p>
+    </details>
+    <button class="primary">Check this server</button>
+  </form>
+</section>
+{% endif %}
+
+{% if step == 2 %}
+<section class="card">
+  <h2>{{ check.os_name or 'The server' }}</h2>
+  <p class="muted">{{ check.memory_mb }} MB memory · {{ check.disk_gb }} GB free disk{% if check.public_ip %} · {{ check.public_ip }}{% endif %}</p>
+  {% if plan.problems %}
+  <div class="notice warn"><p><strong>The setup can't continue:</strong></p><ul>{% for p in plan.problems %}<li>{{ p }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  {% for n in plan.notes %}<p class="muted small">{{ n }}</p>{% endfor %}
+  <form method="post" action="/servers/setup/run">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="draft" value="{{ draft }}">
+    <div class="grid">
+      <label>Name for this server <input name="name" value="{{ server_name }}" required></label>
+      <label>Server address <input name="admin_host" value="{{ plan.admin_host }}" required spellcheck="false"></label>
+    </div>
+    <p class="muted small">The suggested address works straight away. To use your own (such as <code>cms.yourdomain.com</code>), first add an A record for it pointing to {{ check.public_ip or host }}.</p>
+    <label class="check"><input type="checkbox" name="studio" value="1" {% if plan.studio_host %}checked{% endif %}> Also put a studio on the server, to write from any browser or phone, at <code>{{ studio_default }}</code></label>
+    <label class="check"><input type="checkbox" name="gopher" value="1" {% if plan.gopher %}checked{% endif %}> Serve Gopher too (an old, text-only protocol)</label>
+    <h3 class="top-gap">The studio will:</h3>
+    <ol class="plan-steps">{% for s in plan.steps %}<li>{{ s }}</li>{% endfor %}</ol>
+    <button class="primary" {% if plan.problems %}disabled{% endif %}>Set it up</button>
+    <a href="/servers/setup" class="small">Start over</a>
+  </form>
+</section>
+{% endif %}
+
+{% if step == 3 %}
+<section class="card">
+  <p>This takes a few minutes. You can leave this page open, or come back to <strong>Servers</strong> later.</p>
+  {% include "partials/job.html" %}
+</section>
+{% endif %}
+{% endblock %}

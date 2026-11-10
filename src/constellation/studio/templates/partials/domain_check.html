@@ -1,0 +1,14 @@
+<div {% if not report.ok %}hx-get="/sites/{{ site_id }}/domain/check" hx-trigger="every 15s" hx-swap="outerHTML" hx-target="this"{% endif %}>
+{% for n in report.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if report.records %}
+<table class="items dns-records"><thead><tr><th>Type</th><th>Name</th><th>Value</th><th>Right now</th></tr></thead><tbody>
+{% for r in report.records %}
+<tr><td><code>{{ r.rtype }}</code></td><td><code>{{ r.name }}</code></td><td><code>{{ r.value }}</code> <span class="muted small">({{ r.why }})</span></td>
+  <td>{% if r.ok and r.proxied %}<span class="ok">✓ through Cloudflare</span>{% elif r.ok %}<span class="ok">✓ right</span>{% elif r.proxied %}<span class="warn">goes through Cloudflare's proxy: set this record to DNS only (grey cloud)</span>{% elif r.found %}<span class="warn">points to {{ r.found | join(', ') }}</span>{% else %}<span class="muted">not there yet</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table>
+{% if report.ok %}
+<p class="ok">All records are right. {% if https %}HTTPS works too: <a href="https://{{ https }}" target="_blank" rel="noopener">https://{{ https }}</a>{% else %}HTTPS turns on by itself the next time you publish (it can take a minute).{% endif %}</p>
+{% else %}<p class="muted small">Checked {{ checked }}. Checking again every 15 seconds…</p>{% endif %}
+{% elif not report.notes %}<p class="muted">Add the site's address (Settings → Web, Base URL) to see the records it needs.</p>{% endif %}
+</div>

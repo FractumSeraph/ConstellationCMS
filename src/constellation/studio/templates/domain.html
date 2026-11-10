@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Domain{% endblock %}
+{% block content %}
+<h1>Domain</h1>
+<p class="muted">Your site's addresses are set on the <a href="/sites/{{ site_id }}/settings">Settings</a> page. For people to reach them, your domain needs these DNS records. You add them where you bought the domain (Namecheap, Porkbun, GoDaddy, Cloudflare and so on), usually under <strong>DNS</strong>, <strong>DNS records</strong> or <strong>Advanced DNS</strong>.</p>
+<section class="card">
+  <div id="domain-check" hx-get="/sites/{{ site_id }}/domain/check" hx-trigger="load" hx-swap="innerHTML">
+    <p class="muted">Checking DNS…</p>
+  </div>
+</section>
+<section class="card">
+  <h2>Tips</h2>
+  <ul class="small">
+    <li><strong>Name</strong>: for the domain itself (<code>example.com</code>) most registrars want <code>@</code>; for <code>www.example.com</code> type just <code>www</code>.</li>
+    <li>Delete any other A record for the same name, often a "parking" page added by the registrar.</li>
+    <li>On Cloudflare, set the cloud to grey (<em>DNS only</em>), so Gemini and the server's HTTPS work.</li>
+    <li>Changes usually show up within minutes, sometimes up to a few hours. This page checks again by itself.</li>
+  </ul>
+</section>
+{% endblock %}

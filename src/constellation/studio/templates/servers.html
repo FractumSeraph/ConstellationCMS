@@ -3,6 +3,7 @@
 {% block content %}
 <h1>Servers</h1>
 <p class="muted">The servers your sites are published to. Their addresses are shared with your other computers through your sites folder; each computer connects once on its own. New to servers? The <a href="/guide">server guide</a> walks through it.</p>
+<p><a class="button primary" href="/servers/setup">Set up a new server</a> <span class="muted small">Have a fresh VPS? The studio installs everything for you.</span></p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if ok %}<p class="ok">Saved.</p>{% endif %}
 {% for s in servers %}
@@ -59,9 +60,9 @@
     </form>
   </details>
 </section>
-{% else %}<p class="empty">No servers yet. Add one below, or follow the <a href="/guide">server guide</a> to set one up.</p>{% endfor %}
+{% else %}<p class="empty">No servers yet. <a href="/servers/setup">Set up a new server</a> (the studio does the work), or add one that is already running below.</p>{% endfor %}
 <section class="card">
-  <h2>Add a server</h2>
+  <h2>Add a server that's already running</h2>
   <form method="post" action="/servers" class="grid">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label>Name <input name="name" required placeholder="My server"></label>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -117,6 +118,14 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--caddy", action="store_true", help="print a Caddyfile block instead of nginx")
     ps.add_argument("hostnames", nargs="*")
     ps.set_defaults(func=cmd_server_proxy)
+    nk = svs.add_parser(
+        "new-key",
+        help="make a new installation key (to connect a studio when no computer is connected)",
+        description="Replace the installation key with a new one and print it. Restart the "
+        "service afterwards. Computers already connected keep working.",
+    )
+    nk.add_argument("--config", type=Path, default=Path("/var/lib/constellation/server.toml"))
+    nk.set_defaults(func=cmd_server_new_key)
     bk = svs.add_parser(
         "backup",
         help="write a tarball of the data directory (releases are rebuilt from blobs on restore)",
@@ -404,6 +413,23 @@ def cmd_server_install(args: argparse.Namespace) -> int:
         else ["80 and 443 (http/https)"]
     )
     print("ports: " + ", ".join(ports))
+    return 0
+
+
+def cmd_server_new_key(args: argparse.Namespace) -> int:
+    import secrets
+
+    from constellation.server.config import load_server_config, save_server_config
+    from constellation.server.releases import hash_admin_token
+
+    cfg = load_server_config(args.config)
+    key = "cst_admin_" + secrets.token_urlsafe(32)
+    cfg.admin.token_hash = hash_admin_token(key)
+    save_server_config(args.config, cfg)
+    with contextlib.suppress(OSError):
+        os.chmod(args.config, 0o600)
+    print("installation key (shown once; restart the service to use it):")
+    print(f"  {key}")
     return 0
 
 

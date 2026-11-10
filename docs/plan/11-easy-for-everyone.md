@@ -32,7 +32,7 @@ Each stage leaves something usable and ships with tests, docs and a phone check.
   admin token.
 - A studio on a server connects to its own server automatically.
 
-### B · Guided server setup
+### B · Guided server setup (done 2026-11-10)
 
 A wizard in the studio, **Add a server**:
 

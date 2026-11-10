@@ -20,7 +20,7 @@
   {% set here = request.url.path %}
   <nav class="site-nav">
     <span class="site-name">{{ site_id }}</span>
-    {% for path, label in [('', 'Dashboard'), ('/posts', 'Posts'), ('/pages', 'Pages'), ('/taxonomies', 'Taxonomies'), ('/settings', 'Settings'), ('/theme', 'Theme'), ('/publish', 'Publish'), ('/analytics', 'Analytics')] %}
+    {% for path, label in [('', 'Dashboard'), ('/posts', 'Posts'), ('/pages', 'Pages'), ('/taxonomies', 'Taxonomies'), ('/settings', 'Settings'), ('/domain', 'Domain'), ('/theme', 'Theme'), ('/publish', 'Publish'), ('/analytics', 'Analytics')] %}
     {% set href = '/sites/' ~ site_id ~ path %}
     <a href="{{ href }}"{% if here == href %} class="current" aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}

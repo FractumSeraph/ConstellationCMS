@@ -7,6 +7,7 @@ import contextlib
 import json
 import re
 import secrets
+import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -987,6 +988,41 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         return RedirectResponse(f"/sites/{site_id}/taxonomies", 303)
 
     # ---- settings ---------------------------------------------------------------------------
+    @app.get("/sites/{site_id}/domain", response_class=HTMLResponse)
+    async def domain_page(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        studio.site_root(site_id)
+        return render(request, "domain.html", site_id=site_id)
+
+    @app.get("/sites/{site_id}/domain/check", response_class=HTMLResponse)
+    async def domain_check(
+        request: Request, site_id: str, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        from constellation.core.content import load_config
+        from constellation.studio import domains
+
+        root = studio.site_root(site_id)
+        entry = studio.workspace.site(site_id)
+        server = studio.workspace.server(entry.server) if entry and entry.server else None
+        cfg = load_config(root)
+        report = await asyncio.to_thread(
+            domains.expected_records, cfg, server.admin_url if server else ""
+        )
+        https = ""
+        if report.ok:
+            first = next((r.name for r in report.records if "web" in r.why), "")
+            works = bool(first) and await asyncio.to_thread(domains.https_works, first)
+            https = first if works else ""
+        return render(
+            request,
+            "partials/domain_check.html",
+            site_id=site_id,
+            report=report,
+            https=https,
+            checked=datetime.now(UTC).strftime("%H:%M:%S UTC"),
+        )
+
     @app.get("/sites/{site_id}/settings", response_class=HTMLResponse)
     async def settings_page(
         request: Request,
@@ -1470,6 +1506,173 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
                 )
             studio.state.audit("computer_connected", server.id, client_host(request))
         return RedirectResponse(f"/servers?ok=1#server-{server.id}", 303)
+
+    # ---- guided server setup ------------------------------------------------------------
+    # The wizard's details between its pages, in memory only: the root password is never
+    # written anywhere, and a draft is forgotten after half an hour or once the setup starts.
+    setup_drafts: dict[str, dict[str, Any]] = {}
+
+    def _draft(token: str) -> dict[str, Any] | None:
+        now = time.monotonic()
+        for k in [k for k, d in setup_drafts.items() if d["expires"] < now]:
+            setup_drafts.pop(k, None)
+        return setup_drafts.get(token)
+
+    @app.get("/servers/setup", response_class=HTMLResponse)
+    async def server_setup_page(
+        request: Request, sess: dict[str, Any] = Depends(require_session)
+    ) -> Response:
+        return render(request, "setup_server.html", step=1, error="", host="", user="", port=22)
+
+    @app.post("/servers/setup/check", response_class=HTMLResponse)
+    async def server_setup_check(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        host: str = Form(...),
+        password: str = Form(""),
+        user: str = Form("root"),
+        port: int = Form(22),
+    ) -> Response:
+        from constellation.studio import provision
+
+        host = host.strip().removeprefix("ssh://").split("/")[0]
+        user = user.strip() or "root"
+        if not re.fullmatch(r"[A-Za-z0-9.:\-\[\]]{1,253}", host) or not re.fullmatch(
+            r"[a-z_][a-z0-9_-]{0,31}", user
+        ):
+            return render(
+                request,
+                "setup_server.html",
+                step=1,
+                error="That doesn't look like an IP address or server name.",
+                host=host,
+                user=user,
+                port=port,
+            )
+
+        def look() -> provision.Check:
+            remote = provision.SSHRemote(
+                host,
+                user=user,
+                port=port,
+                password=password,
+                known_hosts=studio.state.dir / "known_hosts",
+            )
+            try:
+                return provision.inspect(remote)
+            finally:
+                remote.close()
+
+        try:
+            check = await asyncio.to_thread(look)
+        except provision.ProvisionError as e:
+            return render(
+                request, "setup_server.html", step=1, error=str(e), host=host, user=user, port=port
+            )
+        # The address the person typed is the one the internet sees; the server's own idea of
+        # its address can be a private one behind the provider's network.
+        ip = host if provision.auto_host(host) else (check.public_ip or host)
+        plan = provision.make_plan(check, provision.auto_host(ip) or host)
+        token = secrets.token_urlsafe(16)
+        setup_drafts[token] = {
+            "host": host,
+            "user": user,
+            "port": port,
+            "password": password,
+            "check": check,
+            "ip": ip,
+            "expires": time.monotonic() + 1800,
+        }
+        studio.state.audit("server_setup_checked", host, client_host(request))
+        return render(
+            request,
+            "setup_server.html",
+            step=2,
+            error="",
+            check=check,
+            plan=plan,
+            draft=token,
+            host=host,
+            server_name=f"Server {ip}",
+            studio_default=provision.auto_host(ip, "studio") or f"studio.{plan.admin_host}",
+        )
+
+    @app.post("/servers/setup/run", response_class=HTMLResponse)
+    async def server_setup_run(
+        request: Request,
+        sess: dict[str, Any] = Depends(require_csrf),
+        draft: str = Form(...),
+        name: str = Form(""),
+        admin_host: str = Form(...),
+        studio_on: str = Form("", alias="studio"),
+        gopher: str = Form(""),
+    ) -> Response:
+        from constellation.studio import provision
+        from constellation.studio.server_setup import run_setup
+
+        d = _draft(draft)
+        if d is None:
+            return render(
+                request,
+                "setup_server.html",
+                step=1,
+                error="That setup page expired; please start again.",
+                host="",
+                user="",
+                port=22,
+            )
+        check = d["check"]
+        studio_host = (
+            (provision.auto_host(d["ip"], "studio") or f"studio.{admin_host}") if studio_on else ""
+        )
+        plan = provision.make_plan(
+            check, admin_host.strip().lower(), studio_host=studio_host, gopher=bool(gopher)
+        )
+        if not plan.ok:
+            return render(
+                request,
+                "setup_server.html",
+                step=2,
+                error="",
+                check=check,
+                plan=plan,
+                draft=draft,
+                host=d["host"],
+                server_name=name,
+                studio_default=studio_host or provision.auto_host(d["ip"], "studio"),
+            )
+        setup_drafts.pop(draft, None)  # the password lives only in the job from here
+        label = f"studio on {locks.machine_label()}"
+        try:
+            job = await studio.jobs.start(
+                "server setup",
+                "_servers",
+                lambda job: run_setup(
+                    job,
+                    studio.state,
+                    studio.workspace_root,
+                    host=d["host"],
+                    port=d["port"],
+                    user=d["user"],
+                    password=d["password"],
+                    name=name.strip(),
+                    plan=plan,
+                    check=check,
+                    label=label,
+                ),
+            )
+        except RuntimeError as e:
+            return render(
+                request,
+                "setup_server.html",
+                step=1,
+                error=str(e),
+                host=d["host"],
+                user=d["user"],
+                port=d["port"],
+            )
+        studio.state.audit("server_setup_started", d["host"], client_host(request))
+        return render(request, "setup_server.html", step=3, error="", job=job, site_id="")
 
     @app.post("/servers/{server_id}/connect-computer")
     async def servers_connect_computer(

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Guided server setup (stage B of `docs/plan/11-easy-for-everyone.md`): **Servers → Set up a new
+  server** takes a fresh VPS's IP address and root password, checks the system (Ubuntu 22.04+ or
+  Debian 11+, memory, disk, ports, an existing Caddy, the firewall), lists what it will do in
+  plain words, and installs everything over SSH: packages, ConstellationCMS (the studio's own
+  version, uploaded), the service, HTTPS (Let's Encrypt, or a Caddy block), firewall rules and
+  an optional studio on the server. The server gets a free address (`<ip>.sslip.io`) that needs
+  no DNS. The studio then puts its own SSH key on the server (the root password is never
+  stored), connects itself and retires the unseen installation key. Running it again continues
+  or updates. See `docs/set-up-a-server.md`.
+- Each site has a **Domain** page listing the DNS records it needs (server, or GitHub Pages and
+  server), checked every 15 seconds through public DNS-over-HTTPS with a tick per record; it
+  recognises Cloudflare's proxy (fine for the web, not for Gemini) and parking records, and
+  confirms HTTPS once DNS is right.
+- `constellation server new-key` makes a fresh installation key (for when no computer is
+  connected); a studio with its SSH key on the server uses it to reconnect.
 - No more tokens to copy (stage A of `docs/plan/11-easy-for-everyone.md`):
   - Each computer connects to a server once and gets a credential of its own, kept on that
     computer; sites publishing to that server get their publish keys by themselves.
