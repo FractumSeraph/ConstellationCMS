@@ -832,13 +832,14 @@ class HttpApp:
         """Swap a pairing code for this computer's credential. No other credential needed."""
         if (g := self._api_guard(request)) is not None:
             return g
-        if self.pairings.locked():
+        who = self._client_ip(request)
+        if self.pairings.locked(who):
             return JSONResponse(
                 {"error": "too many wrong pairing codes; wait ten minutes and make a new code"},
                 status_code=429,
             )
         body = await request.json() if int(request.headers.get("content-length", "0") or 0) else {}
-        if not self.pairings.redeem(str(body.get("code", ""))):
+        if not self.pairings.redeem(str(body.get("code", "")), who):
             return JSONResponse(
                 {"error": "that pairing code is wrong or has expired; make a new one"},
                 status_code=403,

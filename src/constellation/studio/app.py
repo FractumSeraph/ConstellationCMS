@@ -185,7 +185,11 @@ def _explain(exc: StarletteHTTPException) -> tuple[str, str]:
     if isinstance(detail, tuple | list) and len(detail) == 2:
         return str(detail[0]), str(detail[1])
     happened = str(detail or "")
-    if not happened or happened == HTTPStatus(exc.status_code).phrase:
+    try:
+        phrase = HTTPStatus(exc.status_code).phrase
+    except ValueError:  # a code Python doesn't know, such as 499
+        phrase = ""
+    if not happened or happened == phrase:
         happened = {
             404: "There is no page at this address.",
             405: "This address can't be used that way.",
@@ -413,6 +417,8 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
             todo=todo,
         )
         response.status_code = exc.status_code
+        for name, value in (exc.headers or {}).items():  # Retry-After, Allow and the like
+            response.headers[name] = value
         return response
 
     # ---- setup, login, logout -------------------------------------------------------------
@@ -2700,7 +2706,10 @@ def create_app(state: State, workspace_root: Path) -> FastAPI:
         if not account:
             return RedirectResponse(f"/sites/{site_id}/github", 303)
         repo = repo.strip()
-        domain = github.own_domain(root)
+        try:
+            domain = github.own_domain(root)
+        except ContentError:  # _github_pages shows the problem, as the GET of this page does
+            return _github_pages(request, site_id, wizard=bool(wizard), repo=repo, status=400)
         problem = github.check_repo_name(repo, account, domain)
         if problem:
             return _github_pages(

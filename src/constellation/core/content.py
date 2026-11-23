@@ -41,8 +41,11 @@ def load_config(root: Path) -> SiteConfig:
     path = root / "site.toml"
     if not path.is_file():
         raise ContentError([f"{path}: missing site.toml"])
-    with path.open("rb") as fh:
-        data = tomllib.load(fh)
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as e:  # a typo: a site problem like any other, not a crash
+        raise ContentError([f"{path}: {e}"]) from e
     try:
         return SiteConfig.model_validate(data)
     except ValidationError as e:

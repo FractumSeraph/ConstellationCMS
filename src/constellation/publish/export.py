@@ -231,8 +231,12 @@ class FolderTarget(Target):
         dest = self._safe(path)
         if dest.is_file():
             dest.unlink()
+            # Compare like with like: _safe resolved dest, so resolve the root too, or a root
+            # reached through a symlink (or written differently) is never recognised and the
+            # loop would remove it and the empty folders above it.
+            root = self.root.resolve()
             parent = dest.parent
-            while parent != self.root and parent.is_dir() and not any(parent.iterdir()):
+            while parent != root and root in parent.parents and not any(parent.iterdir()):
                 parent.rmdir()
                 parent = parent.parent
 
@@ -285,8 +289,10 @@ class SftpTarget(Target):
         self.client.close()
 
     def _remote(self, path: str) -> str:
-        full = posixpath.normpath(posixpath.join(self.remote_root, path))
-        if not full.startswith(posixpath.normpath(self.remote_root)):
+        root = posixpath.normpath(self.remote_root)
+        full = posixpath.normpath(posixpath.join(root, path))
+        # A bare prefix test would let /srv/out2 pass for /srv/out.
+        if full != root and not full.startswith(root.rstrip("/") + "/"):
             raise ValueError(f"path escapes the target root: {path}")
         return full
 

@@ -25,6 +25,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 SITE_ID_RX = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+RELEASE_ID_RX = re.compile(r"^[0-9a-f]{16}$")  # what release_id_for makes
 SAFE_PATH_RX = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%\-/]+$")
 _ph = PasswordHasher()
 
@@ -136,6 +137,9 @@ def validate_manifest(manifest: dict[str, Any], *, max_bytes: int) -> None:
                 or ".." in path.split("/")
                 or "." in path.split("/")
                 or "\\" in path
+                # "c:/x" is an absolute path on Windows; ':' is also not allowed in Windows
+                # file names, and no build makes one.
+                or ":" in path
             ):
                 raise ReleaseError(f"unsafe path {path!r}")
             if not isinstance(entry, dict):
@@ -224,6 +228,8 @@ class SiteStore:
         return rid, missing
 
     def manifest(self, rid: str) -> dict[str, Any]:
+        if not RELEASE_ID_RX.match(rid):
+            raise ReleaseError(f"no release {rid}")
         p = self.releases / rid / "manifest.json"
         if not p.is_file():
             raise ReleaseError(f"no release {rid}")
@@ -252,11 +258,16 @@ class SiteStore:
         """Build a release's file trees from the blob store (hard links where possible)."""
         rdir = self.releases / rid
         for platform, files in manifest["platforms"].items():
+            tree = (rdir / platform).resolve()
             for path, entry in files.items():
                 src = self.blobs / entry["sha256"]
                 if not src.is_file():
                     raise ReleaseError(f"missing blob for {path}")
                 dest = rdir / platform / path
+                # validate_manifest already refuses unsafe paths; this is the last line of
+                # defence against anything it misses on some platform.
+                if not dest.resolve().is_relative_to(tree):
+                    raise ReleaseError(f"unsafe path {path!r}")
                 if dest.exists():
                     continue
                 try:

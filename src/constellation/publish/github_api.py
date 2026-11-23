@@ -37,6 +37,8 @@ TREE_BATCH_BYTES = 4 * 1024 * 1024
 TREE_BATCH_ENTRIES = 400
 # Waits longer than this are not worth holding a publish open for.
 LONGEST_WAIT = 300.0
+# How much of the changed files' contents to keep in memory between planning and uploading.
+READ_CACHE = 64 * 1024 * 1024
 
 
 class GitHubError(RuntimeError):
@@ -372,6 +374,7 @@ class GitHubApiTarget(Target):
                 }
         self.writes: dict[str, tuple[bytes | None, Path | None]] = {}
         self.deletes: set[str] = set()
+        self._read: dict[Path, bytes] = {}  # file contents read while planning
 
     def describe(self) -> str:
         return f"GitHub {self.owner}/{self.name} ({self.branch})"
@@ -388,9 +391,19 @@ class GitHubApiTarget(Target):
     def local_manifest(self, files: Any) -> dict[str, dict[str, Any]]:
         """Our files described the way GitHub describes its files (git blob ids)."""
         out: dict[str, dict[str, Any]] = {}
+        kept = 0
         for path, (data, source) in files.files.items():
             raw = source.read_bytes() if source is not None else (data or b"")
-            out[path] = {"sha256": "git:" + git_blob_sha(raw), "size": len(raw)}
+            sha = git_blob_sha(raw)
+            out[path] = {"sha256": "git:" + sha, "size": len(raw)}
+            # Files that differ get uploaded right after; keep them so they aren't read twice.
+            if (
+                source is not None
+                and self.remote.get(path) != sha
+                and kept + len(raw) <= READ_CACHE
+            ):
+                self._read[source] = raw
+                kept += len(raw)
         return out
 
     def read_manifest(self) -> dict[str, dict[str, Any]] | None:
@@ -422,7 +435,11 @@ class GitHubApiTarget(Target):
         entries: list[dict[str, Any]] = []
         blobs = 0
         for path, (data, source) in sorted(self.writes.items()):
-            raw = source.read_bytes() if source is not None else (data or b"")
+            if source is None:
+                raw = data or b""
+            else:
+                kept = self._read.pop(source, None)
+                raw = kept if kept is not None else source.read_bytes()
             text = _text(raw)
             if text is not None:
                 entries.append({"path": path, "mode": "100644", "type": "blob", "content": text})

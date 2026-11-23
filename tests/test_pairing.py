@@ -48,11 +48,22 @@ def test_pairing_codes_are_single_use_expire_and_lock_out(monkeypatch: pytest.Mo
     clock[0] += devmod.PAIRING_SECONDS + 1
     assert not p.redeem(late)  # expired
     for _ in range(devmod.MAX_BAD_CODES):
-        p.redeem("WRONG-CODE")
+        p.redeem("WRONG-CODE", "203.0.113.9")
     fresh = p.new()
-    assert p.locked() and not p.redeem(fresh)  # paused for everyone
+    assert p.locked("203.0.113.9") and not p.redeem(fresh, "203.0.113.9")  # paused for them
+    # ...but only for them: a stranger guessing can't lock the owner out.
+    assert not p.locked("198.51.100.4") and p.redeem(fresh, "198.51.100.4")
     clock[0] += devmod.BAD_CODE_WINDOW + 1
-    assert not p.locked()
+    assert not p.locked("203.0.113.9")
+
+
+def test_device_list_is_reread_when_the_file_changes(tmp_path: Path) -> None:
+    devices = Devices(tmp_path)
+    one, raw = devices.add("laptop")
+    assert devices.verify(raw) == one.id
+    # Another Devices on the same folder (another process, say) removes it: the cache notices.
+    assert Devices(tmp_path).remove(one.id)
+    assert devices.verify(raw) is None
 
 
 # ---- the server's API ------------------------------------------------------------------------

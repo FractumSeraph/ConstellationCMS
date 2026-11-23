@@ -82,23 +82,35 @@ def poll(state: State, *, client: httpx.Client | None = None) -> str:
     """
     p = pending(state)
     if p is None:
-        return "done" if token(state) else "expired"
+        if not token(state):
+            return "expired"
+        if not state.kv_get(KV_LOGIN):
+            _remember_login(state, client)  # the first try failed; the token is still good
+        return "done"
     status, tok = poll_device_flow(CLIENT_ID, str(p["device_code"]), client=client)
     if status == "slow_down":
         p["interval"] = int(p.get("interval", 5)) + 5
         state.kv_set(KV_DEVICE, p)
     elif status == "done":
-        api = GitHubAPI(tok, client=client)
-        try:
-            name = str(api.user().get("login", ""))
-        finally:
-            api.close()
+        # Keep the token before anything else can fail: GitHub hands it out only once, and the
+        # code it was swapped for is used up.
         state.kv_set(KV_TOKEN, tok)
-        state.kv_set(KV_LOGIN, name)
+        state.kv_set(KV_LOGIN, "")
         state.kv_set(KV_DEVICE, "")
+        _remember_login(state, client)
     elif status in ("expired", "denied"):
         state.kv_set(KV_DEVICE, "")
     return status
+
+
+def _remember_login(state: State, client: httpx.Client | None) -> None:
+    """Look up and keep the signed-in account's name. Raises GitHubError if GitHub can't be
+    asked; the next poll tries again."""
+    api = GitHubAPI(token(state), client=client)
+    try:
+        state.kv_set(KV_LOGIN, str(api.user().get("login", "")))
+    finally:
+        api.close()
 
 
 # ---- GitHub Pages ------------------------------------------------------------------------------

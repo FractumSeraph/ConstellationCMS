@@ -8,7 +8,9 @@ service.
 A pairing code is how a new computer gets its credential without anyone copying a token: a
 studio that is already connected asks for a code (``ABCD-EFGH``), the new computer enters it
 with the server's address, and the server swaps it for a credential. Codes last ten minutes,
-work once, live only in memory, and too many wrong codes pause pairing for everyone for a while.
+work once, and live only in memory. Too many wrong codes from one address pause pairing for that
+address for a while. The pause is per address, so a stranger guessing codes can't lock out the
+owner; with 31^8 possible codes that each last ten minutes, guessing one is hopeless anyway.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ PREFIX = "cst_admin_d"
 KEY = re.compile(r"^cst_admin_d([a-z0-9]{8})_([A-Za-z0-9_-]{30,})$")
 ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 PAIRING_SECONDS = 600
-MAX_BAD_CODES = 10  # per window, for the whole server
+MAX_BAD_CODES = 10  # per window, for each address
 BAD_CODE_WINDOW = 600
 
 
@@ -58,12 +60,26 @@ class Devices:
     def __init__(self, data_dir: Path) -> None:
         self.path = Path(data_dir) / "devices.json"
         self._lock = threading.Lock()
+        # The parsed file, reused while the file on disk is unchanged: every API request checks
+        # a credential, and a publish makes hundreds of requests.
+        self._cache: tuple[tuple[int, int], list[Device]] | None = None
 
     def _load(self) -> list[Device]:
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            st = self.path.stat()
+        except OSError:
             return []
+        stamp = (st.st_mtime_ns, st.st_size)
+        if self._cache is None or self._cache[0] != stamp:
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return []
+            self._cache = (stamp, self._parse(data))
+        return [Device(**asdict(d)) for d in self._cache[1]]  # copies: callers change them
+
+    @staticmethod
+    def _parse(data: object) -> list[Device]:
         out = []
         for d in data.get("devices", []) if isinstance(data, dict) else []:
             with contextlib.suppress(TypeError, KeyError):
@@ -85,6 +101,7 @@ class Devices:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump({"version": 1, "devices": [asdict(d) for d in devices]}, fh, indent=1)
         os.replace(tmp, self.path)
+        self._cache = None
 
     def list(self) -> list[Device]:
         with self._lock:
@@ -135,7 +152,7 @@ class Devices:
 class Pairings:
     def __init__(self) -> None:
         self._codes: dict[str, float] = {}
-        self._bad: list[float] = []
+        self._bad: dict[str, list[float]] = {}  # address -> times of its wrong codes
         self._lock = threading.Lock()
 
     @staticmethod
@@ -150,15 +167,21 @@ class Pairings:
             self._codes[_sha(raw)] = now + PAIRING_SECONDS
         return f"{raw[:4]}-{raw[4:]}"
 
-    def locked(self) -> bool:
+    def locked(self, who: str = "") -> bool:
+        """Whether the address ``who`` has entered too many wrong codes lately."""
         now = time.monotonic()
         with self._lock:
-            self._bad = [t for t in self._bad if now - t < BAD_CODE_WINDOW]
-            return len(self._bad) >= MAX_BAD_CODES
+            self._bad = {
+                k: kept
+                for k, times in self._bad.items()
+                if (kept := [t for t in times if now - t < BAD_CODE_WINDOW])
+            }
+            return len(self._bad.get(who, [])) >= MAX_BAD_CODES
 
-    def redeem(self, code: str) -> bool:
-        """True (and the code is used up) when ``code`` is a live pairing code."""
-        if self.locked():
+    def redeem(self, code: str, who: str = "") -> bool:
+        """True (and the code is used up) when ``code`` is a live pairing code. A wrong code
+        counts against the address ``who`` only."""
+        if self.locked(who):
             return False
         key = _sha(self.normalise(code))
         now = time.monotonic()
@@ -166,5 +189,5 @@ class Pairings:
             expires = self._codes.pop(key, None)
             if expires is not None and expires > now:
                 return True
-            self._bad.append(now)
+            self._bad.setdefault(who, []).append(now)
             return False

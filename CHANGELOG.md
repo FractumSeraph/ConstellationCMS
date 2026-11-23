@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **Fixes from a review of the whole program.**
+  - On a server running on Windows, a site's publish key could make the server write files
+    outside its data folder (a file path starting with a drive letter, such as `c:/`). Paths
+    with `:` are now refused, and every file is checked to land inside its release.
+  - Wrong pairing codes now pause pairing only for the address that sent them, so a stranger
+    can no longer stop your own computers from connecting.
+  - Publishing to a folder no longer removes the folder itself (and empty folders above it)
+    when the folder was given by a shortcut or a relative path.
+  - Publishing over SSH can no longer write into a neighbouring folder whose name starts the
+    same (`/srv/out2` for `/srv/out`).
+  - Sign in with GitHub keeps GitHub's approval if the connection drops at the last step.
+  - A typo in `site.toml` is shown as a site problem everywhere, including the GitHub Pages
+    button, instead of an "Internal Server Error".
+  - Error pages work for unusual error codes and keep headers such as "try again after".
+  - The server checks version ids in addresses, reads its list of computers only when it
+    changes, and publishing to GitHub no longer reads changed files twice.
+
 ## 0.3.0 (2026-11-10)
 
 - **Plain words everywhere** (stage F). Errors now show a page that says what happened and
